@@ -725,7 +725,13 @@ function validateDocument(document: TextDocument): Diagnostic[] {
         }
     }
 
+    // Directives with optional closing tags
+    const optionalClose = new Set(['.logical']);
+
     for (const unclosed of blockStack) {
+        // Skip directives that have optional closers
+        if (optionalClose.has(unclosed.directive)) continue;
+
         const closeDirective = FOLDING_PAIRS[unclosed.directive];
         diagnostics.push({
             severity: DiagnosticSeverity.Error,
