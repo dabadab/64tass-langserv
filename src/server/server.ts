@@ -20,106 +20,166 @@ interface LabelDefinition {
     name: string;
     uri: string;
     range: Range;
+    scope: string | null;  // null for global labels, parent scope name for local labels
+}
+
+interface DocumentIndex {
+    labels: LabelDefinition[];
+    // Maps line number to the scope (code label) that contains it
+    scopeAtLine: Map<number, string | null>;
 }
 
 // Cache of label definitions per document
-const labelIndex: Map<string, LabelDefinition[]> = new Map();
+const documentIndex: Map<string, DocumentIndex> = new Map();
 
-// Patterns for label definitions
-const LABEL_PATTERNS = [
-    // Label at start of line (with optional colon): "label:" or "label"
-    /^([a-zA-Z_][a-zA-Z0-9_]*)\s*:/,
-    // Label followed by directive: "label .macro", "label .function", "label .proc", etc.
-    /^([a-zA-Z_][a-zA-Z0-9_]*)\s+\.(macro|function|proc|block|struct|union|segment)\b/i,
-    // Label at line start followed by instruction or data directive
-    /^([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:\.(byte|word|addr|fill|text|ptext|null)|[a-zA-Z]{3}\s)/i,
-    // Label at line start alone on line or followed by comment
-    /^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:;|$)/,
-    // Constant assignment: "label = value" or "label := value"
-    /^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=\s*/,
-    // Local label inside scope (indented, no leading underscore requirement in tass64)
-    /^(\t+| {2,})([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|:?=|\.(byte|word|addr|fill)|\s*$)/,
-];
+// 6502 opcodes for detecting code labels
+const OPCODES = new Set([
+    'adc', 'and', 'asl', 'bcc', 'bcs', 'beq', 'bit', 'bmi', 'bne', 'bpl',
+    'brk', 'bvc', 'bvs', 'clc', 'cld', 'cli', 'clv', 'cmp', 'cpx', 'cpy',
+    'dec', 'dex', 'dey', 'eor', 'inc', 'inx', 'iny', 'jmp', 'jsr', 'lda',
+    'ldx', 'ldy', 'lsr', 'nop', 'ora', 'pha', 'php', 'pla', 'plp', 'rol',
+    'ror', 'rti', 'rts', 'sbc', 'sec', 'sed', 'sei', 'sta', 'stx', 'sty',
+    'tax', 'tay', 'tsx', 'txa', 'txs', 'tya'
+]);
 
-function parseLabels(document: TextDocument): LabelDefinition[] {
+function parseDocument(document: TextDocument): DocumentIndex {
     const labels: LabelDefinition[] = [];
+    const scopeAtLine: Map<number, string | null> = new Map();
     const text = document.getText();
     const lines = text.split('\n');
 
+    let currentScope: string | null = null;
+
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
+
+        // Track which scope this line belongs to
+        scopeAtLine.set(lineNum, currentScope);
 
         // Skip empty lines and comment-only lines
         if (/^\s*;/.test(line) || /^\s*$/.test(line)) {
             continue;
         }
 
-        // Try each pattern
-        let match: RegExpMatchArray | null = null;
-        let labelName: string | null = null;
-        let startChar = 0;
+        // Check for code label (scope boundary):
+        // - Regular name at line start (not starting with _)
+        // - Followed by nothing, comment, colon, or opcode
+        // - NOT followed by directive like .macro, .function, etc.
+        const codeLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*(:)?\s*(;.*)?$/);
+        if (codeLabelMatch) {
+            // Label alone or with colon - this is a scope boundary
+            const labelName = codeLabelMatch[1];
+            currentScope = labelName;
+            scopeAtLine.set(lineNum, currentScope);
 
-        // Pattern 1: Label with colon at start
-        match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:/);
-        if (match) {
-            labelName = match[1];
-            startChar = 0;
+            labels.push({
+                name: labelName,
+                uri: document.uri,
+                range: Range.create(
+                    Position.create(lineNum, 0),
+                    Position.create(lineNum, labelName.length)
+                ),
+                scope: null  // global
+            });
+            continue;
         }
 
-        // Pattern 2: Label followed by directive
-        if (!labelName) {
-            match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s+\.(macro|function|proc|block|struct|union|segment)\b/i);
-            if (match) {
-                labelName = match[1];
-                startChar = 0;
-            }
+        // Code label followed by opcode
+        const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+([a-zA-Z]{3})\b/);
+        if (codeLabelOpcodeMatch && OPCODES.has(codeLabelOpcodeMatch[2].toLowerCase())) {
+            const labelName = codeLabelOpcodeMatch[1];
+            currentScope = labelName;
+            scopeAtLine.set(lineNum, currentScope);
+
+            labels.push({
+                name: labelName,
+                uri: document.uri,
+                range: Range.create(
+                    Position.create(lineNum, 0),
+                    Position.create(lineNum, labelName.length)
+                ),
+                scope: null  // global
+            });
+            continue;
         }
 
-        // Pattern 3: Label followed by instruction or data
-        if (!labelName) {
-            match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:\.(byte|word|addr|fill|text|ptext|null|lohi_tbl|hilo_tbl|lo_tbl)|[A-Za-z]{3}\s)/i);
-            if (match) {
-                labelName = match[1];
-                startChar = 0;
-            }
-        }
+        // Local symbol: starts with underscore, at any indentation
+        const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(?::|=|:=|\s|;|$)/);
+        if (localMatch) {
+            const labelName = localMatch[2];
+            const startChar = localMatch[1].length;
 
-        // Pattern 4: Label alone or before comment
-        if (!labelName) {
-            match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:;|$)/);
-            if (match && match[1].length > 0) {
-                labelName = match[1];
-                startChar = 0;
-            }
-        }
-
-        // Pattern 5: Constant assignment (can be indented)
-        if (!labelName) {
-            match = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=/);
-            if (match) {
-                labelName = match[2];
-                startChar = match[1].length;
-            }
-        }
-
-        if (labelName) {
             labels.push({
                 name: labelName,
                 uri: document.uri,
                 range: Range.create(
                     Position.create(lineNum, startChar),
                     Position.create(lineNum, startChar + labelName.length)
-                )
+                ),
+                scope: currentScope  // belongs to current code label scope
             });
+            continue;
+        }
+
+        // Other global labels: with directives like .macro, .function, .proc, etc.
+        const directiveLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(macro|function|proc|block|struct|union|segment)\b/i);
+        if (directiveLabelMatch) {
+            const labelName = directiveLabelMatch[1];
+            // These don't create scope boundaries for local symbols
+            labels.push({
+                name: labelName,
+                uri: document.uri,
+                range: Range.create(
+                    Position.create(lineNum, 0),
+                    Position.create(lineNum, labelName.length)
+                ),
+                scope: null
+            });
+            continue;
+        }
+
+        // Labels with data directives
+        const dataLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(byte|word|addr|fill|text|ptext|null|lohi_tbl|hilo_tbl|lo_tbl)\b/i);
+        if (dataLabelMatch) {
+            const labelName = dataLabelMatch[1];
+            labels.push({
+                name: labelName,
+                uri: document.uri,
+                range: Range.create(
+                    Position.create(lineNum, 0),
+                    Position.create(lineNum, labelName.length)
+                ),
+                scope: null
+            });
+            continue;
+        }
+
+        // Constant assignment (can be indented, can start with _)
+        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=/);
+        if (constMatch) {
+            const labelName = constMatch[2];
+            const startChar = constMatch[1].length;
+            const isLocal = labelName.startsWith('_');
+
+            labels.push({
+                name: labelName,
+                uri: document.uri,
+                range: Range.create(
+                    Position.create(lineNum, startChar),
+                    Position.create(lineNum, startChar + labelName.length)
+                ),
+                scope: isLocal ? currentScope : null
+            });
+            continue;
         }
     }
 
-    return labels;
+    return { labels, scopeAtLine };
 }
 
 function indexDocument(document: TextDocument): void {
-    const labels = parseLabels(document);
-    labelIndex.set(document.uri, labels);
+    const index = parseDocument(document);
+    documentIndex.set(document.uri, index);
 }
 
 function getWordAtPosition(document: TextDocument, position: Position): string | null {
@@ -129,11 +189,10 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
 
     if (!line) return null;
 
-    // Find word boundaries
     let start = position.character;
     let end = position.character;
 
-    // Expand left
+    // Expand left (include _ for local symbols, . for scoped access)
     while (start > 0 && /[a-zA-Z0-9_.]/.test(line[start - 1])) {
         start--;
     }
@@ -147,15 +206,35 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
     return word.length > 0 ? word : null;
 }
 
-function findDefinition(word: string): Location | null {
+function findDefinition(word: string, fromUri: string, fromLine: number): Location | null {
+    const isLocalSymbol = word.startsWith('_');
+
     // Handle scoped references like "tbl.lo" - get the base name
     const baseName = word.split('.')[0];
 
+    // Get the scope at the reference location
+    let referenceScope: string | null = null;
+    const fromIndex = documentIndex.get(fromUri);
+    if (fromIndex && isLocalSymbol) {
+        referenceScope = fromIndex.scopeAtLine.get(fromLine) ?? null;
+    }
+
     // Search all indexed documents
-    for (const [uri, labels] of labelIndex) {
-        for (const label of labels) {
+    for (const [uri, index] of documentIndex) {
+        for (const label of index.labels) {
             if (label.name === word || label.name === baseName) {
-                return Location.create(uri, label.range);
+                // For local symbols, must match the scope
+                if (isLocalSymbol) {
+                    // Local symbol: must be in same document and same scope
+                    if (uri === fromUri && label.scope === referenceScope) {
+                        return Location.create(uri, label.range);
+                    }
+                } else {
+                    // Global symbol
+                    if (label.scope === null) {
+                        return Location.create(uri, label.range);
+                    }
+                }
             }
         }
     }
@@ -174,8 +253,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 
 connection.onInitialized(() => {
     connection.console.log('tass64 language server initialized');
-
-    // Index all currently open documents
     documents.all().forEach(indexDocument);
 });
 
@@ -186,17 +263,15 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     const word = getWordAtPosition(document, params.position);
     if (!word) return null;
 
-    return findDefinition(word);
+    return findDefinition(word, params.textDocument.uri, params.position.line);
 });
 
 documents.onDidChangeContent(change => {
-    // Re-index the document when it changes
     indexDocument(change.document);
 });
 
 documents.onDidClose(event => {
-    // Remove from index when closed
-    labelIndex.delete(event.document.uri);
+    documentIndex.delete(event.document.uri);
 });
 
 documents.listen(connection);
