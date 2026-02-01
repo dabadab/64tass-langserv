@@ -28,20 +28,24 @@ interface LabelDefinition {
     name: string;
     uri: string;
     range: Range;
-    scope: string | null;  // null for global labels, parent scope name for local labels
-    value?: string;        // value for constant assignments (e.g., "$D414")
+    // Full scope path for directive-based scopes (e.g., "outer.inner" or null for global)
+    scopePath: string | null;
+    // For local symbols (_name): the code label they belong to
+    localScope: string | null;
+    // Whether this is a local symbol (starts with _)
+    isLocal: boolean;
+    value?: string;
 }
 
 interface DocumentIndex {
     labels: LabelDefinition[];
-    // Maps line number to the scope (code label) that contains it
-    scopeAtLine: Map<number, string | null>;
+    // Maps line number to { scopePath, localScope }
+    scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }>;
 }
 
-// Cache of label definitions per document
 const documentIndex: Map<string, DocumentIndex> = new Map();
 
-// 6502 opcodes for detecting code labels
+// 6502 opcodes for detecting code labels (scope boundaries for local symbols)
 const OPCODES = new Set([
     'adc', 'and', 'asl', 'bcc', 'bcs', 'beq', 'bit', 'bmi', 'bne', 'bpl',
     'brk', 'bvc', 'bvs', 'clc', 'cld', 'cli', 'clv', 'cmp', 'cpx', 'cpy',
@@ -51,35 +55,134 @@ const OPCODES = new Set([
     'tax', 'tay', 'tsx', 'txa', 'txs', 'tya'
 ]);
 
+// Directives that create new scopes
+const SCOPE_OPENERS: Record<string, string> = {
+    '.proc': '.pend',
+    '.block': '.bend',
+    '.macro': '.endm',
+    '.function': '.endf',
+    '.struct': '.ends',
+    '.union': '.endu'
+};
+
+// Folding pairs (includes non-scope-creating directives)
+const FOLDING_PAIRS: Record<string, string> = {
+    ...SCOPE_OPENERS,
+    '.if': '.endif',
+    '.for': '.next',
+    '.rept': '.endr',
+    '.switch': '.endswitch',
+    '.comment': '.endc'
+};
+
 function parseDocument(document: TextDocument): DocumentIndex {
     const labels: LabelDefinition[] = [];
-    const scopeAtLine: Map<number, string | null> = new Map();
+    const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }> = new Map();
     const text = document.getText();
     const lines = text.split('\n');
 
-    let currentScope: string | null = null;
+    // Stack for directive-based scopes: { name, directive }
+    const scopeStack: { name: string | null; directive: string }[] = [];
+    // Current code label for local symbol scoping
+    let currentLocalScope: string | null = null;
+
+    function getCurrentScopePath(): string | null {
+        const named = scopeStack.filter(s => s.name !== null).map(s => s.name);
+        return named.length > 0 ? named.join('.') : null;
+    }
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
+        const lineLower = line.toLowerCase();
 
-        // Track which scope this line belongs to
-        scopeAtLine.set(lineNum, currentScope);
+        // Record scope info for this line
+        scopeAtLine.set(lineNum, {
+            scopePath: getCurrentScopePath(),
+            localScope: currentLocalScope
+        });
 
         // Skip empty lines and comment-only lines
         if (/^\s*;/.test(line) || /^\s*$/.test(line)) {
             continue;
         }
 
-        // Check for code label (scope boundary):
-        // - Regular name at line start (not starting with _)
-        // - Followed by nothing, comment, colon, or opcode
-        // - NOT followed by directive like .macro, .function, etc.
+        // Check for scope-closing directives first
+        let closedScope = false;
+        for (const [open, close] of Object.entries(SCOPE_OPENERS)) {
+            const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
+            if (closePattern.test(lineLower)) {
+                // Pop matching scope from stack
+                for (let i = scopeStack.length - 1; i >= 0; i--) {
+                    if (scopeStack[i].directive === open) {
+                        scopeStack.splice(i, 1);
+                        closedScope = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (closedScope) {
+            // Update scope after closing
+            scopeAtLine.set(lineNum, {
+                scopePath: getCurrentScopePath(),
+                localScope: currentLocalScope
+            });
+            continue;
+        }
+
+        // Check for scope-opening directives with labels: "name .proc", "name .block", etc.
+        for (const [open] of Object.entries(SCOPE_OPENERS)) {
+            const openPattern = new RegExp(`^([a-zA-Z][a-zA-Z0-9_]*)\\s+\\${open}\\b`, 'i');
+            const match = line.match(openPattern);
+            if (match) {
+                const labelName = match[1];
+                const currentPath = getCurrentScopePath();
+
+                labels.push({
+                    name: labelName,
+                    uri: document.uri,
+                    range: Range.create(
+                        Position.create(lineNum, 0),
+                        Position.create(lineNum, labelName.length)
+                    ),
+                    scopePath: currentPath,
+                    localScope: null,
+                    isLocal: false
+                });
+
+                // Push named scope
+                scopeStack.push({ name: labelName, directive: open });
+
+                // Update scope for this line after opening
+                scopeAtLine.set(lineNum, {
+                    scopePath: getCurrentScopePath(),
+                    localScope: currentLocalScope
+                });
+                continue;
+            }
+
+            // Anonymous scope opener: just ".proc" without a name
+            const anonPattern = new RegExp(`^\\s*\\${open}\\b`, 'i');
+            if (anonPattern.test(lineLower)) {
+                scopeStack.push({ name: null, directive: open });
+                scopeAtLine.set(lineNum, {
+                    scopePath: getCurrentScopePath(),
+                    localScope: currentLocalScope
+                });
+            }
+        }
+
+        // Check for code label (local symbol scope boundary):
+        // Regular name at line start, followed by nothing/comment/colon/opcode
+        // NOT followed by a scope-creating directive
         const codeLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*(:)?\s*(;.*)?$/);
         if (codeLabelMatch) {
-            // Label alone or with colon - this is a scope boundary
             const labelName = codeLabelMatch[1];
-            currentScope = labelName;
-            scopeAtLine.set(lineNum, currentScope);
+            currentLocalScope = labelName;
+            scopeAtLine.set(lineNum, {
+                scopePath: getCurrentScopePath(),
+                localScope: currentLocalScope
+            });
 
             labels.push({
                 name: labelName,
@@ -88,17 +191,22 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     Position.create(lineNum, 0),
                     Position.create(lineNum, labelName.length)
                 ),
-                scope: null  // global
+                scopePath: getCurrentScopePath(),
+                localScope: null,
+                isLocal: false
             });
             continue;
         }
 
-        // Code label followed by opcode
+        // Code label followed by opcode (also a local scope boundary)
         const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+([a-zA-Z]{3})\b/);
         if (codeLabelOpcodeMatch && OPCODES.has(codeLabelOpcodeMatch[2].toLowerCase())) {
             const labelName = codeLabelOpcodeMatch[1];
-            currentScope = labelName;
-            scopeAtLine.set(lineNum, currentScope);
+            currentLocalScope = labelName;
+            scopeAtLine.set(lineNum, {
+                scopePath: getCurrentScopePath(),
+                localScope: currentLocalScope
+            });
 
             labels.push({
                 name: labelName,
@@ -107,12 +215,14 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     Position.create(lineNum, 0),
                     Position.create(lineNum, labelName.length)
                 ),
-                scope: null  // global
+                scopePath: getCurrentScopePath(),
+                localScope: null,
+                isLocal: false
             });
             continue;
         }
 
-        // Local symbol: starts with underscore, at any indentation
+        // Local symbol: starts with underscore
         const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(?::|=|:=|\s|;|$)/);
         if (localMatch) {
             const labelName = localMatch[2];
@@ -125,29 +235,14 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     Position.create(lineNum, startChar),
                     Position.create(lineNum, startChar + labelName.length)
                 ),
-                scope: currentScope  // belongs to current code label scope
+                scopePath: getCurrentScopePath(),
+                localScope: currentLocalScope,
+                isLocal: true
             });
             continue;
         }
 
-        // Other global labels: with directives like .macro, .function, .proc, etc.
-        const directiveLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(macro|function|proc|block|struct|union|segment)\b/i);
-        if (directiveLabelMatch) {
-            const labelName = directiveLabelMatch[1];
-            // These don't create scope boundaries for local symbols
-            labels.push({
-                name: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, 0),
-                    Position.create(lineNum, labelName.length)
-                ),
-                scope: null
-            });
-            continue;
-        }
-
-        // Labels with data directives
+        // Labels with data directives (not scope-creating)
         const dataLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(byte|word|addr|fill|text|ptext|null|lohi_tbl|hilo_tbl|lo_tbl)\b/i);
         if (dataLabelMatch) {
             const labelName = dataLabelMatch[1];
@@ -158,13 +253,14 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     Position.create(lineNum, 0),
                     Position.create(lineNum, labelName.length)
                 ),
-                scope: null
+                scopePath: getCurrentScopePath(),
+                localScope: null,
+                isLocal: false
             });
             continue;
         }
 
-        // Constant assignment (can be indented, can start with _)
-        // Capture the value after = (up to comment or end of line)
+        // Constant assignment
         const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=\s*([^;]+)/);
         if (constMatch) {
             const labelName = constMatch[2];
@@ -179,7 +275,9 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     Position.create(lineNum, startChar),
                     Position.create(lineNum, startChar + labelName.length)
                 ),
-                scope: isLocal ? currentScope : null,
+                scopePath: getCurrentScopePath(),
+                localScope: isLocal ? currentLocalScope : null,
+                isLocal,
                 value: value || undefined
             });
             continue;
@@ -204,18 +302,95 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
     let start = position.character;
     let end = position.character;
 
-    // Expand left (include _ for local symbols, . for scoped access)
     while (start > 0 && /[a-zA-Z0-9_.]/.test(line[start - 1])) {
         start--;
     }
 
-    // Expand right
     while (end < line.length && /[a-zA-Z0-9_.]/.test(line[end])) {
         end++;
     }
 
     const word = line.substring(start, end);
     return word.length > 0 ? word : null;
+}
+
+function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelDefinition | null {
+    const fromIndex = documentIndex.get(fromUri);
+    if (!fromIndex) return null;
+
+    const lineScope = fromIndex.scopeAtLine.get(fromLine);
+    const currentScopePath = lineScope?.scopePath ?? null;
+    const currentLocalScope = lineScope?.localScope ?? null;
+
+    const isLocalSymbol = word.startsWith('_');
+
+    // Handle dotted references like "scope.symbol"
+    if (word.includes('.')) {
+        const parts = word.split('.');
+        const targetName = parts[parts.length - 1];
+        const targetPath = parts.slice(0, -1).join('.');
+
+        for (const [, index] of documentIndex) {
+            for (const label of index.labels) {
+                if (label.name === targetName) {
+                    // Check if scope path matches or ends with the target path
+                    if (label.scopePath === targetPath ||
+                        label.scopePath?.endsWith('.' + targetPath)) {
+                        return label;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // Local symbol lookup: must match same document, same scopePath, same localScope
+    if (isLocalSymbol) {
+        for (const label of fromIndex.labels) {
+            if (label.name === word && label.isLocal &&
+                label.scopePath === currentScopePath &&
+                label.localScope === currentLocalScope) {
+                return label;
+            }
+        }
+        return null;
+    }
+
+    // Regular symbol lookup: search current scope, then parent scopes
+    // First, try exact scope match
+    for (const [, index] of documentIndex) {
+        for (const label of index.labels) {
+            if (label.name === word && !label.isLocal && label.scopePath === currentScopePath) {
+                return label;
+            }
+        }
+    }
+
+    // Then try parent scopes up to global
+    let scopeToTry = currentScopePath;
+    while (scopeToTry !== null) {
+        const lastDot = scopeToTry.lastIndexOf('.');
+        scopeToTry = lastDot >= 0 ? scopeToTry.substring(0, lastDot) : null;
+
+        for (const [, index] of documentIndex) {
+            for (const label of index.labels) {
+                if (label.name === word && !label.isLocal && label.scopePath === scopeToTry) {
+                    return label;
+                }
+            }
+        }
+    }
+
+    // Finally try global scope
+    for (const [, index] of documentIndex) {
+        for (const label of index.labels) {
+            if (label.name === word && !label.isLocal && label.scopePath === null) {
+                return label;
+            }
+        }
+    }
+
+    return null;
 }
 
 function findDefinition(word: string, fromUri: string, fromLine: number): Location | null {
@@ -226,44 +401,24 @@ function findDefinition(word: string, fromUri: string, fromLine: number): Locati
     return null;
 }
 
-// Folding pairs: opening directive -> closing directive
-const FOLDING_PAIRS: Record<string, string> = {
-    '.proc': '.pend',
-    '.block': '.bend',
-    '.macro': '.endm',
-    '.function': '.endf',
-    '.if': '.endif',
-    '.for': '.next',
-    '.rept': '.endr',
-    '.struct': '.ends',
-    '.union': '.endu',
-    '.switch': '.endswitch',
-    '.comment': '.endc'
-};
-
 function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     const ranges: FoldingRange[] = [];
     const text = document.getText();
     const lines = text.split('\n');
 
-    // Stack of open folding regions: { directive, line }
     const stack: { directive: string; line: number }[] = [];
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum].toLowerCase();
 
-        // Check for opening directives
         for (const [open, close] of Object.entries(FOLDING_PAIRS)) {
-            // Match opening directive (with optional label before it)
             const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`);
             if (openPattern.test(line)) {
                 stack.push({ directive: open, line: lineNum });
             }
 
-            // Match closing directive
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`);
             if (closePattern.test(line)) {
-                // Find matching opening directive
                 for (let i = stack.length - 1; i >= 0; i--) {
                     if (stack[i].directive === open) {
                         const startLine = stack[i].line;
@@ -293,10 +448,10 @@ function validateDocument(document: TextDocument): Diagnostic[] {
 
     if (!index) return diagnostics;
 
-    // Check for duplicate labels
-    const seenLabels = new Map<string, LabelDefinition>(); // key: "scope:name"
+    // Check for duplicate labels (same name, same scopePath, same localScope)
+    const seenLabels = new Map<string, LabelDefinition>();
     for (const label of index.labels) {
-        const key = `${label.scope ?? 'global'}:${label.name}`;
+        const key = `${label.scopePath ?? 'global'}:${label.localScope ?? 'none'}:${label.name}`;
         const existing = seenLabels.get(key);
         if (existing) {
             diagnostics.push({
@@ -311,28 +466,20 @@ function validateDocument(document: TextDocument): Diagnostic[] {
     }
 
     // Check for unclosed blocks
-    const blockStack: { directive: string; line: number; name?: string }[] = [];
+    const blockStack: { directive: string; line: number }[] = [];
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const line = lines[lineNum];
-        const lineLower = line.toLowerCase();
+        const lineLower = lines[lineNum].toLowerCase();
 
         for (const [open, close] of Object.entries(FOLDING_PAIRS)) {
             const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`, 'i');
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
 
             if (openPattern.test(lineLower)) {
-                // Extract label name if present
-                const labelMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s+/);
-                blockStack.push({
-                    directive: open,
-                    line: lineNum,
-                    name: labelMatch?.[1]
-                });
+                blockStack.push({ directive: open, line: lineNum });
             }
 
             if (closePattern.test(lineLower)) {
-                // Find matching opening directive
                 let found = false;
                 for (let i = blockStack.length - 1; i >= 0; i--) {
                     if (blockStack[i].directive === open) {
@@ -342,14 +489,12 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                     }
                 }
                 if (!found) {
-                    // Closing without opening
-                    const match = lineLower.match(closePattern);
-                    const startCol = match ? lineLower.indexOf(close) : 0;
+                    const startCol = lineLower.indexOf(close);
                     diagnostics.push({
                         severity: DiagnosticSeverity.Error,
                         range: Range.create(
-                            Position.create(lineNum, startCol),
-                            Position.create(lineNum, startCol + close.length)
+                            Position.create(lineNum, startCol >= 0 ? startCol : 0),
+                            Position.create(lineNum, (startCol >= 0 ? startCol : 0) + close.length)
                         ),
                         message: `'${close}' without matching '${open}'`,
                         source: 'tass64'
@@ -359,7 +504,6 @@ function validateDocument(document: TextDocument): Diagnostic[] {
         }
     }
 
-    // Report unclosed blocks
     for (const unclosed of blockStack) {
         const closeDirective = FOLDING_PAIRS[unclosed.directive];
         diagnostics.push({
@@ -374,35 +518,6 @@ function validateDocument(document: TextDocument): Diagnostic[] {
     }
 
     return diagnostics;
-}
-
-function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelDefinition | null {
-    const isLocalSymbol = word.startsWith('_');
-    const baseName = word.split('.')[0];
-
-    let referenceScope: string | null = null;
-    const fromIndex = documentIndex.get(fromUri);
-    if (fromIndex && isLocalSymbol) {
-        referenceScope = fromIndex.scopeAtLine.get(fromLine) ?? null;
-    }
-
-    for (const [uri, index] of documentIndex) {
-        for (const label of index.labels) {
-            if (label.name === word || label.name === baseName) {
-                if (isLocalSymbol) {
-                    if (uri === fromUri && label.scope === referenceScope) {
-                        return label;
-                    }
-                } else {
-                    if (label.scope === null) {
-                        return label;
-                    }
-                }
-            }
-        }
-    }
-
-    return null;
 }
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
@@ -448,8 +563,10 @@ connection.onHover((params: HoverParams): Hover | null => {
     const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line);
     if (!symbol) return null;
 
-    // Build hover content
     let content = `**${symbol.name}**`;
+    if (symbol.scopePath) {
+        content += ` *(in ${symbol.scopePath})*`;
+    }
     if (symbol.value) {
         content += `\n\n\`= ${symbol.value}\``;
     }
@@ -465,14 +582,12 @@ connection.onHover((params: HoverParams): Hover | null => {
 documents.onDidChangeContent(change => {
     indexDocument(change.document);
 
-    // Validate and send diagnostics
     const diagnostics = validateDocument(change.document);
     connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
 });
 
 documents.onDidClose(event => {
     documentIndex.delete(event.document.uri);
-    // Clear diagnostics for closed document
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
 });
 
