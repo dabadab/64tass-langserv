@@ -701,6 +701,8 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 if (builtins.has(symLower) || OPCODES.has(symLower)) continue;
                 // Skip numbers (might be caught as identifiers if they have letters like in hex)
                 if (/^[0-9]/.test(symName)) continue;
+                // Skip hex numbers like $FE - if preceded by $ and only contains hex digits
+                if (match.index > 0 && operand[match.index - 1] === '$' && /^[0-9A-Fa-f]+$/.test(symName)) continue;
                 // Skip if it's a parameter in the current scope
                 if (isParameter(symName, currentScopePath, index)) continue;
 
