@@ -887,6 +887,38 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return null;
 
+    // Check if cursor is on an .include file path
+    const text = document.getText();
+    const lines = text.split('\n');
+    const line = lines[params.position.line];
+    if (line) {
+        const includeMatch = line.match(/^\s*\.include\s+(["'])([^"']+)\1/i);
+        if (includeMatch) {
+            const quote = includeMatch[1];
+            const includePath = includeMatch[2];
+            // Find the position of the path in the line
+            const pathStart = line.indexOf(quote) + 1;
+            const pathEnd = pathStart + includePath.length;
+
+            // Check if cursor is within the path
+            if (params.position.character >= pathStart && params.position.character <= pathEnd) {
+                try {
+                    const currentPath = fileURLToPath(document.uri);
+                    const currentDir = path.dirname(currentPath);
+                    const resolvedPath = path.resolve(currentDir, includePath);
+                    if (fs.existsSync(resolvedPath)) {
+                        return Location.create(
+                            pathToFileURL(resolvedPath).toString(),
+                            Range.create(Position.create(0, 0), Position.create(0, 0))
+                        );
+                    }
+                } catch {
+                    // Ignore invalid paths
+                }
+            }
+        }
+    }
+
     const word = getWordAtPosition(document, params.position);
     if (!word) return null;
 
