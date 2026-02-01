@@ -683,12 +683,15 @@ function validateDocument(document: TextDocument): Diagnostic[] {
     // Built-in names to ignore
     const builtins = new Set([
         // Registers
-        'a', 'x', 'y', 's', 'p',
-        // Common built-in functions/variables
-        'len', 'size', 'sizeof', 'type', 'range', 'format', 'repr', 'str', 'int', 'float', 'bool',
-        'true', 'false', 'null',
-        // Loop variables often used
-        'i', 'j', 'k', 'n',
+        'a', 'x', 'y',
+        // Boolean/null literals
+        'true', 'false',
+        // Built-in functions (can be shadowed by user definitions)
+        'abs', 'acos', 'addr', 'all', 'any', 'asin', 'atan', 'atan2', 'binary',
+        'byte', 'cbrt', 'ceil', 'char', 'cos', 'cosh', 'deg', 'dint', 'dword',
+        'exp', 'floor', 'format', 'frac', 'hypot', 'len', 'lint', 'log', 'log10',
+        'long', 'pow', 'rad', 'random', 'range', 'repr', 'round', 'rta', 'sign',
+        'sin', 'sinh', 'sint', 'size', 'sort', 'sqrt', 'tan', 'tanh', 'trunc', 'word',
     ]);
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
