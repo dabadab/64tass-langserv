@@ -80,7 +80,7 @@ const SCOPE_OPENERS: Record<string, string> = {
 // All valid closers for each opener
 // Loops can be closed by .next OR their specific .end* directive
 const OPENER_TO_CLOSERS: Record<string, string[]> = {
-    '.proc': ['.pend', '.endp', '.endproc'],
+    '.proc': ['.pend', '.endproc'],
     '.block': ['.bend', '.endblock'],
     '.macro': ['.endm', '.endmacro'],
     '.function': ['.endf', '.endfunction'],
@@ -103,7 +103,7 @@ const OPENER_TO_CLOSERS: Record<string, string[]> = {
     '.with': ['.endwith'],
     '.encode': ['.endencode'],
     '.alignblk': ['.endalignblk'],
-    '.page': ['.endpage'],
+    '.page': ['.endp', '.endpage'],
     '.logical': ['.endlogical'],
     '.virtual': ['.endv', '.endvirtual'],
     '.namespace': ['.endn', '.endnamespace'],
