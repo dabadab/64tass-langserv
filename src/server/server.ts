@@ -20,6 +20,9 @@ import {
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
@@ -47,6 +50,8 @@ interface DocumentIndex {
     macroSubLabels: Map<string, string[]>;
     // Maps label name to the macro used to define it (for labels defined via macro calls)
     labelDefinedByMacro: Map<string, string>;
+    // URIs of files included via .include directive
+    includes: string[];
 }
 
 const documentIndex: Map<string, DocumentIndex> = new Map();
@@ -131,6 +136,7 @@ function parseDocument(document: TextDocument): DocumentIndex {
     const parametersAtScope: Map<string, string[]> = new Map();
     const macroSubLabels: Map<string, string[]> = new Map();
     const labelDefinedByMacro: Map<string, string> = new Map();
+    const includes: string[] = [];
     const text = document.getText();
     const lines = text.split('\n');
 
@@ -159,6 +165,23 @@ function parseDocument(document: TextDocument): DocumentIndex {
         // Skip empty lines and comment-only lines
         if (/^\s*;/.test(line) || /^\s*$/.test(line)) {
             continue;
+        }
+
+        // Check for .include directives
+        const includeMatch = line.match(/^\s*\.include\s+["']([^"']+)["']/i);
+        if (includeMatch) {
+            const includePath = includeMatch[1];
+            // Resolve relative to current document
+            try {
+                const currentPath = fileURLToPath(document.uri);
+                const currentDir = path.dirname(currentPath);
+                const resolvedPath = path.resolve(currentDir, includePath);
+                if (fs.existsSync(resolvedPath)) {
+                    includes.push(pathToFileURL(resolvedPath).toString());
+                }
+            } catch {
+                // Ignore invalid URIs
+            }
         }
 
         // Check for scope-closing directives first
@@ -397,12 +420,32 @@ function parseDocument(document: TextDocument): DocumentIndex {
         }
     }
 
-    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro };
+    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, includes };
 }
 
-function indexDocument(document: TextDocument): void {
+function indexDocument(document: TextDocument, indexedUris: Set<string> = new Set()): void {
+    // Prevent circular includes
+    if (indexedUris.has(document.uri)) {
+        return;
+    }
+    indexedUris.add(document.uri);
+
     const index = parseDocument(document);
     documentIndex.set(document.uri, index);
+
+    // Recursively index included files
+    for (const includeUri of index.includes) {
+        if (!indexedUris.has(includeUri)) {
+            try {
+                const includePath = fileURLToPath(includeUri);
+                const content = fs.readFileSync(includePath, 'utf-8');
+                const includeDoc = TextDocument.create(includeUri, 'tass64', 1, content);
+                indexDocument(includeDoc, indexedUris);
+            } catch {
+                // File not found or unreadable
+            }
+        }
+    }
 }
 
 function getWordAtPosition(document: TextDocument, position: Position): string | null {
@@ -832,7 +875,7 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => {
 
 connection.onInitialized(() => {
     connection.console.log('tass64 language server initialized');
-    documents.all().forEach(indexDocument);
+    documents.all().forEach(doc => indexDocument(doc));
 });
 
 connection.onDefinition((params: DefinitionParams): Location | null => {
