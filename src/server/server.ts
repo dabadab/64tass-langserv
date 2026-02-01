@@ -41,6 +41,8 @@ interface DocumentIndex {
     labels: LabelDefinition[];
     // Maps line number to { scopePath, localScope }
     scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }>;
+    // Maps scope path to list of parameter names (for .function and .macro)
+    parametersAtScope: Map<string, string[]>;
 }
 
 const documentIndex: Map<string, DocumentIndex> = new Map();
@@ -107,6 +109,7 @@ for (const [open, closers] of Object.entries(OPENER_TO_CLOSERS)) {
 function parseDocument(document: TextDocument): DocumentIndex {
     const labels: LabelDefinition[] = [];
     const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }> = new Map();
+    const parametersAtScope: Map<string, string[]> = new Map();
     const text = document.getText();
     const lines = text.split('\n');
 
@@ -161,11 +164,13 @@ function parseDocument(document: TextDocument): DocumentIndex {
 
         // Check for scope-opening directives with labels: "name .proc", "name .block", etc.
         for (const [open] of Object.entries(SCOPE_OPENERS)) {
-            const openPattern = new RegExp(`^([a-zA-Z][a-zA-Z0-9_]*)\\s+\\${open}\\b`, 'i');
+            // Pattern captures: name, optional parameters after the directive
+            const openPattern = new RegExp(`^([a-zA-Z][a-zA-Z0-9_]*)\\s+\\${open}\\b\\s*(.*)`, 'i');
             const match = line.match(openPattern);
             if (match) {
                 const labelName = match[1];
                 const currentPath = getCurrentScopePath();
+                const paramsStr = match[2] ? stripComment(match[2]).trim() : '';
 
                 labels.push({
                     name: labelName,
@@ -181,6 +186,15 @@ function parseDocument(document: TextDocument): DocumentIndex {
 
                 // Push named scope
                 scopeStack.push({ name: labelName, directive: open });
+
+                // Extract parameters for .function and .macro
+                if ((open === '.function' || open === '.macro') && paramsStr) {
+                    const newScopePath = getCurrentScopePath() || labelName;
+                    const params = paramsStr.split(',').map(p => p.trim()).filter(p => p.length > 0);
+                    if (params.length > 0) {
+                        parametersAtScope.set(newScopePath, params);
+                    }
+                }
 
                 // Update scope for this line after opening
                 scopeAtLine.set(lineNum, {
@@ -313,7 +327,7 @@ function parseDocument(document: TextDocument): DocumentIndex {
         }
     }
 
-    return { labels, scopeAtLine };
+    return { labels, scopeAtLine, parametersAtScope };
 }
 
 function indexDocument(document: TextDocument): void {
@@ -503,6 +517,27 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     return ranges;
 }
 
+// Check if a symbol is a parameter in the current scope or any parent scope
+function isParameter(symName: string, scopePath: string | null, index: DocumentIndex): boolean {
+    // Check exact scope
+    if (scopePath) {
+        const params = index.parametersAtScope.get(scopePath);
+        if (params && params.includes(symName)) {
+            return true;
+        }
+        // Check parent scopes
+        let parent = scopePath;
+        while (parent.includes('.')) {
+            parent = parent.substring(0, parent.lastIndexOf('.'));
+            const parentParams = index.parametersAtScope.get(parent);
+            if (parentParams && parentParams.includes(symName)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 function validateDocument(document: TextDocument): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
     const text = document.getText();
@@ -649,6 +684,8 @@ function validateDocument(document: TextDocument): Diagnostic[] {
         if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
             const operand = opcodeMatch[2];
             const operandStart = code.indexOf(operand);
+            const lineScope = index.scopeAtLine.get(lineNum);
+            const currentScopePath = lineScope?.scopePath ?? null;
 
             symbolPattern.lastIndex = 0;
             while ((match = symbolPattern.exec(operand)) !== null) {
@@ -659,6 +696,8 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 if (builtins.has(symLower) || OPCODES.has(symLower)) continue;
                 // Skip numbers (might be caught as identifiers if they have letters like in hex)
                 if (/^[0-9]/.test(symName)) continue;
+                // Skip if it's a parameter in the current scope
+                if (isParameter(symName, currentScopePath, index)) continue;
 
                 const symbol = findSymbolInfo(symName, document.uri, lineNum);
                 if (!symbol) {
