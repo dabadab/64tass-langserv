@@ -6,14 +6,10 @@
   "license": "MIT",
   "publisher": "64tass",
   "engines": {
-    "vscode": "^1.75.0",
-    "node": ">=18.0.0"
+    "vscode": "^1.75.0"
   },
   "categories": [
     "Programming Languages"
-  ],
-  "activationEvents": [
-    "onLanguage:64tass"
   ],
   "main": "./out/extension.js",
   "contributes": {
