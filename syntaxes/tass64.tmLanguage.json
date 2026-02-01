@@ -68,23 +68,23 @@
       "patterns": [
         {
           "name": "keyword.control.tass64",
-          "match": "(?i)\\.(if|else|elsif|endif|fi|switch|case|default|endswitch)\\b"
+          "match": "(?i)\\.(if|else|elsif|elif|endif|fi|switch|case|default|endswitch|ifeq|ifmi|ifne|ifpl)\\b"
         },
         {
           "name": "keyword.control.loop.tass64",
-          "match": "(?i)\\.(for|bfor|endfor|next|rept|brept|endrept|while|bwhile|endwhile|continue|break)\\b"
+          "match": "(?i)\\.(for|bfor|endfor|next|rept|brept|endrept|while|bwhile|endwhile|continue|break|breakif|continueif)\\b"
         },
         {
           "name": "keyword.control.block.tass64",
-          "match": "(?i)\\.(proc|pend|block|bend|macro|endm|function|endf|struct|ends|union|endu|section|send|segment|endsegment|namespace|endn|comment|endc)\\b"
+          "match": "(?i)\\.(proc|pend|endp|endproc|block|bend|endblock|macro|endm|endmacro|function|endf|endfunction|struct|ends|endstruct|union|endu|endunion|section|send|endsection|segment|endsegment|namespace|endn|endnamespace|comment|endc|endcomment|weak|endweak|with|endwith|encode|endencode|alignblk|endalignblk|page|endpage|logical|endlogical|virtual|endv|endvirtual)\\b"
         },
         {
           "name": "keyword.directive.data.tass64",
-          "match": "(?i)\\.(byte|word|long|dword|addr|rta|text|ptext|null|shift|shiftl|fill|align|binary|include|binclude)\\b"
+          "match": "(?i)\\.(byte|word|long|dword|addr|rta|text|ptext|null|shift|shiftl|fill|align|binary|include|binclude|char|dint|lint|sint|dsection|dstruct|dunion|offs|tdef)\\b"
         },
         {
           "name": "keyword.directive.tass64",
-          "match": "(?i)\\.(org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|virtual|endv|logical|here|as|option|page|eor|seed|proff|pron|hidemac|showmac)\\b"
+          "match": "(?i)\\.(org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|here|as|option|eor|seed|proff|pron|hidemac|showmac|al|alignind|alignpageind|check|from|lbl|goto|databank|dpage|autsiz|mansiz|sfunction|xl|xs|end)\\b"
         },
         {
           "name": "keyword.operator.assignment.tass64",

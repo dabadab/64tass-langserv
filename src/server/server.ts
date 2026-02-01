@@ -68,19 +68,24 @@ const SCOPE_OPENERS: Record<string, string> = {
     '.macro': '.endm',
     '.function': '.endf',
     '.struct': '.ends',
-    '.union': '.endu'
+    '.union': '.endu',
+    '.namespace': '.endn'
 };
 
 // All valid closers for each opener
 // Loops can be closed by .next OR their specific .end* directive
 const OPENER_TO_CLOSERS: Record<string, string[]> = {
-    '.proc': ['.pend'],
-    '.block': ['.bend'],
-    '.macro': ['.endm'],
-    '.function': ['.endf'],
-    '.struct': ['.ends'],
-    '.union': ['.endu'],
+    '.proc': ['.pend', '.endp', '.endproc'],
+    '.block': ['.bend', '.endblock'],
+    '.macro': ['.endm', '.endmacro'],
+    '.function': ['.endf', '.endfunction'],
+    '.struct': ['.ends', '.endstruct'],
+    '.union': ['.endu', '.endunion'],
     '.if': ['.endif', '.fi'],
+    '.ifeq': ['.endif', '.fi'],
+    '.ifne': ['.endif', '.fi'],
+    '.ifmi': ['.endif', '.fi'],
+    '.ifpl': ['.endif', '.fi'],
     '.for': ['.next', '.endfor'],
     '.bfor': ['.next', '.endfor'],
     '.rept': ['.next', '.endrept'],
@@ -88,7 +93,17 @@ const OPENER_TO_CLOSERS: Record<string, string[]> = {
     '.while': ['.next', '.endwhile'],
     '.bwhile': ['.next', '.endwhile'],
     '.switch': ['.endswitch'],
-    '.comment': ['.endc']
+    '.comment': ['.endc', '.endcomment'],
+    '.weak': ['.endweak'],
+    '.with': ['.endwith'],
+    '.encode': ['.endencode'],
+    '.alignblk': ['.endalignblk'],
+    '.page': ['.endpage'],
+    '.logical': ['.endlogical'],
+    '.virtual': ['.endv', '.endvirtual'],
+    '.namespace': ['.endn', '.endnamespace'],
+    '.section': ['.send', '.endsection'],
+    '.segment': ['.endsegment']
 };
 
 // Reverse mapping: closer -> list of openers it can close
@@ -722,7 +737,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
             const directive = '.' + macroName.toLowerCase();
             const isBuiltinDirective = Object.keys(OPENER_TO_CLOSERS).includes(directive) ||
                 Object.keys(CLOSING_DIRECTIVES).includes(directive) ||
-                /^\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|align|binary|include|binclude|org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|virtual|endv|logical|here|as|option|page|eor|seed|else|elsif|case|default|shift|shiftl|proff|pron|hidemac|showmac|continue|break|sfunction|return|segment|send|section|namespace|endn|weak|lbl|goto|databank|dpage|enc|autsiz|mansiz)$/i.test(directive);
+                /^\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|align|binary|include|binclude|org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|here|as|option|eor|seed|else|elsif|elif|case|default|shift|shiftl|proff|pron|hidemac|showmac|continue|break|breakif|continueif|sfunction|lbl|goto|databank|dpage|autsiz|mansiz|char|dint|lint|sint|dsection|dstruct|dunion|offs|tdef|al|alignind|alignpageind|check|from|xl|xs|end)$/i.test(directive);
 
             if (!isBuiltinDirective) {
                 // Try to find the macro definition
