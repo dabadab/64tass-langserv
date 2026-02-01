@@ -55,7 +55,7 @@ const OPCODES = new Set([
     'tax', 'tay', 'tsx', 'txa', 'txs', 'tya'
 ]);
 
-// Directives that create new scopes
+// Directives that create new scopes (opener -> primary closer)
 const SCOPE_OPENERS: Record<string, string> = {
     '.proc': '.pend',
     '.block': '.bend',
@@ -65,15 +65,44 @@ const SCOPE_OPENERS: Record<string, string> = {
     '.union': '.endu'
 };
 
-// Folding pairs (includes non-scope-creating directives)
-const FOLDING_PAIRS: Record<string, string> = {
-    ...SCOPE_OPENERS,
-    '.if': '.endif',
-    '.for': '.next',
-    '.rept': '.endr',
-    '.switch': '.endswitch',
-    '.comment': '.endc'
+// All valid closers for each opener
+// Loops can be closed by .next OR their specific .end* directive
+const OPENER_TO_CLOSERS: Record<string, string[]> = {
+    '.proc': ['.pend'],
+    '.block': ['.bend'],
+    '.macro': ['.endm'],
+    '.function': ['.endf'],
+    '.struct': ['.ends'],
+    '.union': ['.endu'],
+    '.if': ['.endif', '.fi'],
+    '.for': ['.next', '.endfor'],
+    '.bfor': ['.next', '.endfor'],
+    '.rept': ['.next', '.endrept'],
+    '.brept': ['.next', '.endrept'],
+    '.while': ['.next', '.endwhile'],
+    '.bwhile': ['.next', '.endwhile'],
+    '.switch': ['.endswitch'],
+    '.comment': ['.endc']
 };
+
+// Reverse mapping: closer -> list of openers it can close
+const CLOSING_DIRECTIVES: Record<string, string[]> = {};
+for (const [open, closers] of Object.entries(OPENER_TO_CLOSERS)) {
+    for (const close of closers) {
+        if (!CLOSING_DIRECTIVES[close]) {
+            CLOSING_DIRECTIVES[close] = [];
+        }
+        if (!CLOSING_DIRECTIVES[close].includes(open)) {
+            CLOSING_DIRECTIVES[close].push(open);
+        }
+    }
+}
+
+// For compatibility: FOLDING_PAIRS maps opener to primary closer
+const FOLDING_PAIRS: Record<string, string> = {};
+for (const [open, closers] of Object.entries(OPENER_TO_CLOSERS)) {
+    FOLDING_PAIRS[open] = closers[0];
+}
 
 function parseDocument(document: TextDocument): DocumentIndex {
     const labels: LabelDefinition[] = [];
@@ -411,16 +440,21 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum].toLowerCase();
 
-        for (const [open, close] of Object.entries(FOLDING_PAIRS)) {
+        // Check for opening directives
+        for (const open of Object.keys(FOLDING_PAIRS)) {
             const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`);
             if (openPattern.test(line)) {
                 stack.push({ directive: open, line: lineNum });
             }
+        }
 
+        // Check for closing directives
+        for (const [close, openers] of Object.entries(CLOSING_DIRECTIVES)) {
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`);
             if (closePattern.test(line)) {
+                // Find the most recent matching opener
                 for (let i = stack.length - 1; i >= 0; i--) {
-                    if (stack[i].directive === open) {
+                    if (openers.includes(stack[i].directive)) {
                         const startLine = stack[i].line;
                         stack.splice(i, 1);
                         ranges.push(FoldingRange.create(
@@ -471,18 +505,22 @@ function validateDocument(document: TextDocument): Diagnostic[] {
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const lineLower = lines[lineNum].toLowerCase();
 
-        for (const [open, close] of Object.entries(FOLDING_PAIRS)) {
+        // Check for opening directives
+        for (const open of Object.keys(FOLDING_PAIRS)) {
             const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`, 'i');
-            const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
-
             if (openPattern.test(lineLower)) {
                 blockStack.push({ directive: open, line: lineNum });
             }
+        }
 
+        // Check for closing directives
+        for (const [close, openers] of Object.entries(CLOSING_DIRECTIVES)) {
+            const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
             if (closePattern.test(lineLower)) {
+                // Find the most recent matching opener
                 let found = false;
                 for (let i = blockStack.length - 1; i >= 0; i--) {
-                    if (blockStack[i].directive === open) {
+                    if (openers.includes(blockStack[i].directive)) {
                         blockStack.splice(i, 1);
                         found = true;
                         break;
@@ -490,13 +528,14 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 }
                 if (!found) {
                     const startCol = lineLower.indexOf(close);
+                    const expectedOpeners = openers.join(', ');
                     diagnostics.push({
                         severity: DiagnosticSeverity.Error,
                         range: Range.create(
                             Position.create(lineNum, startCol >= 0 ? startCol : 0),
                             Position.create(lineNum, (startCol >= 0 ? startCol : 0) + close.length)
                         ),
-                        message: `'${close}' without matching '${open}'`,
+                        message: `'${close}' without matching ${expectedOpeners}`,
                         source: 'tass64'
                     });
                 }

@@ -67,12 +67,28 @@
     "directives": {
       "patterns": [
         {
+          "name": "keyword.control.tass64",
+          "match": "(?i)\\.(if|else|elsif|endif|fi|switch|case|default|endswitch)\\b"
+        },
+        {
+          "name": "keyword.control.loop.tass64",
+          "match": "(?i)\\.(for|bfor|endfor|next|rept|brept|endrept|while|bwhile|endwhile|continue|break)\\b"
+        },
+        {
+          "name": "keyword.control.block.tass64",
+          "match": "(?i)\\.(proc|pend|block|bend|macro|endm|function|endf|struct|ends|union|endu|section|send|segment|endsegment|namespace|endn|comment|endc)\\b"
+        },
+        {
+          "name": "keyword.directive.data.tass64",
+          "match": "(?i)\\.(byte|word|long|dword|addr|rta|text|ptext|null|shift|shiftl|fill|align|binary|include|binclude)\\b"
+        },
+        {
           "name": "keyword.directive.tass64",
-          "match": "(?i)\\.(byte|word|text|fill|align|org|include|binary|macro|endm|if|else|endif|for|next|proc|endproc|segment|assert|error|warn)\\b"
+          "match": "(?i)\\.(org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|virtual|endv|logical|here|as|option|page|eor|seed|proff|pron|hidemac|showmac)\\b"
         },
         {
           "name": "keyword.operator.assignment.tass64",
-          "match": "="
+          "match": ":?="
         }
       ]
     },
