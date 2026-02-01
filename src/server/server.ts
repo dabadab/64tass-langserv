@@ -623,7 +623,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
             // Skip built-in directives
             const directive = '.' + macroName.toLowerCase();
             const isBuiltinDirective = Object.keys(OPENER_TO_CLOSERS).includes(directive) ||
-                Object.values(CLOSING_DIRECTIVES).flat().includes(directive) ||
+                Object.keys(CLOSING_DIRECTIVES).includes(directive) ||
                 /^\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|align|binary|include|binclude|org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|virtual|endv|logical|here|as|option|page|eor|seed|else|elsif|case|default|shift|shiftl|proff|pron|hidemac|showmac|continue|break|sfunction|return|segment|send|section|namespace|endn|weak|lbl|goto|databank|dpage|enc|autsiz|mansiz)$/i.test(directive);
 
             if (!isBuiltinDirective) {
