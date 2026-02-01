@@ -8,7 +8,10 @@ import {
     DefinitionParams,
     Location,
     Range,
-    Position
+    Position,
+    FoldingRangeParams,
+    FoldingRange,
+    FoldingRangeKind
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -242,11 +245,71 @@ function findDefinition(word: string, fromUri: string, fromLine: number): Locati
     return null;
 }
 
+// Folding pairs: opening directive -> closing directive
+const FOLDING_PAIRS: Record<string, string> = {
+    '.proc': '.pend',
+    '.block': '.bend',
+    '.macro': '.endm',
+    '.function': '.endf',
+    '.if': '.endif',
+    '.for': '.next',
+    '.rept': '.endr',
+    '.struct': '.ends',
+    '.union': '.endu',
+    '.switch': '.endswitch',
+    '.comment': '.endc'
+};
+
+function computeFoldingRanges(document: TextDocument): FoldingRange[] {
+    const ranges: FoldingRange[] = [];
+    const text = document.getText();
+    const lines = text.split('\n');
+
+    // Stack of open folding regions: { directive, line }
+    const stack: { directive: string; line: number }[] = [];
+
+    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        const line = lines[lineNum].toLowerCase();
+
+        // Check for opening directives
+        for (const [open, close] of Object.entries(FOLDING_PAIRS)) {
+            // Match opening directive (with optional label before it)
+            const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`);
+            if (openPattern.test(line)) {
+                stack.push({ directive: open, line: lineNum });
+            }
+
+            // Match closing directive
+            const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`);
+            if (closePattern.test(line)) {
+                // Find matching opening directive
+                for (let i = stack.length - 1; i >= 0; i--) {
+                    if (stack[i].directive === open) {
+                        const startLine = stack[i].line;
+                        stack.splice(i, 1);
+                        ranges.push(FoldingRange.create(
+                            startLine,
+                            lineNum,
+                            undefined,
+                            undefined,
+                            FoldingRangeKind.Region
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    return ranges;
+}
+
 connection.onInitialize((params: InitializeParams): InitializeResult => {
     return {
         capabilities: {
             textDocumentSync: TextDocumentSyncKind.Incremental,
-            definitionProvider: true
+            definitionProvider: true,
+            foldingRangeProvider: true
         }
     };
 });
@@ -264,6 +327,13 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     if (!word) return null;
 
     return findDefinition(word, params.textDocument.uri, params.position.line);
+});
+
+connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+
+    return computeFoldingRanges(document);
 });
 
 documents.onDidChangeContent(change => {
