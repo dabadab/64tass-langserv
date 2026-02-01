@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "tass64",
-  "scopeName": "source.tass64",
+  "name": "64tass",
+  "scopeName": "source.64tass",
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
@@ -15,7 +15,7 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.line.semicolon.tass64",
+          "name": "comment.line.semicolon.64tass",
           "match": ";.*$"
         }
       ]
@@ -23,18 +23,18 @@
     "strings": {
       "patterns": [
         {
-          "name": "string.quoted.double.tass64",
+          "name": "string.quoted.double.64tass",
           "begin": "\"",
           "end": "\"",
           "patterns": [
             {
-              "name": "constant.character.escape.tass64",
+              "name": "constant.character.escape.64tass",
               "match": "\\\\."
             }
           ]
         },
         {
-          "name": "string.quoted.single.tass64",
+          "name": "string.quoted.single.64tass",
           "begin": "'",
           "end": "'"
         }
@@ -43,15 +43,15 @@
     "numbers": {
       "patterns": [
         {
-          "name": "constant.numeric.hex.tass64",
+          "name": "constant.numeric.hex.64tass",
           "match": "\\$[0-9a-fA-F]+"
         },
         {
-          "name": "constant.numeric.binary.tass64",
+          "name": "constant.numeric.binary.64tass",
           "match": "%[01]+"
         },
         {
-          "name": "constant.numeric.decimal.tass64",
+          "name": "constant.numeric.decimal.64tass",
           "match": "\\b[0-9]+\\b"
         }
       ]
@@ -59,7 +59,7 @@
     "opcodes": {
       "patterns": [
         {
-          "name": "keyword.mnemonic.tass64",
+          "name": "keyword.mnemonic.64tass",
           "match": "(?i)\\b(adc|and|asl|bcc|bcs|beq|bit|bmi|bne|bpl|brk|bvc|bvs|clc|cld|cli|clv|cmp|cpx|cpy|dec|dex|dey|eor|inc|inx|iny|jmp|jsr|lda|ldx|ldy|lsr|nop|ora|pha|php|pla|plp|rol|ror|rti|rts|sbc|sec|sed|sei|sta|stx|sty|tax|tay|tsx|txa|txs|tya|ane|arr|asr|dcp|isb|jam|lax|lds|rla|rra|sax|sbx|sha|shs|shx|shy|slo|sre|ahx|alr|axs|dcm|ins|isc|lae|las|lxa|tas|xaa)\\b"
         }
       ]
@@ -67,27 +67,27 @@
     "directives": {
       "patterns": [
         {
-          "name": "keyword.control.tass64",
+          "name": "keyword.control.64tass",
           "match": "(?i)\\.(if|else|elsif|elif|endif|fi|switch|case|default|endswitch|ifeq|ifmi|ifne|ifpl)\\b"
         },
         {
-          "name": "keyword.control.loop.tass64",
+          "name": "keyword.control.loop.64tass",
           "match": "(?i)\\.(for|bfor|endfor|next|rept|brept|endrept|while|bwhile|endwhile|continue|break|breakif|continueif)\\b"
         },
         {
-          "name": "keyword.control.block.tass64",
+          "name": "keyword.control.block.64tass",
           "match": "(?i)\\.(proc|pend|endp|endproc|block|bend|endblock|macro|endm|endmacro|function|endf|endfunction|struct|ends|endstruct|union|endu|endunion|section|send|endsection|segment|endsegment|namespace|endn|endnamespace|comment|endc|endcomment|weak|endweak|with|endwith|encode|endencode|alignblk|endalignblk|page|endpage|logical|endlogical|virtual|endv|endvirtual)\\b"
         },
         {
-          "name": "keyword.directive.data.tass64",
+          "name": "keyword.directive.data.64tass",
           "match": "(?i)\\.(byte|word|long|dword|addr|rta|text|ptext|null|shift|shiftl|fill|align|binary|include|binclude|char|dint|lint|sint|dsection|dstruct|dunion|offs|tdef)\\b"
         },
         {
-          "name": "keyword.directive.tass64",
+          "name": "keyword.directive.64tass",
           "match": "(?i)\\.(org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|here|as|option|eor|seed|proff|pron|hidemac|showmac|al|alignind|alignpageind|check|from|lbl|goto|databank|dpage|autsiz|mansiz|sfunction|xl|xs|end)\\b"
         },
         {
-          "name": "keyword.operator.assignment.tass64",
+          "name": "keyword.operator.assignment.64tass",
           "match": ":?="
         }
       ]
@@ -95,11 +95,11 @@
     "labels": {
       "patterns": [
         {
-          "name": "entity.name.function.label.tass64",
+          "name": "entity.name.function.label.64tass",
           "match": "^[a-zA-Z_][a-zA-Z0-9_]*:"
         },
         {
-          "name": "entity.name.function.label.local.tass64",
+          "name": "entity.name.function.label.local.64tass",
           "match": "^[+\\-]"
         }
       ]
@@ -107,7 +107,7 @@
     "registers": {
       "patterns": [
         {
-          "name": "variable.language.register.tass64",
+          "name": "variable.language.register.64tass",
           "match": "(?i)\\b[axy]\\b"
         }
       ]

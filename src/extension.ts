@@ -24,13 +24,13 @@ export function activate(context: ExtensionContext) {
     };
 
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: 'file', language: 'tass64' }],
+        documentSelector: [{ scheme: 'file', language: '64tass' }],
         synchronize: {}
     };
 
     client = new LanguageClient(
-        'tass64LanguageServer',
-        'tass64 Language Server',
+        '64tassLanguageServer',
+        '64tass Language Server',
         serverOptions,
         clientOptions
     );

@@ -1,25 +1,27 @@
 {
-  "name": "tass64-langserv",
-  "displayName": "tass64 Language Support",
-  "description": "Language support for tass64 MOS 6502 macro assembler",
+  "name": "64tass-langserv",
+  "displayName": "64tass Language Support",
+  "description": "Language support for 64tass MOS 6502 macro assembler",
   "version": "0.0.1",
-  "publisher": "tass64",
+  "license": "MIT",
+  "publisher": "64tass",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.75.0",
+    "node": ">=18.0.0"
   },
   "categories": [
     "Programming Languages"
   ],
   "activationEvents": [
-    "onLanguage:tass64"
+    "onLanguage:64tass"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
-        "id": "tass64",
+        "id": "64tass",
         "aliases": [
-          "tass64",
+          "64tass",
           "6502 Assembly"
         ],
         "extensions": [
@@ -33,9 +35,9 @@
     ],
     "grammars": [
       {
-        "language": "tass64",
-        "scopeName": "source.tass64",
-        "path": "./syntaxes/tass64.tmLanguage.json"
+        "language": "64tass",
+        "scopeName": "source.64tass",
+        "path": "./syntaxes/64tass.tmLanguage.json"
       }
     ]
   },

@@ -65,7 +65,7 @@ const OPCODES = new Set([
     'ldx', 'ldy', 'lsr', 'nop', 'ora', 'pha', 'php', 'pla', 'plp', 'rol',
     'ror', 'rti', 'rts', 'sbc', 'sec', 'sed', 'sei', 'sta', 'stx', 'sty',
     'tax', 'tay', 'tsx', 'txa', 'txs', 'tya',
-    // Undocumented 6502 opcodes (as used by tass64)
+    // Undocumented 6502 opcodes (as used by 64tass)
     'ane', 'arr', 'asr', 'dcp', 'isb', 'jam', 'lax', 'lds', 'rla', 'rra',
     'sax', 'sbx', 'sha', 'shs', 'shx', 'shy', 'slo', 'sre', 'ahx', 'alr',
     'axs', 'dcm', 'ins', 'isc', 'lae', 'las', 'lxa', 'tas', 'xaa'
@@ -444,7 +444,7 @@ function indexDocument(document: TextDocument, indexedUris: Set<string> = new Se
             try {
                 const includePath = fileURLToPath(includeUri);
                 const content = fs.readFileSync(includePath, 'utf-8');
-                const includeDoc = TextDocument.create(includeUri, 'tass64', 1, content);
+                const includeDoc = TextDocument.create(includeUri, '64tass', 1, content);
                 indexDocument(includeDoc, indexedUris);
             } catch {
                 // File not found or unreadable
@@ -674,7 +674,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 severity: DiagnosticSeverity.Error,
                 range: label.range,
                 message: `Duplicate label '${label.name}'`,
-                source: 'tass64'
+                source: '64tass'
             });
         } else {
             seenLabels.set(key, label);
@@ -718,7 +718,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                             Position.create(lineNum, (startCol >= 0 ? startCol : 0) + close.length)
                         ),
                         message: `'${close}' without matching ${expectedOpeners}`,
-                        source: 'tass64'
+                        source: '64tass'
                     });
                 }
             }
@@ -734,7 +734,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 Position.create(unclosed.line, lines[unclosed.line].length)
             ),
             message: `Unclosed '${unclosed.directive}' - missing '${closeDirective}'`,
-            source: 'tass64'
+            source: '64tass'
         });
     }
 
@@ -798,7 +798,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                             Position.create(lineNum, startCol + fullMatch.length)
                         ),
                         message: `Undefined macro '${macroName}'`,
-                        source: 'tass64'
+                        source: '64tass'
                     });
                 }
             }
@@ -857,7 +857,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                             Position.create(lineNum, startCol + symName.length)
                         ),
                         message: `Undefined symbol '${symName}'`,
-                        source: 'tass64'
+                        source: '64tass'
                     });
                 }
             }
@@ -879,7 +879,7 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => {
 });
 
 connection.onInitialized(() => {
-    connection.console.log('tass64 language server initialized');
+    connection.console.log('64tass language server initialized');
     documents.all().forEach(doc => indexDocument(doc));
 });
 
