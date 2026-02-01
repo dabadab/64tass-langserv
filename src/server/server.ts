@@ -58,12 +58,17 @@ const documentIndex: Map<string, DocumentIndex> = new Map();
 
 // 6502 opcodes for detecting code labels (scope boundaries for local symbols)
 const OPCODES = new Set([
+    // Standard 6502 opcodes
     'adc', 'and', 'asl', 'bcc', 'bcs', 'beq', 'bit', 'bmi', 'bne', 'bpl',
     'brk', 'bvc', 'bvs', 'clc', 'cld', 'cli', 'clv', 'cmp', 'cpx', 'cpy',
     'dec', 'dex', 'dey', 'eor', 'inc', 'inx', 'iny', 'jmp', 'jsr', 'lda',
     'ldx', 'ldy', 'lsr', 'nop', 'ora', 'pha', 'php', 'pla', 'plp', 'rol',
     'ror', 'rti', 'rts', 'sbc', 'sec', 'sed', 'sei', 'sta', 'stx', 'sty',
-    'tax', 'tay', 'tsx', 'txa', 'txs', 'tya'
+    'tax', 'tay', 'tsx', 'txa', 'txs', 'tya',
+    // Undocumented 6502 opcodes (as used by tass64)
+    'ane', 'arr', 'asr', 'dcp', 'isb', 'jam', 'lax', 'lds', 'rla', 'rra',
+    'sax', 'sbx', 'sha', 'shs', 'shx', 'shy', 'slo', 'sre', 'ahx', 'alr',
+    'axs', 'dcm', 'ins', 'isc', 'lae', 'las', 'lxa', 'tas', 'xaa'
 ]);
 
 // Directives that create new scopes (opener -> primary closer)
