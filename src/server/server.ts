@@ -11,7 +11,10 @@ import {
     Position,
     FoldingRangeParams,
     FoldingRange,
-    FoldingRangeKind
+    FoldingRangeKind,
+    HoverParams,
+    Hover,
+    MarkupKind
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -24,6 +27,7 @@ interface LabelDefinition {
     uri: string;
     range: Range;
     scope: string | null;  // null for global labels, parent scope name for local labels
+    value?: string;        // value for constant assignments (e.g., "$D414")
 }
 
 interface DocumentIndex {
@@ -158,11 +162,13 @@ function parseDocument(document: TextDocument): DocumentIndex {
         }
 
         // Constant assignment (can be indented, can start with _)
-        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=/);
+        // Capture the value after = (up to comment or end of line)
+        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=\s*([^;]+)/);
         if (constMatch) {
             const labelName = constMatch[2];
             const startChar = constMatch[1].length;
             const isLocal = labelName.startsWith('_');
+            const value = constMatch[3]?.trim();
 
             labels.push({
                 name: labelName,
@@ -171,7 +177,8 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     Position.create(lineNum, startChar),
                     Position.create(lineNum, startChar + labelName.length)
                 ),
-                scope: isLocal ? currentScope : null
+                scope: isLocal ? currentScope : null,
+                value: value || undefined
             });
             continue;
         }
@@ -210,38 +217,10 @@ function getWordAtPosition(document: TextDocument, position: Position): string |
 }
 
 function findDefinition(word: string, fromUri: string, fromLine: number): Location | null {
-    const isLocalSymbol = word.startsWith('_');
-
-    // Handle scoped references like "tbl.lo" - get the base name
-    const baseName = word.split('.')[0];
-
-    // Get the scope at the reference location
-    let referenceScope: string | null = null;
-    const fromIndex = documentIndex.get(fromUri);
-    if (fromIndex && isLocalSymbol) {
-        referenceScope = fromIndex.scopeAtLine.get(fromLine) ?? null;
+    const label = findSymbolInfo(word, fromUri, fromLine);
+    if (label) {
+        return Location.create(label.uri, label.range);
     }
-
-    // Search all indexed documents
-    for (const [uri, index] of documentIndex) {
-        for (const label of index.labels) {
-            if (label.name === word || label.name === baseName) {
-                // For local symbols, must match the scope
-                if (isLocalSymbol) {
-                    // Local symbol: must be in same document and same scope
-                    if (uri === fromUri && label.scope === referenceScope) {
-                        return Location.create(uri, label.range);
-                    }
-                } else {
-                    // Global symbol
-                    if (label.scope === null) {
-                        return Location.create(uri, label.range);
-                    }
-                }
-            }
-        }
-    }
-
     return null;
 }
 
@@ -304,12 +283,42 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     return ranges;
 }
 
+function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelDefinition | null {
+    const isLocalSymbol = word.startsWith('_');
+    const baseName = word.split('.')[0];
+
+    let referenceScope: string | null = null;
+    const fromIndex = documentIndex.get(fromUri);
+    if (fromIndex && isLocalSymbol) {
+        referenceScope = fromIndex.scopeAtLine.get(fromLine) ?? null;
+    }
+
+    for (const [uri, index] of documentIndex) {
+        for (const label of index.labels) {
+            if (label.name === word || label.name === baseName) {
+                if (isLocalSymbol) {
+                    if (uri === fromUri && label.scope === referenceScope) {
+                        return label;
+                    }
+                } else {
+                    if (label.scope === null) {
+                        return label;
+                    }
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
 connection.onInitialize((params: InitializeParams): InitializeResult => {
     return {
         capabilities: {
             textDocumentSync: TextDocumentSyncKind.Incremental,
             definitionProvider: true,
-            foldingRangeProvider: true
+            foldingRangeProvider: true,
+            hoverProvider: true
         }
     };
 });
@@ -334,6 +343,30 @@ connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
     if (!document) return [];
 
     return computeFoldingRanges(document);
+});
+
+connection.onHover((params: HoverParams): Hover | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
+
+    const word = getWordAtPosition(document, params.position);
+    if (!word) return null;
+
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line);
+    if (!symbol) return null;
+
+    // Build hover content
+    let content = `**${symbol.name}**`;
+    if (symbol.value) {
+        content += `\n\n\`= ${symbol.value}\``;
+    }
+
+    return {
+        contents: {
+            kind: MarkupKind.Markdown,
+            value: content
+        }
+    };
 });
 
 documents.onDidChangeContent(change => {
