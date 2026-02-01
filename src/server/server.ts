@@ -351,11 +351,18 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
     const currentScopePath = lineScope?.scopePath ?? null;
     const currentLocalScope = lineScope?.localScope ?? null;
 
-    const isLocalSymbol = word.startsWith('_');
+    // Handle macro calls like ".macroname" - strip leading dot
+    // (macros are defined as "name .macro" but called as ".name")
+    let lookupWord = word;
+    if (word.startsWith('.') && !word.includes('.', 1)) {
+        lookupWord = word.substring(1);
+    }
+
+    const isLocalSymbol = lookupWord.startsWith('_');
 
     // Handle dotted references like "scope.symbol"
-    if (word.includes('.')) {
-        const parts = word.split('.');
+    if (lookupWord.includes('.')) {
+        const parts = lookupWord.split('.');
         const targetName = parts[parts.length - 1];
         const targetPath = parts.slice(0, -1).join('.');
 
@@ -376,7 +383,7 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
     // Local symbol lookup: must match same document, same scopePath, same localScope
     if (isLocalSymbol) {
         for (const label of fromIndex.labels) {
-            if (label.name === word && label.isLocal &&
+            if (label.name === lookupWord && label.isLocal &&
                 label.scopePath === currentScopePath &&
                 label.localScope === currentLocalScope) {
                 return label;
@@ -389,7 +396,7 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
     // First, try exact scope match
     for (const [, index] of documentIndex) {
         for (const label of index.labels) {
-            if (label.name === word && !label.isLocal && label.scopePath === currentScopePath) {
+            if (label.name === lookupWord && !label.isLocal && label.scopePath === currentScopePath) {
                 return label;
             }
         }
@@ -403,7 +410,7 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
 
         for (const [, index] of documentIndex) {
             for (const label of index.labels) {
-                if (label.name === word && !label.isLocal && label.scopePath === scopeToTry) {
+                if (label.name === lookupWord && !label.isLocal && label.scopePath === scopeToTry) {
                     return label;
                 }
             }
@@ -413,7 +420,7 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
     // Finally try global scope
     for (const [, index] of documentIndex) {
         for (const label of index.labels) {
-            if (label.name === word && !label.isLocal && label.scopePath === null) {
+            if (label.name === lookupWord && !label.isLocal && label.scopePath === null) {
                 return label;
             }
         }
