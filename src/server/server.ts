@@ -655,6 +655,11 @@ function validateDocument(document: TextDocument): Diagnostic[] {
             const fullMatch = match[0];
             const startCol = match.index;
 
+            // Skip if this is part of a dotted reference (e.g., tbl.lo - the .lo is not a macro call)
+            if (startCol > 0 && /[a-zA-Z0-9_]/.test(code[startCol - 1])) {
+                continue;
+            }
+
             // Skip built-in directives
             const directive = '.' + macroName.toLowerCase();
             const isBuiltinDirective = Object.keys(OPENER_TO_CLOSERS).includes(directive) ||
@@ -698,6 +703,13 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 if (/^[0-9]/.test(symName)) continue;
                 // Skip if it's a parameter in the current scope
                 if (isParameter(symName, currentScopePath, index)) continue;
+
+                // For dotted references like param.lo, check if the parent is a parameter
+                // If so, accept the reference (we can't validate sub-labels of parameters)
+                if (symName.includes('.')) {
+                    const parentName = symName.split('.')[0];
+                    if (isParameter(parentName, currentScopePath, index)) continue;
+                }
 
                 const symbol = findSymbolInfo(symName, document.uri, lineNum);
                 if (!symbol) {
