@@ -43,6 +43,10 @@ interface DocumentIndex {
     scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }>;
     // Maps scope path to list of parameter names (for .function and .macro)
     parametersAtScope: Map<string, string[]>;
+    // Maps macro name to list of sub-labels it defines in its body
+    macroSubLabels: Map<string, string[]>;
+    // Maps label name to the macro used to define it (for labels defined via macro calls)
+    labelDefinedByMacro: Map<string, string>;
 }
 
 const documentIndex: Map<string, DocumentIndex> = new Map();
@@ -110,6 +114,8 @@ function parseDocument(document: TextDocument): DocumentIndex {
     const labels: LabelDefinition[] = [];
     const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }> = new Map();
     const parametersAtScope: Map<string, string[]> = new Map();
+    const macroSubLabels: Map<string, string[]> = new Map();
+    const labelDefinedByMacro: Map<string, string> = new Map();
     const text = document.getText();
     const lines = text.split('\n');
 
@@ -117,6 +123,8 @@ function parseDocument(document: TextDocument): DocumentIndex {
     const scopeStack: { name: string | null; directive: string }[] = [];
     // Current code label for local symbol scoping
     let currentLocalScope: string | null = null;
+    // Track macro bodies for extracting sub-labels: { name, startLine }
+    let currentMacroCapture: { name: string; startLine: number } | null = null;
 
     function getCurrentScopePath(): string | null {
         const named = scopeStack.filter(s => s.name !== null).map(s => s.name);
@@ -143,6 +151,23 @@ function parseDocument(document: TextDocument): DocumentIndex {
         for (const [open, close] of Object.entries(SCOPE_OPENERS)) {
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
             if (closePattern.test(lineLower)) {
+                // If closing a macro, extract sub-labels from its body
+                if (open === '.macro' && currentMacroCapture) {
+                    const subLabels: string[] = [];
+                    for (let i = currentMacroCapture.startLine; i < lineNum; i++) {
+                        const macroLine = lines[i];
+                        // Look for label definitions at start of line: "name" or "name =" or "name .byte", etc.
+                        const labelMatch = macroLine.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:$|:|=|\.)/);
+                        if (labelMatch) {
+                            subLabels.push(labelMatch[1]);
+                        }
+                    }
+                    if (subLabels.length > 0) {
+                        macroSubLabels.set(currentMacroCapture.name.toLowerCase(), subLabels);
+                    }
+                    currentMacroCapture = null;
+                }
+
                 // Pop matching scope from stack
                 for (let i = scopeStack.length - 1; i >= 0; i--) {
                     if (scopeStack[i].directive === open) {
@@ -194,6 +219,11 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     if (params.length > 0) {
                         parametersAtScope.set(newScopePath, params);
                     }
+                }
+
+                // Start capturing macro body to extract sub-labels
+                if (open === '.macro') {
+                    currentMacroCapture = { name: labelName, startLine: lineNum + 1 };
                 }
 
                 // Update scope for this line after opening
@@ -286,7 +316,7 @@ function parseDocument(document: TextDocument): DocumentIndex {
         }
 
         // Labels with data directives (not scope-creating)
-        const dataLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(byte|word|addr|fill|text|ptext|null|lohi_tbl|hilo_tbl|lo_tbl)\b/i);
+        const dataLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(byte|word|addr|fill|text|ptext|null)\b/i);
         if (dataLabelMatch) {
             const labelName = dataLabelMatch[1];
             labels.push({
@@ -300,6 +330,31 @@ function parseDocument(document: TextDocument): DocumentIndex {
                 localScope: null,
                 isLocal: false
             });
+            continue;
+        }
+
+        // Labels defined via macro calls (e.g., "label .macro_name args")
+        // Track which macro was used so we can validate sub-label references
+        const macroLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
+        if (macroLabelMatch) {
+            const labelName = macroLabelMatch[1];
+            const macroCalled = macroLabelMatch[2].toLowerCase();
+            // Skip if this is a scope-creating directive (already handled above)
+            if (!Object.keys(SCOPE_OPENERS).includes('.' + macroCalled)) {
+                labels.push({
+                    name: labelName,
+                    uri: document.uri,
+                    range: Range.create(
+                        Position.create(lineNum, 0),
+                        Position.create(lineNum, labelName.length)
+                    ),
+                    scopePath: getCurrentScopePath(),
+                    localScope: null,
+                    isLocal: false
+                });
+                // Track the macro used to define this label (for sub-label validation)
+                labelDefinedByMacro.set(labelName, macroCalled);
+            }
             continue;
         }
 
@@ -327,7 +382,7 @@ function parseDocument(document: TextDocument): DocumentIndex {
         }
     }
 
-    return { labels, scopeAtLine, parametersAtScope };
+    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro };
 }
 
 function indexDocument(document: TextDocument): void {
@@ -706,11 +761,24 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 // Skip if it's a parameter in the current scope
                 if (isParameter(symName, currentScopePath, index)) continue;
 
-                // For dotted references like param.lo, check if the parent is a parameter
-                // If so, accept the reference (we can't validate sub-labels of parameters)
+                // For dotted references like param.lo or label.hi
                 if (symName.includes('.')) {
-                    const parentName = symName.split('.')[0];
+                    const parts = symName.split('.');
+                    const parentName = parts[0];
+                    const subLabelName = parts[parts.length - 1];
+
+                    // If parent is a parameter, skip (we can't validate runtime values)
                     if (isParameter(parentName, currentScopePath, index)) continue;
+
+                    // Check if parent label was defined via a macro that creates this sub-label
+                    const macroUsed = index.labelDefinedByMacro.get(parentName);
+                    if (macroUsed) {
+                        const macroLabels = index.macroSubLabels.get(macroUsed);
+                        const subLabelLower = subLabelName.toLowerCase();
+                        if (macroLabels && macroLabels.some(l => l.toLowerCase() === subLabelLower)) {
+                            continue; // Valid sub-label from macro
+                        }
+                    }
                 }
 
                 const symbol = findSymbolInfo(symName, document.uri, lineNum);
@@ -733,7 +801,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
     return diagnostics;
 }
 
-connection.onInitialize((params: InitializeParams): InitializeResult => {
+connection.onInitialize((_params: InitializeParams): InitializeResult => {
     return {
         capabilities: {
             textDocumentSync: TextDocumentSyncKind.Incremental,
