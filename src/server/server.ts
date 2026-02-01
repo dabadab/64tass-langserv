@@ -621,8 +621,8 @@ function validateDocument(document: TextDocument): Diagnostic[] {
     }
 
     // Check for undefined symbols
-    // Pattern to match potential symbol references
-    const symbolPattern = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+    // Pattern to match potential symbol references (including dotted scope references like scope.label)
+    const symbolPattern = /\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\b/g;
     const macroCallPattern = /\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
 
     // Built-in names to ignore
