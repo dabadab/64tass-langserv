@@ -39,7 +39,12 @@
         "scopeName": "source.64tass",
         "path": "./syntaxes/64tass.tmLanguage.json"
       }
-    ]
+    ],
+    "configurationDefaults": {
+      "[64tass]": {
+        "editor.colorDecorators": false
+      }
+    }
   },
   "scripts": {
     "compile": "tsc -b",

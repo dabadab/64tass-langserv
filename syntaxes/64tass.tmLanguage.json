@@ -5,6 +5,7 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#immediate" },
     { "include": "#numbers" },
     { "include": "#opcodes" },
     { "include": "#directives" },
@@ -37,6 +38,26 @@
           "name": "string.quoted.single.64tass",
           "begin": "'",
           "end": "'"
+        }
+      ]
+    },
+    "immediate": {
+      "patterns": [
+        {
+          "name": "constant.numeric.immediate.64tass",
+          "match": "#\\$[0-9a-fA-F]+"
+        },
+        {
+          "name": "constant.numeric.immediate.64tass",
+          "match": "#%[01]+"
+        },
+        {
+          "name": "constant.numeric.immediate.64tass",
+          "match": "#[0-9]+"
+        },
+        {
+          "name": "constant.numeric.immediate.64tass",
+          "match": "#[<>]?[a-zA-Z_][a-zA-Z0-9_]*"
         }
       ]
     },
