@@ -585,6 +585,98 @@ function validateDocument(document: TextDocument): Diagnostic[] {
         });
     }
 
+    // Check for undefined symbols
+    // Pattern to match potential symbol references
+    const symbolPattern = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+    const macroCallPattern = /\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+
+    // Built-in names to ignore
+    const builtins = new Set([
+        // Registers
+        'a', 'x', 'y', 's', 'p',
+        // Common built-in functions/variables
+        'len', 'size', 'sizeof', 'type', 'range', 'format', 'repr', 'str', 'int', 'float', 'bool',
+        'true', 'false', 'null',
+        // Loop variables often used
+        'i', 'j', 'k', 'n',
+    ]);
+
+    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        const line = lines[lineNum];
+        const code = stripComment(line);
+
+        // Skip empty lines and comment-only lines
+        if (code.trim() === '') continue;
+
+        // Skip lines that are label definitions (they define, not reference)
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*[:=]/.test(code)) continue;
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s+\.(macro|function|proc|block|struct|union)\b/i.test(code)) continue;
+
+        // Check macro calls like .macroname
+        let match;
+        macroCallPattern.lastIndex = 0;
+        while ((match = macroCallPattern.exec(code)) !== null) {
+            const macroName = match[1];
+            const fullMatch = match[0];
+            const startCol = match.index;
+
+            // Skip built-in directives
+            const directive = '.' + macroName.toLowerCase();
+            const isBuiltinDirective = Object.keys(OPENER_TO_CLOSERS).includes(directive) ||
+                Object.values(CLOSING_DIRECTIVES).flat().includes(directive) ||
+                /^\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|align|binary|include|binclude|org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|virtual|endv|logical|here|as|option|page|eor|seed|else|elsif|case|default|shift|shiftl|proff|pron|hidemac|showmac|continue|break|sfunction|return|segment|send|section|namespace|endn|weak|lbl|goto|databank|dpage|enc|autsiz|mansiz)$/i.test(directive);
+
+            if (!isBuiltinDirective) {
+                // Try to find the macro definition
+                const symbol = findSymbolInfo(fullMatch, document.uri, lineNum);
+                if (!symbol) {
+                    diagnostics.push({
+                        severity: DiagnosticSeverity.Warning,
+                        range: Range.create(
+                            Position.create(lineNum, startCol),
+                            Position.create(lineNum, startCol + fullMatch.length)
+                        ),
+                        message: `Undefined macro '${macroName}'`,
+                        source: 'tass64'
+                    });
+                }
+            }
+        }
+
+        // Check regular symbol references (after opcodes, in expressions, etc.)
+        // Look for symbols after opcodes
+        const opcodeMatch = code.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?([a-zA-Z]{3})\s+(.+)$/i);
+        if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
+            const operand = opcodeMatch[2];
+            const operandStart = code.indexOf(operand);
+
+            symbolPattern.lastIndex = 0;
+            while ((match = symbolPattern.exec(operand)) !== null) {
+                const symName = match[1];
+                const symLower = symName.toLowerCase();
+
+                // Skip if it's a register, opcode, or builtin
+                if (builtins.has(symLower) || OPCODES.has(symLower)) continue;
+                // Skip numbers (might be caught as identifiers if they have letters like in hex)
+                if (/^[0-9]/.test(symName)) continue;
+
+                const symbol = findSymbolInfo(symName, document.uri, lineNum);
+                if (!symbol) {
+                    const startCol = operandStart + match.index;
+                    diagnostics.push({
+                        severity: DiagnosticSeverity.Warning,
+                        range: Range.create(
+                            Position.create(lineNum, startCol),
+                            Position.create(lineNum, startCol + symName.length)
+                        ),
+                        message: `Undefined symbol '${symName}'`,
+                        source: 'tass64'
+                    });
+                }
+            }
+        }
+    }
+
     return diagnostics;
 }
 
