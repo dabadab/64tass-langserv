@@ -14,7 +14,9 @@ import {
     FoldingRangeKind,
     HoverParams,
     Hover,
-    MarkupKind
+    MarkupKind,
+    Diagnostic,
+    DiagnosticSeverity
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -283,6 +285,97 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     return ranges;
 }
 
+function validateDocument(document: TextDocument): Diagnostic[] {
+    const diagnostics: Diagnostic[] = [];
+    const text = document.getText();
+    const lines = text.split('\n');
+    const index = documentIndex.get(document.uri);
+
+    if (!index) return diagnostics;
+
+    // Check for duplicate labels
+    const seenLabels = new Map<string, LabelDefinition>(); // key: "scope:name"
+    for (const label of index.labels) {
+        const key = `${label.scope ?? 'global'}:${label.name}`;
+        const existing = seenLabels.get(key);
+        if (existing) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: label.range,
+                message: `Duplicate label '${label.name}'`,
+                source: 'tass64'
+            });
+        } else {
+            seenLabels.set(key, label);
+        }
+    }
+
+    // Check for unclosed blocks
+    const blockStack: { directive: string; line: number; name?: string }[] = [];
+
+    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        const line = lines[lineNum];
+        const lineLower = line.toLowerCase();
+
+        for (const [open, close] of Object.entries(FOLDING_PAIRS)) {
+            const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`, 'i');
+            const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
+
+            if (openPattern.test(lineLower)) {
+                // Extract label name if present
+                const labelMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s+/);
+                blockStack.push({
+                    directive: open,
+                    line: lineNum,
+                    name: labelMatch?.[1]
+                });
+            }
+
+            if (closePattern.test(lineLower)) {
+                // Find matching opening directive
+                let found = false;
+                for (let i = blockStack.length - 1; i >= 0; i--) {
+                    if (blockStack[i].directive === open) {
+                        blockStack.splice(i, 1);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // Closing without opening
+                    const match = lineLower.match(closePattern);
+                    const startCol = match ? lineLower.indexOf(close) : 0;
+                    diagnostics.push({
+                        severity: DiagnosticSeverity.Error,
+                        range: Range.create(
+                            Position.create(lineNum, startCol),
+                            Position.create(lineNum, startCol + close.length)
+                        ),
+                        message: `'${close}' without matching '${open}'`,
+                        source: 'tass64'
+                    });
+                }
+            }
+        }
+    }
+
+    // Report unclosed blocks
+    for (const unclosed of blockStack) {
+        const closeDirective = FOLDING_PAIRS[unclosed.directive];
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: Range.create(
+                Position.create(unclosed.line, 0),
+                Position.create(unclosed.line, lines[unclosed.line].length)
+            ),
+            message: `Unclosed '${unclosed.directive}' - missing '${closeDirective}'`,
+            source: 'tass64'
+        });
+    }
+
+    return diagnostics;
+}
+
 function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelDefinition | null {
     const isLocalSymbol = word.startsWith('_');
     const baseName = word.split('.')[0];
@@ -371,10 +464,16 @@ connection.onHover((params: HoverParams): Hover | null => {
 
 documents.onDidChangeContent(change => {
     indexDocument(change.document);
+
+    // Validate and send diagnostics
+    const diagnostics = validateDocument(change.document);
+    connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
 });
 
 documents.onDidClose(event => {
     documentIndex.delete(event.document.uri);
+    // Clear diagnostics for closed document
+    connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
 });
 
 documents.listen(connection);
