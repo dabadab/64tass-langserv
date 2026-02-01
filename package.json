@@ -25,7 +25,8 @@
         "extensions": [
           ".asm",
           ".s",
-          ".inc"
+          ".inc",
+          ".src"
         ],
         "configuration": "./language-configuration.json"
       }
