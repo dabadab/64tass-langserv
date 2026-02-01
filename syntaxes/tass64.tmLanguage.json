@@ -1,0 +1,100 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "tass64",
+  "scopeName": "source.tass64",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#opcodes" },
+    { "include": "#directives" },
+    { "include": "#labels" },
+    { "include": "#registers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.tass64",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.tass64",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.tass64",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.tass64",
+          "begin": "'",
+          "end": "'"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.tass64",
+          "match": "\\$[0-9a-fA-F]+"
+        },
+        {
+          "name": "constant.numeric.binary.tass64",
+          "match": "%[01]+"
+        },
+        {
+          "name": "constant.numeric.decimal.tass64",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "opcodes": {
+      "patterns": [
+        {
+          "name": "keyword.mnemonic.tass64",
+          "match": "(?i)\\b(adc|and|asl|bcc|bcs|beq|bit|bmi|bne|bpl|brk|bvc|bvs|clc|cld|cli|clv|cmp|cpx|cpy|dec|dex|dey|eor|inc|inx|iny|jmp|jsr|lda|ldx|ldy|lsr|nop|ora|pha|php|pla|plp|rol|ror|rti|rts|sbc|sec|sed|sei|sta|stx|sty|tax|tay|tsx|txa|txs|tya)\\b"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.directive.tass64",
+          "match": "(?i)\\.(byte|word|text|fill|align|org|include|binary|macro|endm|if|else|endif|for|next|proc|endproc|segment|assert|error|warn)\\b"
+        },
+        {
+          "name": "keyword.operator.assignment.tass64",
+          "match": "="
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.function.label.tass64",
+          "match": "^[a-zA-Z_][a-zA-Z0-9_]*:"
+        },
+        {
+          "name": "entity.name.function.label.local.tass64",
+          "match": "^[+\\-]"
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.language.register.tass64",
+          "match": "(?i)\\b[axy]\\b"
+        }
+      ]
+    }
+  }
+}

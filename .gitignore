@@ -1,0 +1,7 @@
+node_modules/
+yarn.lock
+out/
+*.vsix
+.vscode-test/
+example/
+.claude

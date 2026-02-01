@@ -1,0 +1,57 @@
+{
+  "name": "tass64-langserv",
+  "displayName": "tass64 Language Support",
+  "description": "Language support for tass64 MOS 6502 macro assembler",
+  "version": "0.0.1",
+  "publisher": "tass64",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:tass64"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "tass64",
+        "aliases": [
+          "tass64",
+          "6502 Assembly"
+        ],
+        "extensions": [
+          ".asm",
+          ".s",
+          ".inc"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tass64",
+        "scopeName": "source.tass64",
+        "path": "./syntaxes/tass64.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -b",
+    "watch": "tsc -b -w",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.3.0"
+  }
+}
