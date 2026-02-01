@@ -430,6 +430,28 @@ function findDefinition(word: string, fromUri: string, fromLine: number): Locati
     return null;
 }
 
+// Strip comments from a line (handle strings to avoid stripping ; inside strings)
+function stripComment(line: string): string {
+    let inString = false;
+    let stringChar = '';
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (inString) {
+            if (char === stringChar && line[i - 1] !== '\\') {
+                inString = false;
+            }
+        } else {
+            if (char === '"' || char === "'") {
+                inString = true;
+                stringChar = char;
+            } else if (char === ';') {
+                return line.substring(0, i);
+            }
+        }
+    }
+    return line;
+}
+
 function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     const ranges: FoldingRange[] = [];
     const text = document.getText();
@@ -438,7 +460,7 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     const stack: { directive: string; line: number }[] = [];
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const line = lines[lineNum].toLowerCase();
+        const line = stripComment(lines[lineNum]).toLowerCase();
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {
@@ -503,7 +525,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
     const blockStack: { directive: string; line: number }[] = [];
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const lineLower = lines[lineNum].toLowerCase();
+        const lineLower = stripComment(lines[lineNum]).toLowerCase();
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {
