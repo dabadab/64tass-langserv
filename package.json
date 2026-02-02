@@ -2,7 +2,7 @@
   "name": "64tass-langserv",
   "displayName": "64tass Language Support",
   "description": "Language support for 64tass MOS 6502 macro assembler",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "license": "MIT",
   "publisher": "64tass",
   "engines": {
@@ -46,6 +46,8 @@
     "compile": "tsc -b",
     "watch": "tsc -b -w",
     "lint": "eslint src --ext ts",
+    "version-from-tag": "node -e \"const v = require('child_process').execSync('git describe --tags --abbrev=0').toString().trim().replace(/^v/, ''); const pkg = require('./package.json'); pkg.version = v; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');\"",
+    "vscode:prepublish": "yarn version-from-tag && yarn compile",
     "package": "vsce package"
   },
   "dependencies": {
