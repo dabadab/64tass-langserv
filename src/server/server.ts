@@ -938,6 +938,39 @@ connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
     return computeFoldingRanges(document);
 });
 
+// Parse a numeric value from various formats (decimal, hex, binary)
+function parseNumericValue(value: string): number | null {
+    const trimmed = value.trim();
+
+    // Hexadecimal: $FF or 0xFF or 0xABC
+    const hexMatch = trimmed.match(/^\$([0-9a-fA-F]+)$/) || trimmed.match(/^0x([0-9a-fA-F]+)$/i);
+    if (hexMatch) {
+        return parseInt(hexMatch[1], 16);
+    }
+
+    // Binary: %10101010 or 0b10101010
+    const binMatch = trimmed.match(/^%([01]+)$/) || trimmed.match(/^0b([01]+)$/i);
+    if (binMatch) {
+        return parseInt(binMatch[1], 2);
+    }
+
+    // Decimal: 123 or -123
+    const decMatch = trimmed.match(/^-?\d+$/);
+    if (decMatch) {
+        return parseInt(trimmed, 10);
+    }
+
+    return null;
+}
+
+// Format a number in binary, decimal, and hexadecimal
+function formatNumericValue(num: number): string {
+    const bin = num >= 0 ? '%' + num.toString(2) : '-' + '%' + Math.abs(num).toString(2);
+    const dec = num.toString(10);
+    const hex = num >= 0 ? '$' + num.toString(16).toUpperCase() : '-$' + Math.abs(num).toString(16).toUpperCase();
+    return `${bin}, ${dec}, ${hex}`;
+}
+
 connection.onHover((params: HoverParams): Hover | null => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return null;
@@ -953,7 +986,13 @@ connection.onHover((params: HoverParams): Hover | null => {
         content += ` *(in ${symbol.scopePath})*`;
     }
     if (symbol.value) {
-        content += `\n\n\`= ${symbol.value}\``;
+        const numValue = parseNumericValue(symbol.value);
+        if (numValue !== null) {
+            content += `\n\n\`= ${formatNumericValue(numValue)}\``;
+        } else {
+            // Not a simple numeric value, show as-is
+            content += `\n\n\`= ${symbol.value}\``;
+        }
     }
 
     return {
