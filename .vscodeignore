@@ -1,0 +1,17 @@
+.vscode/**
+.claude/**
+src/**
+example/**
+node_modules/**
+!node_modules/vscode-languageclient/**
+!node_modules/vscode-languageserver/**
+!node_modules/vscode-languageserver-textdocument/**
+!node_modules/vscode-jsonrpc/**
+!node_modules/vscode-languageserver-types/**
+!node_modules/vscode-languageserver-protocol/**
+.gitignore
+tsconfig.json
+tsconfig.tsbuildinfo
+**/*.ts
+**/*.map
+yarn.lock
