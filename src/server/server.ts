@@ -38,6 +38,8 @@ interface LabelDefinition {
     // Whether this is a local symbol (starts with _)
     isLocal: boolean;
     value?: string;
+    // Documentation comment from same line, line above, or line below
+    comment?: string;
 }
 
 interface DocumentIndex {
@@ -133,6 +135,64 @@ for (const [open, closers] of Object.entries(OPENER_TO_CLOSERS)) {
 const FOLDING_PAIRS: Record<string, string> = {};
 for (const [open, closers] of Object.entries(OPENER_TO_CLOSERS)) {
     FOLDING_PAIRS[open] = closers[0];
+}
+
+// Extract comment text from a line (returns the text after ;, preserving indentation)
+// Strips one leading space if present (conventional separator after ;)
+function extractComment(line: string): string | null {
+    const idx = line.indexOf(';');
+    if (idx >= 0) {
+        let comment = line.substring(idx + 1).trimEnd();
+        // Remove single leading space (conventional "; comment" format)
+        if (comment.startsWith(' ')) {
+            comment = comment.substring(1);
+        }
+        return comment.length > 0 ? comment : null;
+    }
+    return null;
+}
+
+// Get associated comment for a block label at lineNum
+// Checks: same line, lines above, lines below (in that priority order)
+// Multiple consecutive comment lines are joined together
+function getBlockComment(lines: string[], lineNum: number): string | undefined {
+    // Same line comment
+    const sameLine = extractComment(lines[lineNum]);
+    if (sameLine) return sameLine;
+
+    // Lines above (must be comment-only lines, collect all consecutive)
+    if (lineNum > 0 && /^\s*;/.test(lines[lineNum - 1])) {
+        const commentLines: string[] = [];
+        for (let i = lineNum - 1; i >= 0; i--) {
+            if (/^\s*;/.test(lines[i])) {
+                const comment = extractComment(lines[i]);
+                if (comment) commentLines.unshift(comment);
+            } else {
+                break;
+            }
+        }
+        if (commentLines.length > 0) {
+            return commentLines.join('  \n');
+        }
+    }
+
+    // Lines below (must be comment-only lines, collect all consecutive)
+    if (lineNum < lines.length - 1 && /^\s*;/.test(lines[lineNum + 1])) {
+        const commentLines: string[] = [];
+        for (let i = lineNum + 1; i < lines.length; i++) {
+            if (/^\s*;/.test(lines[i])) {
+                const comment = extractComment(lines[i]);
+                if (comment) commentLines.push(comment);
+            } else {
+                break;
+            }
+        }
+        if (commentLines.length > 0) {
+            return commentLines.join('  \n');
+        }
+    }
+
+    return undefined;
 }
 
 function parseDocument(document: TextDocument): DocumentIndex {
@@ -239,6 +299,7 @@ function parseDocument(document: TextDocument): DocumentIndex {
                 const labelName = match[1];
                 const currentPath = getCurrentScopePath();
                 const paramsStr = match[2] ? stripComment(match[2]).trim() : '';
+                const comment = getBlockComment(lines, lineNum);
 
                 labels.push({
                     name: labelName,
@@ -249,7 +310,8 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     ),
                     scopePath: currentPath,
                     localScope: null,
-                    isLocal: false
+                    isLocal: false,
+                    comment
                 });
 
                 // Push named scope
@@ -984,6 +1046,9 @@ connection.onHover((params: HoverParams): Hover | null => {
     let content = `**${symbol.name}**`;
     if (symbol.scopePath) {
         content += ` *(in ${symbol.scopePath})*`;
+    }
+    if (symbol.comment) {
+        content += `\n\n\`\`\`text\n${symbol.comment}\n\`\`\``;
     }
     if (symbol.value) {
         const numValue = parseNumericValue(symbol.value);
