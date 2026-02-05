@@ -20,7 +20,11 @@ import {
     ReferenceParams,
     RenameParams,
     WorkspaceEdit,
-    TextEdit
+    TextEdit,
+    AnnotatedTextEdit,
+    ChangeAnnotation,
+    TextDocumentEdit,
+    OptionalVersionedTextDocumentIdentifier
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -1191,6 +1195,28 @@ connection.onReferences((params: ReferenceParams): Location[] => {
     return references;
 });
 
+// Find comment start position in a line (returns -1 if no comment)
+function getCommentStart(line: string): number {
+    let inString = false;
+    let stringChar = '';
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (inString) {
+            if (char === stringChar && line[i - 1] !== '\\') {
+                inString = false;
+            }
+        } else {
+            if (char === '"' || char === "'") {
+                inString = true;
+                stringChar = char;
+            } else if (char === ';') {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
 connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return null;
@@ -1203,18 +1229,42 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
     if (!symbol) return null;
 
     const newName = params.newName;
-    const changes: { [uri: string]: TextEdit[] } = {};
 
-    // Helper to add an edit
-    function addEdit(uri: string, range: Range) {
-        if (!changes[uri]) {
-            changes[uri] = [];
+    // Track edits by URI, separating code and comment edits
+    const codeEdits: Map<string, TextEdit[]> = new Map();
+    const commentEdits: Map<string, AnnotatedTextEdit[]> = new Map();
+
+    // Track added edits to avoid duplicates
+    const addedEdits = new Set<string>();
+
+    // Helper to add a code edit
+    function addCodeEdit(uri: string, range: Range) {
+        const key = `${uri}:${range.start.line}:${range.start.character}`;
+        if (addedEdits.has(key)) return;
+        addedEdits.add(key);
+
+        if (!codeEdits.has(uri)) {
+            codeEdits.set(uri, []);
         }
-        changes[uri].push(TextEdit.replace(range, newName));
+        codeEdits.get(uri)!.push(TextEdit.replace(range, newName));
+    }
+
+    // Helper to add a comment edit (with annotation)
+    function addCommentEdit(uri: string, range: Range) {
+        const key = `${uri}:${range.start.line}:${range.start.character}`;
+        if (addedEdits.has(key)) return;
+        addedEdits.add(key);
+
+        if (!commentEdits.has(uri)) {
+            commentEdits.set(uri, []);
+        }
+        commentEdits.get(uri)!.push(
+            AnnotatedTextEdit.replace(range, newName, 'commentRename')
+        );
     }
 
     // Add the definition
-    addEdit(symbol.uri, symbol.range);
+    addCodeEdit(symbol.uri, symbol.range);
 
     // Search all indexed documents for references
     for (const [uri, index] of documentIndex) {
@@ -1236,8 +1286,7 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
         for (let lineNum = 0; lineNum < lines.length; lineNum++) {
             const line = lines[lineNum];
             const code = stripComment(line);
-
-            if (code.trim() === '') continue;
+            const commentStart = getCommentStart(line);
 
             const symbolName = symbol.name;
             const escapedName = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1250,51 +1299,118 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
                 patterns.push(new RegExp(`\\.${escapedName}\\b`, 'g'));
             }
 
-            for (const pattern of patterns) {
+            // Search in code portion
+            if (code.trim() !== '') {
+                for (const pattern of patterns) {
+                    let match;
+                    while ((match = pattern.exec(code)) !== null) {
+                        const startCol = match.index;
+                        const matchText = match[0];
+
+                        // Skip if this is the definition itself (already added)
+                        if (uri === symbol.uri && lineNum === symbol.range.start.line &&
+                            startCol === symbol.range.start.character) {
+                            continue;
+                        }
+
+                        const lineScope = index.scopeAtLine.get(lineNum);
+                        const lineScopePath = lineScope?.scopePath ?? null;
+                        const lineLocalScope = lineScope?.localScope ?? null;
+
+                        if (symbol.isLocal) {
+                            if (lineScopePath !== symbol.scopePath ||
+                                lineLocalScope !== symbol.localScope) {
+                                continue;
+                            }
+                        } else {
+                            const refSymbol = findSymbolInfo(
+                                matchText.startsWith('.') ? matchText : symbolName,
+                                uri,
+                                lineNum
+                            );
+                            if (!refSymbol || refSymbol.uri !== symbol.uri ||
+                                refSymbol.range.start.line !== symbol.range.start.line) {
+                                continue;
+                            }
+                        }
+
+                        const actualStartCol = matchText.startsWith('.') ? startCol + 1 : startCol;
+
+                        addCodeEdit(uri, Range.create(
+                            Position.create(lineNum, actualStartCol),
+                            Position.create(lineNum, actualStartCol + symbolName.length)
+                        ));
+                    }
+                }
+            }
+
+            // Search in comment portion (for all symbols, not just scoped ones)
+            if (commentStart >= 0) {
+                const comment = line.substring(commentStart);
+                // Only match whole words in comments (no macro call syntax)
+                const commentPattern = new RegExp(`\\b${escapedName}\\b`, 'g');
                 let match;
-                while ((match = pattern.exec(code)) !== null) {
-                    const startCol = match.index;
-                    const matchText = match[0];
+                while ((match = commentPattern.exec(comment)) !== null) {
+                    const startCol = commentStart + match.index;
 
-                    // Skip if this is the definition itself (already added)
-                    if (uri === symbol.uri && lineNum === symbol.range.start.line &&
-                        startCol === symbol.range.start.character) {
-                        continue;
-                    }
-
-                    const lineScope = index.scopeAtLine.get(lineNum);
-                    const lineScopePath = lineScope?.scopePath ?? null;
-                    const lineLocalScope = lineScope?.localScope ?? null;
-
-                    if (symbol.isLocal) {
-                        if (lineScopePath !== symbol.scopePath ||
-                            lineLocalScope !== symbol.localScope) {
-                            continue;
-                        }
-                    } else {
-                        const refSymbol = findSymbolInfo(
-                            matchText.startsWith('.') ? matchText : symbolName,
-                            uri,
-                            lineNum
-                        );
-                        if (!refSymbol || refSymbol.uri !== symbol.uri ||
-                            refSymbol.range.start.line !== symbol.range.start.line) {
-                            continue;
-                        }
-                    }
-
-                    const actualStartCol = matchText.startsWith('.') ? startCol + 1 : startCol;
-
-                    addEdit(uri, Range.create(
-                        Position.create(lineNum, actualStartCol),
-                        Position.create(lineNum, actualStartCol + symbolName.length)
+                    addCommentEdit(uri, Range.create(
+                        Position.create(lineNum, startCol),
+                        Position.create(lineNum, startCol + symbolName.length)
                     ));
                 }
             }
         }
     }
 
-    return { changes };
+    // Build the workspace edit
+    const hasCommentEdits = commentEdits.size > 0;
+
+    if (hasCommentEdits) {
+        // Use documentChanges with annotations to force preview
+        const documentChanges: TextDocumentEdit[] = [];
+        const changeAnnotations: { [id: string]: ChangeAnnotation } = {
+            'commentRename': {
+                label: 'Rename in comments',
+                needsConfirmation: true,
+                description: 'Also rename occurrences in comments'
+            }
+        };
+
+        // Collect all URIs
+        const allUris = new Set([...codeEdits.keys(), ...commentEdits.keys()]);
+
+        for (const uri of allUris) {
+            const edits: (TextEdit | AnnotatedTextEdit)[] = [];
+
+            // Add code edits
+            const uriCodeEdits = codeEdits.get(uri);
+            if (uriCodeEdits) {
+                edits.push(...uriCodeEdits);
+            }
+
+            // Add comment edits (annotated)
+            const uriCommentEdits = commentEdits.get(uri);
+            if (uriCommentEdits) {
+                edits.push(...uriCommentEdits);
+            }
+
+            if (edits.length > 0) {
+                documentChanges.push({
+                    textDocument: OptionalVersionedTextDocumentIdentifier.create(uri, null),
+                    edits
+                });
+            }
+        }
+
+        return { documentChanges, changeAnnotations };
+    } else {
+        // No comment edits, use simple changes format
+        const changes: { [uri: string]: TextEdit[] } = {};
+        for (const [uri, edits] of codeEdits) {
+            changes[uri] = edits;
+        }
+        return { changes };
+    }
 });
 
 documents.onDidChangeContent(change => {
