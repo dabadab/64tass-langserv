@@ -25,19 +25,11 @@
       "patterns": [
         {
           "name": "string.quoted.double.64tass",
-          "begin": "\"",
-          "end": "\"",
-          "patterns": [
-            {
-              "name": "constant.character.escape.64tass",
-              "match": "\\\\."
-            }
-          ]
+          "match": "\"([^\"]|\"\")*\""
         },
         {
           "name": "string.quoted.single.64tass",
-          "begin": "'",
-          "end": "'"
+          "match": "'([^']|'')*'"
         }
       ]
     },

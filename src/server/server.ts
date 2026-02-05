@@ -640,14 +640,20 @@ function findDefinition(word: string, fromUri: string, fromLine: number): Locati
 }
 
 // Strip comments from a line (handle strings to avoid stripping ; inside strings)
+// In 64tass, "" inside a string is an escaped quote, backslashes are literal
 function stripComment(line: string): string {
     let inString = false;
     let stringChar = '';
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
         if (inString) {
-            if (char === stringChar && line[i - 1] !== '\\') {
-                inString = false;
+            if (char === stringChar) {
+                // Check for escaped quote (doubled quote)
+                if (i + 1 < line.length && line[i + 1] === stringChar) {
+                    i++; // Skip the escaped quote
+                } else {
+                    inString = false;
+                }
             }
         } else {
             if (char === '"' || char === "'") {
@@ -1196,14 +1202,20 @@ connection.onReferences((params: ReferenceParams): Location[] => {
 });
 
 // Find comment start position in a line (returns -1 if no comment)
+// In 64tass, "" inside a string is an escaped quote, backslashes are literal
 function getCommentStart(line: string): number {
     let inString = false;
     let stringChar = '';
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
         if (inString) {
-            if (char === stringChar && line[i - 1] !== '\\') {
-                inString = false;
+            if (char === stringChar) {
+                // Check for escaped quote (doubled quote)
+                if (i + 1 < line.length && line[i + 1] === stringChar) {
+                    i++; // Skip the escaped quote
+                } else {
+                    inString = false;
+                }
             }
         } else {
             if (char === '"' || char === "'") {
