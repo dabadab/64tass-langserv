@@ -17,7 +17,10 @@ import {
     MarkupKind,
     Diagnostic,
     DiagnosticSeverity,
-    ReferenceParams
+    ReferenceParams,
+    RenameParams,
+    WorkspaceEdit,
+    TextEdit
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -942,6 +945,7 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => {
             textDocumentSync: TextDocumentSyncKind.Incremental,
             definitionProvider: true,
             referencesProvider: true,
+            renameProvider: true,
             foldingRangeProvider: true,
             hoverProvider: true
         }
@@ -1185,6 +1189,112 @@ connection.onReferences((params: ReferenceParams): Location[] => {
     }
 
     return references;
+});
+
+connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
+
+    const word = getWordAtPosition(document, params.position);
+    if (!word) return null;
+
+    // Find the symbol definition
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line);
+    if (!symbol) return null;
+
+    const newName = params.newName;
+    const changes: { [uri: string]: TextEdit[] } = {};
+
+    // Helper to add an edit
+    function addEdit(uri: string, range: Range) {
+        if (!changes[uri]) {
+            changes[uri] = [];
+        }
+        changes[uri].push(TextEdit.replace(range, newName));
+    }
+
+    // Add the definition
+    addEdit(symbol.uri, symbol.range);
+
+    // Search all indexed documents for references
+    for (const [uri, index] of documentIndex) {
+        let docContent: string;
+        const openDoc = documents.get(uri);
+        if (openDoc) {
+            docContent = openDoc.getText();
+        } else {
+            try {
+                const filePath = fileURLToPath(uri);
+                docContent = fs.readFileSync(filePath, 'utf-8');
+            } catch {
+                continue;
+            }
+        }
+
+        const lines = docContent.split('\n');
+
+        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+            const line = lines[lineNum];
+            const code = stripComment(line);
+
+            if (code.trim() === '') continue;
+
+            const symbolName = symbol.name;
+            const escapedName = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            const patterns: RegExp[] = [];
+            if (symbol.isLocal) {
+                patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
+            } else {
+                patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
+                patterns.push(new RegExp(`\\.${escapedName}\\b`, 'g'));
+            }
+
+            for (const pattern of patterns) {
+                let match;
+                while ((match = pattern.exec(code)) !== null) {
+                    const startCol = match.index;
+                    const matchText = match[0];
+
+                    // Skip if this is the definition itself (already added)
+                    if (uri === symbol.uri && lineNum === symbol.range.start.line &&
+                        startCol === symbol.range.start.character) {
+                        continue;
+                    }
+
+                    const lineScope = index.scopeAtLine.get(lineNum);
+                    const lineScopePath = lineScope?.scopePath ?? null;
+                    const lineLocalScope = lineScope?.localScope ?? null;
+
+                    if (symbol.isLocal) {
+                        if (lineScopePath !== symbol.scopePath ||
+                            lineLocalScope !== symbol.localScope) {
+                            continue;
+                        }
+                    } else {
+                        const refSymbol = findSymbolInfo(
+                            matchText.startsWith('.') ? matchText : symbolName,
+                            uri,
+                            lineNum
+                        );
+                        if (!refSymbol || refSymbol.uri !== symbol.uri ||
+                            refSymbol.range.start.line !== symbol.range.start.line) {
+                            continue;
+                        }
+                    }
+
+                    const actualStartCol = matchText.startsWith('.') ? startCol + 1 : startCol;
+
+                    addEdit(uri, Range.create(
+                        Position.create(lineNum, actualStartCol),
+                        Position.create(lineNum, actualStartCol + symbolName.length)
+                    ));
+                }
+            }
+        }
+    }
+
+    return { changes };
 });
 
 documents.onDidChangeContent(change => {
