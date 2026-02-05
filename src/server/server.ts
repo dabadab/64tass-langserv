@@ -16,7 +16,8 @@ import {
     Hover,
     MarkupKind,
     Diagnostic,
-    DiagnosticSeverity
+    DiagnosticSeverity,
+    ReferenceParams
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -940,6 +941,7 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => {
         capabilities: {
             textDocumentSync: TextDocumentSyncKind.Incremental,
             definitionProvider: true,
+            referencesProvider: true,
             foldingRangeProvider: true,
             hoverProvider: true
         }
@@ -1066,6 +1068,123 @@ connection.onHover((params: HoverParams): Hover | null => {
             value: content
         }
     };
+});
+
+connection.onReferences((params: ReferenceParams): Location[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+
+    const word = getWordAtPosition(document, params.position);
+    if (!word) return [];
+
+    // Find the symbol definition to understand its scope
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line);
+    if (!symbol) return [];
+
+    const references: Location[] = [];
+
+    // Include the definition itself if requested
+    if (params.context.includeDeclaration) {
+        references.push(Location.create(symbol.uri, symbol.range));
+    }
+
+    // Search all indexed documents for references
+    for (const [uri, index] of documentIndex) {
+        // Get document content
+        let docContent: string;
+        const openDoc = documents.get(uri);
+        if (openDoc) {
+            docContent = openDoc.getText();
+        } else {
+            try {
+                const filePath = fileURLToPath(uri);
+                docContent = fs.readFileSync(filePath, 'utf-8');
+            } catch {
+                continue;
+            }
+        }
+
+        const lines = docContent.split('\n');
+
+        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+            const line = lines[lineNum];
+            const code = stripComment(line);
+
+            // Skip empty lines
+            if (code.trim() === '') continue;
+
+            // Find all occurrences of the symbol name in this line
+            const symbolName = symbol.name;
+            const escapedName = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            // Pattern to match the symbol as a whole word
+            // For local symbols (_name), match with underscore
+            // For regular symbols, match word boundaries
+            // Also match macro calls (.name)
+            const patterns: RegExp[] = [];
+
+            if (symbol.isLocal) {
+                // Local symbol: match exactly with word boundaries
+                patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
+            } else {
+                // Regular symbol: match as word or as macro call (.name)
+                patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
+                patterns.push(new RegExp(`\\.${escapedName}\\b`, 'g'));
+            }
+
+            for (const pattern of patterns) {
+                let match;
+                while ((match = pattern.exec(code)) !== null) {
+                    const startCol = match.index;
+                    const matchText = match[0];
+
+                    // Skip if this is the definition itself
+                    if (uri === symbol.uri && lineNum === symbol.range.start.line &&
+                        startCol === symbol.range.start.character) {
+                        continue;
+                    }
+
+                    // Get scope context for this line
+                    const lineScope = index.scopeAtLine.get(lineNum);
+                    const lineScopePath = lineScope?.scopePath ?? null;
+                    const lineLocalScope = lineScope?.localScope ?? null;
+
+                    // For local symbols, must be in same scope and local scope
+                    if (symbol.isLocal) {
+                        if (lineScopePath !== symbol.scopePath ||
+                            lineLocalScope !== symbol.localScope) {
+                            continue;
+                        }
+                    } else {
+                        // For regular symbols, check if this reference could resolve to our symbol
+                        // The symbol should be visible from the current scope
+                        const refSymbol = findSymbolInfo(
+                            matchText.startsWith('.') ? matchText : symbolName,
+                            uri,
+                            lineNum
+                        );
+                        if (!refSymbol || refSymbol.uri !== symbol.uri ||
+                            refSymbol.range.start.line !== symbol.range.start.line) {
+                            continue;
+                        }
+                    }
+
+                    // Adjust start column for macro call prefix
+                    const actualStartCol = matchText.startsWith('.') ? startCol + 1 : startCol;
+
+                    references.push(Location.create(
+                        uri,
+                        Range.create(
+                            Position.create(lineNum, actualStartCol),
+                            Position.create(lineNum, actualStartCol + symbolName.length)
+                        )
+                    ));
+                }
+            }
+        }
+    }
+
+    return references;
 });
 
 documents.onDidChangeContent(change => {
