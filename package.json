@@ -2,7 +2,7 @@
   "name": "64tass-langserv",
   "displayName": "64tass Language Support",
   "description": "Language support for 64tass MOS 6502 macro assembler",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "license": "MIT",
   "publisher": "dabadab",
   "repository": {
