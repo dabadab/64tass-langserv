@@ -1,0 +1,256 @@
+import { describe, it, expect } from 'vitest';
+import {
+    stripComment,
+    stripStrings,
+    getCommentStart,
+    extractComment,
+    getBlockComment,
+    parseNumericValue,
+    formatNumericValue
+} from '../../src/server/utils';
+
+describe('stripComment', () => {
+    it('returns line unchanged when no comment', () => {
+        expect(stripComment('lda #$FF')).toBe('lda #$FF');
+    });
+
+    it('strips simple comment', () => {
+        expect(stripComment('lda #$FF ; load acc')).toBe('lda #$FF ');
+    });
+
+    it('preserves semicolon inside double-quoted string', () => {
+        expect(stripComment('.text "a;b"')).toBe('.text "a;b"');
+    });
+
+    it('preserves semicolon inside single-quoted string', () => {
+        expect(stripComment(".text 'a;b'")).toBe(".text 'a;b'");
+    });
+
+    it('handles doubled double-quote escape then comment', () => {
+        expect(stripComment('.text "a""b" ; comment')).toBe('.text "a""b" ');
+    });
+
+    it('handles doubled single-quote escape then comment', () => {
+        expect(stripComment(".text 'a''b' ; comment")).toBe(".text 'a''b' ");
+    });
+
+    it('strips comment after string', () => {
+        expect(stripComment('.text "hello" ; msg')).toBe('.text "hello" ');
+    });
+
+    it('strips comment-only line', () => {
+        expect(stripComment('; this is a comment')).toBe('');
+    });
+
+    it('returns empty string for empty line', () => {
+        expect(stripComment('')).toBe('');
+    });
+
+    it('strips at first semicolon outside strings', () => {
+        expect(stripComment('lda #1 ; a ; b')).toBe('lda #1 ');
+    });
+
+    it('returns full line for unclosed string (no semicolon found)', () => {
+        expect(stripComment('.text "abc')).toBe('.text "abc');
+    });
+});
+
+describe('stripStrings', () => {
+    it('returns line unchanged when no strings', () => {
+        expect(stripStrings('lda #1')).toBe('lda #1');
+    });
+
+    it('replaces double-quoted string content with spaces', () => {
+        const result = stripStrings('.text "abc"');
+        expect(result).toBe('.text "   "');
+    });
+
+    it('replaces single-quoted string content with spaces', () => {
+        const result = stripStrings(".text 'abc'");
+        expect(result).toBe(".text '   '");
+    });
+
+    it('handles doubled quote escape', () => {
+        const result = stripStrings('.text "a""b"');
+        // "a""b" -> opening quote kept, a->space, ""->two spaces, b->space, closing quote kept
+        expect(result).toBe('.text "    "');
+    });
+
+    it('preserves line length', () => {
+        const input = '.text "hello", \'world\'';
+        expect(stripStrings(input).length).toBe(input.length);
+    });
+
+    it('handles multiple strings on one line', () => {
+        const result = stripStrings('.byte "a", "b"');
+        expect(result).toBe('.byte " ", " "');
+    });
+});
+
+describe('getCommentStart', () => {
+    it('returns -1 when no comment', () => {
+        expect(getCommentStart('lda #1')).toBe(-1);
+    });
+
+    it('returns index of semicolon', () => {
+        expect(getCommentStart('nop ; comment')).toBe(4);
+    });
+
+    it('returns -1 when semicolon is inside string', () => {
+        expect(getCommentStart('.text "a;b"')).toBe(-1);
+    });
+
+    it('returns correct index after string', () => {
+        const line = '.text "a" ; c';
+        expect(getCommentStart(line)).toBe(10);
+    });
+
+    it('returns 0 for comment-only line', () => {
+        expect(getCommentStart('; comment')).toBe(0);
+    });
+});
+
+describe('extractComment', () => {
+    it('returns null when no semicolon', () => {
+        expect(extractComment('lda #1')).toBeNull();
+    });
+
+    it('strips one leading space', () => {
+        expect(extractComment('; hello')).toBe('hello');
+    });
+
+    it('returns comment without leading space if none present', () => {
+        expect(extractComment(';hello')).toBe('hello');
+    });
+
+    it('returns null for empty comment', () => {
+        expect(extractComment(';')).toBeNull();
+    });
+
+    it('returns null for comment with only whitespace', () => {
+        expect(extractComment(';   ')).toBeNull();
+    });
+
+    it('extracts inline comment', () => {
+        expect(extractComment('lda #1 ; load value')).toBe('load value');
+    });
+});
+
+describe('getBlockComment', () => {
+    it('returns same-line comment', () => {
+        expect(getBlockComment(['label ; doc'], 0)).toBe('doc');
+    });
+
+    it('returns single comment line above', () => {
+        expect(getBlockComment(['; doc', 'label'], 1)).toBe('doc');
+    });
+
+    it('joins multiple comment lines above', () => {
+        const lines = ['; line1', '; line2', 'label'];
+        expect(getBlockComment(lines, 2)).toBe('line1  \nline2');
+    });
+
+    it('returns comment line below', () => {
+        expect(getBlockComment(['label', '; doc below'], 0)).toBe('doc below');
+    });
+
+    it('joins multiple comment lines below', () => {
+        const lines = ['label', '; line1', '; line2'];
+        expect(getBlockComment(lines, 0)).toBe('line1  \nline2');
+    });
+
+    it('prefers same-line over above', () => {
+        const lines = ['; above', 'label ; inline'];
+        expect(getBlockComment(lines, 1)).toBe('inline');
+    });
+
+    it('prefers above over below', () => {
+        const lines = ['; above', 'label', '; below'];
+        expect(getBlockComment(lines, 1)).toBe('above');
+    });
+
+    it('returns undefined when no comment', () => {
+        expect(getBlockComment(['label'], 0)).toBeUndefined();
+    });
+
+    it('stops at non-comment line above', () => {
+        const lines = ['; c1', 'code', '; c2', 'label'];
+        expect(getBlockComment(lines, 3)).toBe('c2');
+    });
+});
+
+describe('parseNumericValue', () => {
+    it('parses hex with $ prefix', () => {
+        expect(parseNumericValue('$FF')).toBe(255);
+    });
+
+    it('parses hex with 0x prefix', () => {
+        expect(parseNumericValue('0xFF')).toBe(255);
+    });
+
+    it('parses hex with 0X prefix (case insensitive)', () => {
+        expect(parseNumericValue('0XAB')).toBe(171);
+    });
+
+    it('parses binary with % prefix', () => {
+        expect(parseNumericValue('%10101010')).toBe(170);
+    });
+
+    it('parses binary with 0b prefix', () => {
+        expect(parseNumericValue('0b11111111')).toBe(255);
+    });
+
+    it('parses decimal', () => {
+        expect(parseNumericValue('42')).toBe(42);
+    });
+
+    it('parses negative decimal', () => {
+        expect(parseNumericValue('-1')).toBe(-1);
+    });
+
+    it('parses zero', () => {
+        expect(parseNumericValue('0')).toBe(0);
+    });
+
+    it('trims whitespace', () => {
+        expect(parseNumericValue('  $FF  ')).toBe(255);
+    });
+
+    it('returns null for non-numeric', () => {
+        expect(parseNumericValue('hello')).toBeNull();
+    });
+
+    it('returns null for empty string', () => {
+        expect(parseNumericValue('')).toBeNull();
+    });
+
+    it('returns null for hex digits without prefix', () => {
+        expect(parseNumericValue('FF')).toBeNull();
+    });
+
+    it('returns null for invalid hex', () => {
+        expect(parseNumericValue('$GG')).toBeNull();
+    });
+
+    it('returns null for invalid binary', () => {
+        expect(parseNumericValue('%102')).toBeNull();
+    });
+});
+
+describe('formatNumericValue', () => {
+    it('formats 255', () => {
+        expect(formatNumericValue(255)).toBe('%11111111, 255, $FF');
+    });
+
+    it('formats zero', () => {
+        expect(formatNumericValue(0)).toBe('%0, 0, $0');
+    });
+
+    it('formats negative', () => {
+        expect(formatNumericValue(-1)).toBe('-%1, -1, -$1');
+    });
+
+    it('formats power of 2', () => {
+        expect(formatNumericValue(256)).toBe('%100000000, 256, $100');
+    });
+});

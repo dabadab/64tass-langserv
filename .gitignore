@@ -6,3 +6,4 @@ out/
 example/
 .claude
 .env
+coverage/
