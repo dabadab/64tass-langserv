@@ -36,12 +36,16 @@ const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 interface LabelDefinition {
+    // Symbol name in lowercase (64tass is case-insensitive)
     name: string;
+    // Original symbol name preserving case (for display)
+    originalName: string;
     uri: string;
     range: Range;
     // Full scope path for directive-based scopes (e.g., "outer.inner" or null for global)
+    // Stored lowercase for case-insensitive matching
     scopePath: string | null;
-    // For local symbols (_name): the code label they belong to
+    // For local symbols (_name): the code label they belong to (lowercase)
     localScope: string | null;
     // Whether this is a local symbol (starts with _)
     isLocal: boolean;
@@ -262,7 +266,7 @@ function parseDocument(document: TextDocument): DocumentIndex {
         for (const [open, close] of Object.entries(SCOPE_OPENERS)) {
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
             if (closePattern.test(lineLower)) {
-                // If closing a macro, extract sub-labels from its body
+                // If closing a macro, extract sub-labels from its body (stored lowercase)
                 if (open === '.macro' && currentMacroCapture) {
                     const subLabels: string[] = [];
                     for (let i = currentMacroCapture.startLine; i < lineNum; i++) {
@@ -270,11 +274,11 @@ function parseDocument(document: TextDocument): DocumentIndex {
                         // Look for label definitions at start of line: "name" or "name =" or "name .byte", etc.
                         const labelMatch = macroLine.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:$|:|=|\.)/);
                         if (labelMatch) {
-                            subLabels.push(labelMatch[1]);
+                            subLabels.push(labelMatch[1].toLowerCase());
                         }
                     }
                     if (subLabels.length > 0) {
-                        macroSubLabels.set(currentMacroCapture.name.toLowerCase(), subLabels);
+                        macroSubLabels.set(currentMacroCapture.name, subLabels);
                     }
                     currentMacroCapture = null;
                 }
@@ -309,8 +313,10 @@ function parseDocument(document: TextDocument): DocumentIndex {
                 const paramsStr = match[2] ? stripComment(match[2]).trim() : '';
                 const comment = getBlockComment(lines, lineNum);
 
+                const labelNameLower = labelName.toLowerCase();
                 labels.push({
-                    name: labelName,
+                    name: labelNameLower,
+                    originalName: labelName,
                     uri: document.uri,
                     range: Range.create(
                         Position.create(lineNum, 0),
@@ -322,13 +328,13 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     comment
                 });
 
-                // Push named scope
-                scopeStack.push({ name: labelName, directive: open });
+                // Push named scope (lowercase for case-insensitive matching)
+                scopeStack.push({ name: labelNameLower, directive: open });
 
-                // Extract parameters for .function and .macro
+                // Extract parameters for .function and .macro (stored lowercase)
                 if ((open === '.function' || open === '.macro') && paramsStr) {
-                    const newScopePath = getCurrentScopePath() || labelName;
-                    const params = paramsStr.split(',').map(p => p.trim()).filter(p => p.length > 0);
+                    const newScopePath = getCurrentScopePath() || labelNameLower;
+                    const params = paramsStr.split(',').map(p => p.trim().toLowerCase()).filter(p => p.length > 0);
                     if (params.length > 0) {
                         parametersAtScope.set(newScopePath, params);
                     }
@@ -336,7 +342,7 @@ function parseDocument(document: TextDocument): DocumentIndex {
 
                 // Start capturing macro body to extract sub-labels
                 if (open === '.macro') {
-                    currentMacroCapture = { name: labelName, startLine: lineNum + 1 };
+                    currentMacroCapture = { name: labelNameLower, startLine: lineNum + 1 };
                 }
 
                 // Update scope for this line after opening
@@ -364,14 +370,16 @@ function parseDocument(document: TextDocument): DocumentIndex {
         const codeLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*(:)?\s*(;.*)?$/);
         if (codeLabelMatch) {
             const labelName = codeLabelMatch[1];
-            currentLocalScope = labelName;
+            const labelNameLower = labelName.toLowerCase();
+            currentLocalScope = labelNameLower;
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope
             });
 
             labels.push({
-                name: labelName,
+                name: labelNameLower,
+                originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
                     Position.create(lineNum, 0),
@@ -388,14 +396,16 @@ function parseDocument(document: TextDocument): DocumentIndex {
         const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+([a-zA-Z]{3})\b/);
         if (codeLabelOpcodeMatch && OPCODES.has(codeLabelOpcodeMatch[2].toLowerCase())) {
             const labelName = codeLabelOpcodeMatch[1];
-            currentLocalScope = labelName;
+            const labelNameLower = labelName.toLowerCase();
+            currentLocalScope = labelNameLower;
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope
             });
 
             labels.push({
-                name: labelName,
+                name: labelNameLower,
+                originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
                     Position.create(lineNum, 0),
@@ -412,10 +422,12 @@ function parseDocument(document: TextDocument): DocumentIndex {
         const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(?::|=|:=|\s|;|$)/);
         if (localMatch) {
             const labelName = localMatch[2];
+            const labelNameLower = labelName.toLowerCase();
             const startChar = localMatch[1].length;
 
             labels.push({
-                name: labelName,
+                name: labelNameLower,
+                originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
                     Position.create(lineNum, startChar),
@@ -432,8 +444,10 @@ function parseDocument(document: TextDocument): DocumentIndex {
         const dataLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(byte|word|addr|fill|text|ptext|null)\b/i);
         if (dataLabelMatch) {
             const labelName = dataLabelMatch[1];
+            const labelNameLower = labelName.toLowerCase();
             labels.push({
-                name: labelName,
+                name: labelNameLower,
+                originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
                     Position.create(lineNum, 0),
@@ -451,11 +465,13 @@ function parseDocument(document: TextDocument): DocumentIndex {
         const macroLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
         if (macroLabelMatch) {
             const labelName = macroLabelMatch[1];
+            const labelNameLower = labelName.toLowerCase();
             const macroCalled = macroLabelMatch[2].toLowerCase();
             // Skip if this is a scope-creating directive (already handled above)
             if (!Object.keys(SCOPE_OPENERS).includes('.' + macroCalled)) {
                 labels.push({
-                    name: labelName,
+                    name: labelNameLower,
+                    originalName: labelName,
                     uri: document.uri,
                     range: Range.create(
                         Position.create(lineNum, 0),
@@ -466,7 +482,7 @@ function parseDocument(document: TextDocument): DocumentIndex {
                     isLocal: false
                 });
                 // Track the macro used to define this label (for sub-label validation)
-                labelDefinedByMacro.set(labelName, macroCalled);
+                labelDefinedByMacro.set(labelNameLower, macroCalled);
             }
             continue;
         }
@@ -475,12 +491,14 @@ function parseDocument(document: TextDocument): DocumentIndex {
         const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=\s*([^;]+)/);
         if (constMatch) {
             const labelName = constMatch[2];
+            const labelNameLower = labelName.toLowerCase();
             const startChar = constMatch[1].length;
             const isLocal = labelName.startsWith('_');
             const value = constMatch[3]?.trim();
 
             labels.push({
-                name: labelName,
+                name: labelNameLower,
+                originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
                     Position.create(lineNum, startChar),
@@ -559,12 +577,14 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
     if (word.startsWith('.') && !word.includes('.', 1)) {
         lookupWord = word.substring(1);
     }
+    // All stored names are lowercase for case-insensitive matching
+    const lookupName = lookupWord.toLowerCase();
 
     const isLocalSymbol = lookupWord.startsWith('_');
 
     // Handle dotted references like "scope.symbol"
     if (lookupWord.includes('.')) {
-        const parts = lookupWord.split('.');
+        const parts = lookupName.split('.');
         const targetName = parts[parts.length - 1];
         const targetPath = parts.slice(0, -1).join('.');
 
@@ -585,7 +605,7 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
     // Local symbol lookup: must match same document, same scopePath, same localScope
     if (isLocalSymbol) {
         for (const label of fromIndex.labels) {
-            if (label.name === lookupWord && label.isLocal &&
+            if (label.name === lookupName && label.isLocal &&
                 label.scopePath === currentScopePath &&
                 label.localScope === currentLocalScope) {
                 return label;
@@ -598,7 +618,7 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
     // First, try exact scope match
     for (const [, index] of documentIndex) {
         for (const label of index.labels) {
-            if (label.name === lookupWord && !label.isLocal && label.scopePath === currentScopePath) {
+            if (label.name === lookupName && !label.isLocal && label.scopePath === currentScopePath) {
                 return label;
             }
         }
@@ -612,7 +632,7 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
 
         for (const [, index] of documentIndex) {
             for (const label of index.labels) {
-                if (label.name === lookupWord && !label.isLocal && label.scopePath === scopeToTry) {
+                if (label.name === lookupName && !label.isLocal && label.scopePath === scopeToTry) {
                     return label;
                 }
             }
@@ -622,7 +642,7 @@ function findSymbolInfo(word: string, fromUri: string, fromLine: number): LabelD
     // Finally try global scope
     for (const [, index] of documentIndex) {
         for (const label of index.labels) {
-            if (label.name === lookupWord && !label.isLocal && label.scopePath === null) {
+            if (label.name === lookupName && !label.isLocal && label.scopePath === null) {
                 return label;
             }
         }
@@ -665,6 +685,38 @@ function stripComment(line: string): string {
         }
     }
     return line;
+}
+
+// Strip string literals from a line, replacing contents with spaces to preserve positions
+// Used to avoid matching symbols inside string literals
+function stripStrings(line: string): string {
+    let result = '';
+    let inString = false;
+    let stringChar = '';
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (inString) {
+            if (char === stringChar) {
+                // Check for escaped quote (doubled quote)
+                if (i + 1 < line.length && line[i + 1] === stringChar) {
+                    result += '  '; // Replace both quotes with spaces
+                    i++;
+                } else {
+                    result += char; // Keep the closing quote
+                    inString = false;
+                }
+            } else {
+                result += ' '; // Replace string content with space
+            }
+        } else {
+            result += char;
+            if (char === '"' || char === "'") {
+                inString = true;
+                stringChar = char;
+            }
+        }
+    }
+    return result;
 }
 
 function computeFoldingRanges(document: TextDocument): FoldingRange[] {
@@ -712,11 +764,13 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
 }
 
 // Check if a symbol is a parameter in the current scope or any parent scope
+// All parameter names are stored lowercase
 function isParameter(symName: string, scopePath: string | null, index: DocumentIndex): boolean {
+    const symNameLower = symName.toLowerCase();
     // Check exact scope
     if (scopePath) {
         const params = index.parametersAtScope.get(scopePath);
-        if (params && params.includes(symName)) {
+        if (params && params.includes(symNameLower)) {
             return true;
         }
         // Check parent scopes
@@ -724,7 +778,7 @@ function isParameter(symName: string, scopePath: string | null, index: DocumentI
         while (parent.includes('.')) {
             parent = parent.substring(0, parent.lastIndexOf('.'));
             const parentParams = index.parametersAtScope.get(parent);
-            if (parentParams && parentParams.includes(symName)) {
+            if (parentParams && parentParams.includes(symNameLower)) {
                 return true;
             }
         }
@@ -741,6 +795,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
     if (!index) return diagnostics;
 
     // Check for duplicate labels (same name, same scopePath, same localScope)
+    // All names are stored lowercase, so simple comparison works
     const seenLabels = new Map<string, LabelDefinition>();
     for (const label of index.labels) {
         const key = `${label.scopePath ?? 'global'}:${label.localScope ?? 'none'}:${label.name}`;
@@ -749,7 +804,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
             diagnostics.push({
                 severity: DiagnosticSeverity.Error,
                 range: label.range,
-                message: `Duplicate label '${label.name}'`,
+                message: `Duplicate label '${label.originalName}'`,
                 source: '64tass'
             });
         } else {
@@ -886,17 +941,31 @@ function validateDocument(document: TextDocument): Diagnostic[] {
             }
         }
 
-        // Check regular symbol references (after opcodes, in expressions, etc.)
+        // Check regular symbol references (after opcodes or data directives)
         // Look for symbols after opcodes
         const opcodeMatch = code.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?([a-zA-Z]{3})\s+(.+)$/i);
+        // Look for symbols after data directives like .text, .byte, .word, etc.
+        const dataDirectiveMatch = code.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|char|dint|lint|sint)\s+(.+)$/i);
+
+        let operand: string | null = null;
+        let operandStart = 0;
+
         if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
-            const operand = opcodeMatch[2];
-            const operandStart = code.indexOf(operand);
+            operand = opcodeMatch[2];
+            operandStart = code.indexOf(operand);
+        } else if (dataDirectiveMatch) {
+            operand = dataDirectiveMatch[2];
+            operandStart = code.indexOf(operand);
+        }
+
+        if (operand) {
             const lineScope = index.scopeAtLine.get(lineNum);
             const currentScopePath = lineScope?.scopePath ?? null;
 
+            // Strip string literals to avoid matching symbols inside strings
+            const operandNoStrings = stripStrings(operand);
             symbolPattern.lastIndex = 0;
-            while ((match = symbolPattern.exec(operand)) !== null) {
+            while ((match = symbolPattern.exec(operandNoStrings)) !== null) {
                 const symName = match[1];
                 const symLower = symName.toLowerCase();
 
@@ -905,7 +974,7 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 // Skip numbers (might be caught as identifiers if they have letters like in hex)
                 if (/^[0-9]/.test(symName)) continue;
                 // Skip hex numbers like $FE - if preceded by $ and only contains hex digits
-                if (match.index > 0 && operand[match.index - 1] === '$' && /^[0-9A-Fa-f]+$/.test(symName)) continue;
+                if (match.index > 0 && operandNoStrings[match.index - 1] === '$' && /^[0-9A-Fa-f]+$/.test(symName)) continue;
                 // Skip if it's a parameter in the current scope
                 if (isParameter(symName, currentScopePath, index)) continue;
 
@@ -913,17 +982,17 @@ function validateDocument(document: TextDocument): Diagnostic[] {
                 if (symName.includes('.')) {
                     const parts = symName.split('.');
                     const parentName = parts[0];
-                    const subLabelName = parts[parts.length - 1];
+                    const parentNameLower = parentName.toLowerCase();
+                    const subLabelName = parts[parts.length - 1].toLowerCase();
 
                     // If parent is a parameter, skip (we can't validate runtime values)
                     if (isParameter(parentName, currentScopePath, index)) continue;
 
                     // Check if parent label was defined via a macro that creates this sub-label
-                    const macroUsed = index.labelDefinedByMacro.get(parentName);
+                    const macroUsed = index.labelDefinedByMacro.get(parentNameLower);
                     if (macroUsed) {
                         const macroLabels = index.macroSubLabels.get(macroUsed);
-                        const subLabelLower = subLabelName.toLowerCase();
-                        if (macroLabels && macroLabels.some(l => l.toLowerCase() === subLabelLower)) {
+                        if (macroLabels && macroLabels.includes(subLabelName)) {
                             continue; // Valid sub-label from macro
                         }
                     }
@@ -1059,7 +1128,7 @@ connection.onHover((params: HoverParams): Hover | null => {
     const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line);
     if (!symbol) return null;
 
-    let content = `**${symbol.name}**`;
+    let content = `**${symbol.originalName}**`;
     if (symbol.scopePath) {
         content += ` *(in ${symbol.scopePath})*`;
     }
