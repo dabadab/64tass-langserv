@@ -256,8 +256,8 @@ function parseDocument(document: TextDocument): DocumentIndex {
                 if (fs.existsSync(resolvedPath)) {
                     includes.push(pathToFileURL(resolvedPath).toString());
                 }
-            } catch {
-                // Ignore invalid URIs
+            } catch (e) {
+                connection.console.warn(`Failed to resolve .include path '${includePath}': ${e}`);
             }
         }
 
@@ -534,8 +534,8 @@ function indexDocument(document: TextDocument, indexedUris: Set<string> = new Se
                 const content = fs.readFileSync(includePath, 'utf-8');
                 const includeDoc = TextDocument.create(includeUri, '64tass', 1, content);
                 indexDocument(includeDoc, indexedUris);
-            } catch {
-                // File not found or unreadable
+            } catch (e) {
+                connection.console.warn(`Failed to read included file '${includeUri}': ${e}`);
             }
         }
     }
@@ -1065,8 +1065,8 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
                             Range.create(Position.create(0, 0), Position.create(0, 0))
                         );
                     }
-                } catch {
-                    // Ignore invalid paths
+                } catch (e) {
+                    connection.console.warn(`Failed to resolve include path for definition: ${e}`);
                 }
             }
         }
@@ -1182,7 +1182,8 @@ connection.onReferences((params: ReferenceParams): Location[] => {
             try {
                 const filePath = fileURLToPath(uri);
                 docContent = fs.readFileSync(filePath, 'utf-8');
-            } catch {
+            } catch (e) {
+                connection.console.warn(`Failed to read file for references '${uri}': ${e}`);
                 continue;
             }
         }
@@ -1357,7 +1358,8 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
             try {
                 const filePath = fileURLToPath(uri);
                 docContent = fs.readFileSync(filePath, 'utf-8');
-            } catch {
+            } catch (e) {
+                connection.console.warn(`Failed to read file for rename '${uri}': ${e}`);
                 continue;
             }
         }
