@@ -70,6 +70,10 @@ interface DocumentIndex {
 
 const documentIndex: Map<string, DocumentIndex> = new Map();
 
+// Tracks which parent documents reference each included file (for cleanup)
+// Maps included file URI -> Set of parent document URIs that include it
+const includeRefCount: Map<string, Set<string>> = new Map();
+
 // 6502 opcodes for detecting code labels (scope boundaries for local symbols)
 const OPCODES = new Set([
     // Standard 6502 opcodes
@@ -516,24 +520,51 @@ function parseDocument(document: TextDocument): DocumentIndex {
     return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, includes };
 }
 
-function indexDocument(document: TextDocument, indexedUris: Set<string> = new Set()): void {
+// Remove all include references from a root document and clean up orphaned includes
+function clearIncludeRefs(rootUri: string): void {
+    const orphanedUris: string[] = [];
+
+    for (const [includeUri, refs] of includeRefCount) {
+        refs.delete(rootUri);
+        if (refs.size === 0) {
+            orphanedUris.push(includeUri);
+            includeRefCount.delete(includeUri);
+        }
+    }
+
+    // Remove orphaned includes from documentIndex
+    for (const uri of orphanedUris) {
+        documentIndex.delete(uri);
+    }
+}
+
+function indexDocument(document: TextDocument, indexedUris: Set<string> = new Set(), rootUri?: string): void {
     // Prevent circular includes
     if (indexedUris.has(document.uri)) {
         return;
     }
     indexedUris.add(document.uri);
 
+    // The root URI is the top-level document that initiated the indexing
+    const effectiveRootUri = rootUri ?? document.uri;
+
     const index = parseDocument(document);
     documentIndex.set(document.uri, index);
 
-    // Recursively index included files
+    // Recursively index included files and track references
     for (const includeUri of index.includes) {
+        // Track that this root document references this included file
+        if (!includeRefCount.has(includeUri)) {
+            includeRefCount.set(includeUri, new Set());
+        }
+        includeRefCount.get(includeUri)!.add(effectiveRootUri);
+
         if (!indexedUris.has(includeUri)) {
             try {
                 const includePath = fileURLToPath(includeUri);
                 const content = fs.readFileSync(includePath, 'utf-8');
                 const includeDoc = TextDocument.create(includeUri, '64tass', 1, content);
-                indexDocument(includeDoc, indexedUris);
+                indexDocument(includeDoc, indexedUris, effectiveRootUri);
             } catch (e) {
                 connection.console.warn(`Failed to read included file '${includeUri}': ${e}`);
             }
@@ -1497,6 +1528,8 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
 });
 
 documents.onDidChangeContent(change => {
+    // Clear old include references before re-indexing (includes may have changed)
+    clearIncludeRefs(change.document.uri);
     indexDocument(change.document);
 
     const diagnostics = validateDocument(change.document);
@@ -1504,6 +1537,8 @@ documents.onDidChangeContent(change => {
 });
 
 documents.onDidClose(event => {
+    // Clean up this document and any orphaned includes
+    clearIncludeRefs(event.document.uri);
     documentIndex.delete(event.document.uri);
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
 });
