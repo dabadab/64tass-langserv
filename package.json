@@ -2,7 +2,7 @@
   "name": "64tass-langserv",
   "displayName": "64tass Language Support",
   "description": "Language support for 64tass MOS 6502 macro assembler",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "license": "MIT",
   "publisher": "dabadab",
   "repository": {
@@ -60,11 +60,13 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "compile": "tsc -b",
-    "watch": "tsc -b -w",
+    "compile": "node esbuild.js",
+    "compile:prod": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "typecheck": "tsc -b --noEmit",
     "lint": "eslint src --ext ts",
     "version-from-tag": "node -e \"const v = require('child_process').execSync('git describe --tags --abbrev=0').toString().trim().replace(/^v/, ''); const pkg = require('./package.json'); pkg.version = v; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');\"",
-    "vscode:prepublish": "yarn version-from-tag && yarn compile",
+    "vscode:prepublish": "yarn version-from-tag && yarn compile:prod",
     "package": "vsce package"
   },
   "dependencies": {
@@ -76,6 +78,7 @@
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.3",
     "typescript": "^5.3.0",
     "vitest": "^4.0.18"
   }
