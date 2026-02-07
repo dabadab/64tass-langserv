@@ -2,6 +2,18 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [0.8.0] - 2026-02-07
+
+### Added
+- **Case Sensitivity Setting** - New `64tass.caseSensitive` setting to enable case-sensitive symbol matching
+  - Equivalent to 64tass `-C` command line flag
+  - Default: disabled (case-insensitive, matching 64tass default behavior)
+  - When enabled, symbols must match exactly: `MyLabel`, `mylabel`, and `MYLABEL` are treated as distinct
+  - Index automatically rebuilds when setting changes
+
+### Improved
+- **Various bugfixes** - Check git history for details
+
 ## [0.7.0] - 2026-02-05
 
 ### Added
