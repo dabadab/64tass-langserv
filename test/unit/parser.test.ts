@@ -162,6 +162,60 @@ describe('parseDocument - local symbols', () => {
         expect(local!.scopePath).toBe('s');
         expect(local!.localScope).toBe('main');
     });
+
+    describe('whitespace handling', () => {
+        it('matches local symbol with tab after name', () => {
+            const index = parse('main\n_loc\t= 1');
+            const local = index.labels.find(l => l.name === '_loc');
+            expect(local).toBeDefined();
+            expect(local!.isLocal).toBe(true);
+        });
+
+        it('matches local symbol with tab before name', () => {
+            const index = parse('main\n\t_loc = 1');
+            const local = index.labels.find(l => l.name === '_loc');
+            expect(local).toBeDefined();
+            expect(local!.isLocal).toBe(true);
+        });
+
+        it('matches local symbol with multiple tabs', () => {
+            const index = parse('main\n\t\t_loc\t\t=\t\t1');
+            const local = index.labels.find(l => l.name === '_loc');
+            expect(local).toBeDefined();
+            expect(local!.isLocal).toBe(true);
+        });
+
+        it('matches local symbol with mixed spaces and tabs', () => {
+            const index = parse('main\n  \t_loc \t = 1');
+            const local = index.labels.find(l => l.name === '_loc');
+            expect(local).toBeDefined();
+            expect(local!.isLocal).toBe(true);
+        });
+
+        it('matches local symbol with colon syntax', () => {
+            const index = parse('main\n_loc: = 1');
+            const local = index.labels.find(l => l.name === '_loc');
+            expect(local).toBeDefined();
+        });
+
+        it('matches local symbol with := assignment', () => {
+            const index = parse('main\n_loc := 1');
+            const local = index.labels.find(l => l.name === '_loc');
+            expect(local).toBeDefined();
+        });
+
+        it('matches local symbol with just colon (label)', () => {
+            const index = parse('main\n_loc:');
+            const local = index.labels.find(l => l.name === '_loc');
+            expect(local).toBeDefined();
+        });
+
+        it('matches local symbol followed by semicolon comment', () => {
+            const index = parse('main\n_loc = 1 ; comment');
+            const local = index.labels.find(l => l.name === '_loc');
+            expect(local).toBeDefined();
+        });
+    });
 });
 
 describe('parseDocument - macro/function parameters', () => {
