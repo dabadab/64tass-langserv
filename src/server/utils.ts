@@ -165,3 +165,90 @@ export function formatNumericValue(num: number): string {
     const hex = num >= 0 ? '$' + num.toString(16).toUpperCase() : '-$' + Math.abs(num).toString(16).toUpperCase();
     return `${bin}, ${dec}, ${hex}`;
 }
+
+// Token types for expression tokenization
+export interface Token {
+    type: 'value' | 'operator' | 'paren';
+    text: string;
+    start: number;
+}
+
+// Tokenize an expression into values, operators, and parentheses
+// Used for validating operator presence between data directive values
+export function tokenizeExpression(expr: string): Token[] {
+    const tokens: Token[] = [];
+    const operators = /^(,|\+|-|\*|\/|&|\||<<|>>|<|>|\^)/;
+    const parens = /^[()]/;
+    const value = /^(\$[0-9a-fA-F]+|0x[0-9a-fA-F]+|%[01]+|0b[01]+|\d+|[a-zA-Z_][a-zA-Z0-9_]*)/;
+
+    let pos = 0;
+    while (pos < expr.length) {
+        // Skip whitespace
+        if (/\s/.test(expr[pos])) {
+            pos++;
+            continue;
+        }
+
+        const char = expr[pos];
+
+        // Try to match string literal (single or double quoted)
+        if (char === '"' || char === "'") {
+            const stringStart = pos;
+            const quote = char;
+            pos++; // Skip opening quote
+
+            // Scan until closing quote (handle escaped quotes "")
+            while (pos < expr.length) {
+                if (expr[pos] === quote) {
+                    // Check for doubled quote escape
+                    if (pos + 1 < expr.length && expr[pos + 1] === quote) {
+                        pos += 2; // Skip both quotes
+                    } else {
+                        pos++; // Skip closing quote
+                        break;
+                    }
+                } else {
+                    pos++;
+                }
+            }
+
+            tokens.push({
+                type: 'value',
+                text: expr.substring(stringStart, pos),
+                start: stringStart
+            });
+            continue;
+        }
+
+        const remaining = expr.substring(pos);
+
+        // Try to match operator (check multi-char first)
+        const opMatch = remaining.match(operators);
+        if (opMatch) {
+            tokens.push({ type: 'operator', text: opMatch[0], start: pos });
+            pos += opMatch[0].length;
+            continue;
+        }
+
+        // Try to match paren
+        const parenMatch = remaining.match(parens);
+        if (parenMatch) {
+            tokens.push({ type: 'paren', text: parenMatch[0], start: pos });
+            pos += 1;
+            continue;
+        }
+
+        // Try to match value (number or identifier)
+        const valMatch = remaining.match(value);
+        if (valMatch) {
+            tokens.push({ type: 'value', text: valMatch[0], start: pos });
+            pos += valMatch[0].length;
+            continue;
+        }
+
+        // Unknown character, skip
+        pos++;
+    }
+
+    return tokens;
+}

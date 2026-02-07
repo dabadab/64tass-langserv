@@ -147,3 +147,79 @@ describe('undefined macro warnings', () => {
         expect(undef).toHaveLength(0);
     });
 });
+
+describe('data directive operator validation', () => {
+    it('errors on .byte with missing commas', () => {
+        const diags = errors('        .byte 1 2 3');
+        expect(diags.some(d => d.message.includes('operator'))).toBe(true);
+    });
+
+    it('accepts .byte with commas', () => {
+        const diags = errors('        .byte 1, 2, 3');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    it('errors on .word with missing operators', () => {
+        const diags = errors('        .word $1000 $2000');
+        expect(diags.some(d => d.message.includes('operator'))).toBe(true);
+    });
+
+    it('accepts .word with commas', () => {
+        const diags = errors('        .word $1000, $2000');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    it('accepts expressions with operators', () => {
+        const diags = errors('        .byte 2*3+4, 5-1');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    it('accepts unary operators', () => {
+        const diags = errors('        .byte -5, +10');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    it('errors on .text with missing operator between strings', () => {
+        const diags = errors('        .text "hello" "world"');
+        expect(diags.some(d => d.message.includes('operator'))).toBe(true);
+    });
+
+    it('accepts .text with comma between strings', () => {
+        const diags = errors('        .text "hello", "world"');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    it('accepts parenthesized expressions', () => {
+        const diags = errors('        .byte (1+2), 3');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    it('accepts shift operators', () => {
+        const diags = errors('        .word $1000<<8, $FF>>1');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    it('accepts bitwise operators', () => {
+        const diags = errors('        .byte $FF&$0F, $F0|$0F, $FF^$AA');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    it('errors on identifiers without operators', () => {
+        const diags = errors('a=1\nb=2\n        .byte a b');
+        expect(diags.some(d => d.message.includes('operator'))).toBe(true);
+    });
+
+    it('accepts identifiers with operators', () => {
+        const diags = errors('a=1\nb=2\n        .byte a, b');
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+});

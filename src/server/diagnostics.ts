@@ -15,7 +15,7 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN
 } from './constants';
-import { parseLineStructure, stripStrings } from './utils';
+import { parseLineStructure, stripStrings, tokenizeExpression } from './utils';
 import { findSymbolInfo, isParameter } from './symbols';
 
 export function validateDocument(
@@ -157,6 +157,31 @@ export function validateDocument(
         if (operand) {
             const lineScope = index.scopeAtLine.get(lineNum);
             const currentScopePath = lineScope?.scopePath ?? null;
+
+            // Check for missing operators between data directive values
+            if (dataDirectiveMatch) {
+                const tokens = tokenizeExpression(operand);
+
+                // Look for consecutive value tokens without operator between them
+                for (let i = 0; i < tokens.length - 1; i++) {
+                    const curr = tokens[i];
+                    const next = tokens[i + 1];
+
+                    if (curr.type === 'value' && next.type === 'value') {
+                        // Found two consecutive values without operator
+                        const errorPos = operandStart + next.start;
+                        diagnostics.push({
+                            severity: DiagnosticSeverity.Error,
+                            range: Range.create(
+                                Position.create(lineNum, errorPos),
+                                Position.create(lineNum, errorPos + next.text.length)
+                            ),
+                            message: `An operator is expected before '${next.text}'`,
+                            source: '64tass'
+                        });
+                    }
+                }
+            }
 
             // Strip string literals to avoid matching symbols inside strings
             const operandNoStrings = stripStrings(operand);
