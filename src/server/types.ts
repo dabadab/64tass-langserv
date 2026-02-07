@@ -14,6 +14,10 @@ export interface LabelDefinition {
     localScope: string | null;
     // Whether this is a local symbol (starts with _)
     isLocal: boolean;
+    // Whether this is an anonymous label (+ or -)
+    isAnonymous?: boolean;
+    // For anonymous labels: count of symbols in definition (+++  = 3)
+    anonymousCount?: number;
     value?: string;
     // Documentation comment from same line, line above, or line below
     comment?: string;

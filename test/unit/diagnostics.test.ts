@@ -223,3 +223,100 @@ describe('data directive operator validation', () => {
         expect(opErrors).toHaveLength(0);
     });
 });
+
+describe('anonymous label diagnostics', () => {
+    it('allows multiple anonymous labels in same scope', () => {
+        const source = 'main\n-\n        nop\n-\n        nop\n-\n        nop';
+        const diags = errors(source);
+        const duplicates = diags.filter(d => d.message.includes('Duplicate'));
+        expect(duplicates).toHaveLength(0);
+    });
+
+    it('does not flag arithmetic + as anonymous label', () => {
+        const source = 'table = $1000\n        lda table+1';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+
+    it('does not flag arithmetic - as anonymous label', () => {
+        const source = 'value = 100\n        lda value-10';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+
+    it('does not flag immediate mode +/- as anonymous label', () => {
+        const source = '        lda #-1\n        ldx #+5';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+
+    it('warns about unresolved forward anonymous label', () => {
+        const source = 'main\n        bcc +';
+        const diags = warnings(source);
+        expect(diags.some(d => d.message.includes('No forward anonymous label'))).toBe(true);
+    });
+
+    it('warns about unresolved backward anonymous label', () => {
+        const source = 'main\n        bne -';
+        const diags = warnings(source);
+        expect(diags.some(d => d.message.includes('No backward anonymous label'))).toBe(true);
+    });
+
+    it('does not warn when forward label exists', () => {
+        const source = 'main\n        bcc +\n+';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+
+    it('does not warn when backward label exists', () => {
+        const source = 'main\n-\n        bne -';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+
+    it('does not flag +/- in data directives as anonymous labels', () => {
+        const source = '        .byte -5, +10, 3+4, 7-2';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+
+    it('does not flag +/- in .word directives', () => {
+        const source = '        .word $1000+offset, base-$10';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+
+    it('checks anonymous labels only in opcodes, not data directives', () => {
+        // Should warn about unresolved + in opcode
+        const source1 = 'main\n        bcc +';
+        const diags1 = warnings(source1);
+        expect(diags1.some(d => d.message.includes('No forward anonymous label'))).toBe(true);
+
+        // Should NOT warn about + in data directive
+        const source2 = 'main\n        .byte 1+2';
+        const diags2 = warnings(source2);
+        const anonWarnings2 = diags2.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings2).toHaveLength(0);
+    });
+
+    it('does not flag + in middle of expression as anonymous label', () => {
+        const source = 'table = $1000\n        dec table + 5';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+
+    it('does not flag - in middle of expression as anonymous label', () => {
+        const source = 'value = 100\n        lda value - 10';
+        const diags = warnings(source);
+        const anonWarnings = diags.filter(d => d.message.includes('anonymous label'));
+        expect(anonWarnings).toHaveLength(0);
+    });
+});

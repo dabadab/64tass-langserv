@@ -13,6 +13,26 @@ export function getWordAtPosition(document: TextDocument, position: Position): s
     let start = position.character;
     let end = position.character;
 
+    const char = line[position.character];
+
+    // Special handling for anonymous labels (+ or -)
+    if (char === '+' || char === '-') {
+        // Extend to capture all consecutive + or - symbols
+        while (start > 0 && (line[start - 1] === '+' || line[start - 1] === '-')) {
+            start--;
+        }
+        while (end < line.length && (line[end] === '+' || line[end] === '-')) {
+            end++;
+        }
+        const word = line.substring(start, end);
+        // Only return if all chars are the same (+++, not +-)
+        if (word.length > 0 && word.split('').every(c => c === word[0])) {
+            return word;
+        }
+        return null;
+    }
+
+    // Regular alphanumeric word detection
     while (start > 0 && /[a-zA-Z0-9_.]/.test(line[start - 1])) {
         start--;
     }
@@ -25,12 +45,68 @@ export function getWordAtPosition(document: TextDocument, position: Position): s
     return word.length > 0 ? word : null;
 }
 
+/**
+ * Find an anonymous label by direction and distance.
+ *
+ * @param direction - '+' for forward, '-' for backward
+ * @param distance - How many labels to skip (1 for +, 2 for ++, etc.)
+ * @param fromUri - URI of the document containing the reference
+ * @param fromLine - Line number of the reference
+ * @param documentIndex - Document index map
+ * @returns The target anonymous label, or null if not found
+ */
+export function findAnonymousLabel(
+    direction: '+' | '-',
+    distance: number,
+    fromUri: string,
+    fromLine: number,
+    documentIndex: Map<string, DocumentIndex>
+): LabelDefinition | null {
+    const fromIndex = documentIndex.get(fromUri);
+    if (!fromIndex) return null;
+
+    const lineScope = fromIndex.scopeAtLine.get(fromLine);
+    const currentLocalScope = lineScope?.localScope ?? null;
+
+    // Filter anonymous labels matching direction and local scope
+    const candidates = fromIndex.labels.filter(l =>
+        l.isAnonymous &&
+        l.name === direction &&
+        l.localScope === currentLocalScope
+    );
+
+    if (direction === '+') {
+        // Forward: find labels AFTER current line
+        const forward = candidates
+            .filter(l => l.range.start.line > fromLine)
+            .sort((a, b) => a.range.start.line - b.range.start.line);
+
+        // Return the nth label forward (distance - 1 because arrays are 0-indexed)
+        return forward[distance - 1] || null;
+    } else {
+        // Backward: find labels BEFORE current line
+        const backward = candidates
+            .filter(l => l.range.start.line < fromLine)
+            .sort((a, b) => b.range.start.line - a.range.start.line); // Reverse order
+
+        // Return the nth label backward
+        return backward[distance - 1] || null;
+    }
+}
+
 export function findSymbolInfo(
     word: string,
     fromUri: string,
     fromLine: number,
     documentIndex: Map<string, DocumentIndex>
 ): LabelDefinition | null {
+    // Check if word is an anonymous label reference
+    if (/^[+\-]+$/.test(word)) {
+        const direction = word[0] as '+' | '-';
+        const distance = word.length;
+        return findAnonymousLabel(direction, distance, fromUri, fromLine, documentIndex);
+    }
+
     const fromIndex = documentIndex.get(fromUri);
     if (!fromIndex) return null;
 

@@ -244,6 +244,38 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
             continue;
         }
 
+        // Anonymous labels: + or - at start of line (can have multiples)
+        // Can be on their own line or followed by an instruction: "-  INX"
+        // Each symbol creates a separate label entry for precise distance calculation
+        const anonMatch = line.match(/^(\s*)([+\-]+)\s*(:)?(?:\s|;|$)/);
+        if (anonMatch) {
+            const symbols = anonMatch[2]; // The +++ or --- string
+            const direction = symbols[0]; // First char: '+' or '-'
+            const leadingWhitespace = anonMatch[1].length;
+
+            // Validate that all symbols are the same (no mixing + and -)
+            if (symbols.split('').every(c => c === direction)) {
+                // Create a separate label for each + or - symbol
+                for (let i = 0; i < symbols.length; i++) {
+                    labels.push({
+                        name: direction, // '+' or '-'
+                        originalName: symbols.substring(0, i + 1), // '+', '++', '+++', etc.
+                        uri: document.uri,
+                        range: Range.create(
+                            Position.create(lineNum, leadingWhitespace + i),
+                            Position.create(lineNum, leadingWhitespace + i + 1)
+                        ),
+                        scopePath: getCurrentScopePath(),
+                        localScope: currentLocalScope,
+                        isLocal: true,  // Scoped like local symbols
+                        isAnonymous: true,
+                        anonymousCount: i + 1 // 1 for first +, 2 for second +, etc.
+                    });
+                }
+                continue;
+            }
+        }
+
         // Labels with data directives (not scope-creating)
         const dataLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(byte|word|addr|fill|text|ptext|null)\b/i);
         if (dataLabelMatch) {

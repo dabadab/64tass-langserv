@@ -16,7 +16,7 @@ import {
     BUILTIN_DIRECTIVES_PATTERN
 } from './constants';
 import { parseLineStructure, stripStrings, tokenizeExpression } from './utils';
-import { findSymbolInfo, isParameter } from './symbols';
+import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 
 export function validateDocument(
     document: TextDocument,
@@ -31,8 +31,12 @@ export function validateDocument(
 
     // Check for duplicate labels (same name, same scopePath, same localScope)
     // All names are stored lowercase, so simple comparison works
+    // Skip anonymous labels - they're allowed to have multiple instances
     const seenLabels = new Map<string, LabelDefinition>();
     for (const label of index.labels) {
+        // Anonymous labels can have multiple instances in the same scope
+        if (label.isAnonymous) continue;
+
         const key = `${label.scopePath ?? 'global'}:${label.localScope ?? 'none'}:${label.name}`;
         const existing = seenLabels.get(key);
         if (existing) {
@@ -179,6 +183,56 @@ export function validateDocument(
                                 Position.create(lineNum, errorPos + next.text.length)
                             ),
                             message: `An operator is expected before '${next.text}'`,
+                            source: '64tass'
+                        });
+                    }
+                }
+            }
+
+            // Check for anonymous label references (+ or -)
+            // ONLY in opcode context (branch/jump instructions), NOT in data directives
+            // Data directives use +/- for arithmetic/unary operators
+            if (opcodeMatch) {
+                const anonRefPattern = /([+\-]+)/g;
+                let anonMatch;
+                while ((anonMatch = anonRefPattern.exec(operand)) !== null) {
+                    const ref = anonMatch[1]; // '+', '--', '+++', etc.
+                    const matchIndex = anonMatch.index;
+
+                    // Skip if not a valid anonymous reference (mixed symbols)
+                    if (!ref.split('').every(c => c === ref[0])) continue;
+
+                    // Skip if adjacent to alphanumeric or $ (like table+1, value-offset, $1000+5, #-1)
+                    const before = matchIndex > 0 ? operand[matchIndex - 1] : ' ';
+                    const after = matchIndex + ref.length < operand.length ? operand[matchIndex + ref.length] : ' ';
+                    if (/[a-zA-Z0-9_$#]/.test(before) || /[a-zA-Z0-9_]/.test(after)) continue;
+
+                    // Skip if there's any non-whitespace before the +/- (like "table + offset")
+                    // Anonymous labels must be at the start of the operand
+                    const beforeText = operand.substring(0, matchIndex).trim();
+                    if (beforeText.length > 0) continue;
+
+                    const direction = ref[0] as '+' | '-';
+                    const distance = ref.length;
+
+                    // Validate that the reference can be resolved
+                    const targetLabel = findAnonymousLabel(
+                        direction,
+                        distance,
+                        document.uri,
+                        lineNum,
+                        documentIndex
+                    );
+
+                    if (!targetLabel) {
+                        const startCol = operandStart + matchIndex;
+                        diagnostics.push({
+                            severity: DiagnosticSeverity.Warning,
+                            range: Range.create(
+                                Position.create(lineNum, startCol),
+                                Position.create(lineNum, startCol + ref.length)
+                            ),
+                            message: `No ${direction === '+' ? 'forward' : 'backward'} anonymous label found`,
                             source: '64tass'
                         });
                     }

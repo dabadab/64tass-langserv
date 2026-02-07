@@ -297,3 +297,88 @@ describe('parseDocument - comment association', () => {
         expect(index.labels[0].comment).toBe('Documentation for myproc');
     });
 });
+
+describe('parseDocument - anonymous labels', () => {
+    it('parses single + label', () => {
+        const index = parse('+\n        nop');
+        const label = index.labels.find(l => l.isAnonymous && l.name === '+');
+        expect(label).toBeDefined();
+        expect(label!.anonymousCount).toBe(1);
+        expect(label!.originalName).toBe('+');
+        expect(label!.isLocal).toBe(true);
+    });
+
+    it('parses single - label', () => {
+        const index = parse('-\n        nop');
+        const label = index.labels.find(l => l.isAnonymous && l.name === '-');
+        expect(label).toBeDefined();
+        expect(label!.anonymousCount).toBe(1);
+        expect(label!.originalName).toBe('-');
+    });
+
+    it('parses multiple + symbols as separate labels', () => {
+        const index = parse('+++\n        nop');
+        const labels = index.labels.filter(l => l.isAnonymous && l.name === '+');
+        expect(labels).toHaveLength(3);
+        expect(labels[0].anonymousCount).toBe(1);
+        expect(labels[1].anonymousCount).toBe(2);
+        expect(labels[2].anonymousCount).toBe(3);
+        expect(labels[0].originalName).toBe('+');
+        expect(labels[1].originalName).toBe('++');
+        expect(labels[2].originalName).toBe('+++');
+    });
+
+    it('parses multiple - symbols as separate labels', () => {
+        const index = parse('--\n        nop');
+        const labels = index.labels.filter(l => l.isAnonymous && l.name === '-');
+        expect(labels).toHaveLength(2);
+        expect(labels[0].anonymousCount).toBe(1);
+        expect(labels[1].anonymousCount).toBe(2);
+    });
+
+    it('scopes anonymous labels to current code label', () => {
+        const index = parse('main\n+\n        nop');
+        const label = index.labels.find(l => l.isAnonymous);
+        expect(label).toBeDefined();
+        expect(label!.localScope).toBe('main');
+    });
+
+    it('rejects mixed +- symbols', () => {
+        const index = parse('+-\n        nop');
+        const anonLabels = index.labels.filter(l => l.isAnonymous);
+        expect(anonLabels).toHaveLength(0); // Invalid pattern shouldn't match
+    });
+
+    it('parses anonymous label with optional colon', () => {
+        const index = parse('+:\n        nop');
+        const label = index.labels.find(l => l.isAnonymous && l.name === '+');
+        expect(label).toBeDefined();
+    });
+
+    it('preserves anonymous labels across different scopes', () => {
+        const index = parse('func1\n+\n        nop\nfunc2\n+\n        nop');
+        const plusLabels = index.labels.filter(l => l.isAnonymous && l.name === '+');
+        expect(plusLabels).toHaveLength(2);
+        expect(plusLabels[0].localScope).toBe('func1');
+        expect(plusLabels[1].localScope).toBe('func2');
+    });
+
+    it('parses anonymous label followed by instruction on same line', () => {
+        const index = parse('-\tINX\n        BCS -');
+        const label = index.labels.find(l => l.isAnonymous && l.name === '-');
+        expect(label).toBeDefined();
+        expect(label!.range.start.line).toBe(0);
+    });
+
+    it('parses + label followed by instruction', () => {
+        const index = parse('+\tLDA #1');
+        const label = index.labels.find(l => l.isAnonymous && l.name === '+');
+        expect(label).toBeDefined();
+    });
+
+    it('parses anonymous label with colon followed by instruction', () => {
+        const index = parse('-:\tDEX');
+        const label = index.labels.find(l => l.isAnonymous && l.name === '-');
+        expect(label).toBeDefined();
+    });
+});
