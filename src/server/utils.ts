@@ -1,6 +1,11 @@
-// Strip comments from a line (handle strings to avoid stripping ; inside strings)
+export interface LineStructure {
+    code: string;        // Everything before ; (or full line if no comment)
+    commentStart: number; // Position of ; (-1 if none)
+}
+
+// Parse line structure in a single scan, returning both code portion and comment position
 // In 64tass, "" inside a string is an escaped quote, backslashes are literal
-export function stripComment(line: string): string {
+export function parseLineStructure(line: string): LineStructure {
     let inString = false;
     let stringChar = '';
     for (let i = 0; i < line.length; i++) {
@@ -19,11 +24,17 @@ export function stripComment(line: string): string {
                 inString = true;
                 stringChar = char;
             } else if (char === ';') {
-                return line.substring(0, i);
+                return { code: line.substring(0, i), commentStart: i };
             }
         }
     }
-    return line;
+    return { code: line, commentStart: -1 };
+}
+
+// Strip comments from a line (handle strings to avoid stripping ; inside strings)
+// In 64tass, "" inside a string is an escaped quote, backslashes are literal
+export function stripComment(line: string): string {
+    return parseLineStructure(line).code;
 }
 
 // Strip string literals from a line, replacing contents with spaces to preserve positions
@@ -61,29 +72,7 @@ export function stripStrings(line: string): string {
 // Find comment start position in a line (returns -1 if no comment)
 // In 64tass, "" inside a string is an escaped quote, backslashes are literal
 export function getCommentStart(line: string): number {
-    let inString = false;
-    let stringChar = '';
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (inString) {
-            if (char === stringChar) {
-                // Check for escaped quote (doubled quote)
-                if (i + 1 < line.length && line[i + 1] === stringChar) {
-                    i++; // Skip the escaped quote
-                } else {
-                    inString = false;
-                }
-            }
-        } else {
-            if (char === '"' || char === "'") {
-                inString = true;
-                stringChar = char;
-            } else if (char === ';') {
-                return i;
-            }
-        }
-    }
-    return -1;
+    return parseLineStructure(line).commentStart;
 }
 
 // Extract comment text from a line (returns the text after ;, preserving indentation)

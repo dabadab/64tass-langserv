@@ -32,7 +32,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
 import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
-import { stripComment, getCommentStart, parseNumericValue, formatNumericValue } from './utils';
+import { parseLineStructure, parseNumericValue, formatNumericValue } from './utils';
 import { parseDocument } from './parser';
 import { getWordAtPosition, findSymbolInfo, findDefinition } from './symbols';
 import { validateDocument } from './diagnostics';
@@ -106,7 +106,8 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     const stack: { directive: string; line: number }[] = [];
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const line = stripComment(lines[lineNum]).toLowerCase();
+        const { code } = parseLineStructure(lines[lineNum]);
+        const line = code.toLowerCase();
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {
@@ -283,7 +284,7 @@ connection.onReferences((params: ReferenceParams): Location[] => {
 
         for (let lineNum = 0; lineNum < lines.length; lineNum++) {
             const line = lines[lineNum];
-            const code = stripComment(line);
+            const { code } = parseLineStructure(line);
 
             // Skip empty lines
             if (code.trim() === '') continue;
@@ -432,8 +433,7 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
 
         for (let lineNum = 0; lineNum < lines.length; lineNum++) {
             const line = lines[lineNum];
-            const code = stripComment(line);
-            const commentStart = getCommentStart(line);
+            const { code, commentStart } = parseLineStructure(line);
 
             const symbolName = symbol.name;
             const escapedName = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -15,7 +15,7 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN
 } from './constants';
-import { stripComment, stripStrings } from './utils';
+import { parseLineStructure, stripStrings } from './utils';
 import { findSymbolInfo, isParameter } from './symbols';
 
 export function validateDocument(
@@ -47,16 +47,20 @@ export function validateDocument(
         }
     }
 
-    // Check for unclosed blocks
+    // Check for unclosed blocks and undefined symbols in a single pass
     const blockStack: { directive: string; line: number }[] = [];
+    const symbolPattern = /\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\b/g;
+    const macroCallPattern = /\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const lineLower = stripComment(lines[lineNum]).toLowerCase();
+        const line = lines[lineNum];
+        const { code } = parseLineStructure(line);
+        const codeLower = code.toLowerCase();
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {
             const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`, 'i');
-            if (openPattern.test(lineLower)) {
+            if (openPattern.test(codeLower)) {
                 blockStack.push({ directive: open, line: lineNum });
             }
         }
@@ -64,7 +68,7 @@ export function validateDocument(
         // Check for closing directives
         for (const [close, openers] of Object.entries(CLOSING_DIRECTIVES)) {
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
-            if (closePattern.test(lineLower)) {
+            if (closePattern.test(codeLower)) {
                 // Find the most recent matching opener
                 let found = false;
                 for (let i = blockStack.length - 1; i >= 0; i--) {
@@ -75,7 +79,7 @@ export function validateDocument(
                     }
                 }
                 if (!found) {
-                    const startCol = lineLower.indexOf(close);
+                    const startCol = codeLower.indexOf(close);
                     const expectedOpeners = openers.join(', ');
                     diagnostics.push({
                         severity: DiagnosticSeverity.Error,
@@ -89,37 +93,8 @@ export function validateDocument(
                 }
             }
         }
-    }
 
-    // Directives with optional closing tags
-    const optionalClose = new Set(['.logical']);
-
-    for (const unclosed of blockStack) {
-        // Skip directives that have optional closers
-        if (optionalClose.has(unclosed.directive)) continue;
-
-        const closeDirective = FOLDING_PAIRS[unclosed.directive];
-        diagnostics.push({
-            severity: DiagnosticSeverity.Error,
-            range: Range.create(
-                Position.create(unclosed.line, 0),
-                Position.create(unclosed.line, lines[unclosed.line].length)
-            ),
-            message: `Unclosed '${unclosed.directive}' - missing '${closeDirective}'`,
-            source: '64tass'
-        });
-    }
-
-    // Check for undefined symbols
-    // Pattern to match potential symbol references (including dotted scope references like scope.label)
-    const symbolPattern = /\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\b/g;
-    const macroCallPattern = /\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
-
-    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const line = lines[lineNum];
-        const code = stripComment(line);
-
-        // Skip empty lines and comment-only lines
+        // Symbol validation - skip empty lines and label definitions
         if (code.trim() === '') continue;
 
         // Skip lines that are label definitions (they define, not reference)
@@ -234,6 +209,25 @@ export function validateDocument(
                 }
             }
         }
+    }
+
+    // Check for unclosed blocks after processing all lines
+    const optionalClose = new Set(['.logical']);
+
+    for (const unclosed of blockStack) {
+        // Skip directives that have optional closers
+        if (optionalClose.has(unclosed.directive)) continue;
+
+        const closeDirective = FOLDING_PAIRS[unclosed.directive];
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: Range.create(
+                Position.create(unclosed.line, 0),
+                Position.create(unclosed.line, lines[unclosed.line].length)
+            ),
+            message: `Unclosed '${unclosed.directive}' - missing '${closeDirective}'`,
+            source: '64tass'
+        });
     }
 
     return diagnostics;

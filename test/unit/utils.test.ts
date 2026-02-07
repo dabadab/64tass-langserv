@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    parseLineStructure,
     stripComment,
     stripStrings,
     getCommentStart,
@@ -8,6 +9,68 @@ import {
     parseNumericValue,
     formatNumericValue
 } from '../../src/server/utils';
+
+describe('parseLineStructure', () => {
+    it('returns full line as code when no comment', () => {
+        const result = parseLineStructure('lda #$FF');
+        expect(result.code).toBe('lda #$FF');
+        expect(result.commentStart).toBe(-1);
+    });
+
+    it('returns code and comment position for simple comment', () => {
+        const result = parseLineStructure('lda #$FF ; load acc');
+        expect(result.code).toBe('lda #$FF ');
+        expect(result.commentStart).toBe(9);
+    });
+
+    it('preserves semicolon inside double-quoted string', () => {
+        const result = parseLineStructure('.text "a;b"');
+        expect(result.code).toBe('.text "a;b"');
+        expect(result.commentStart).toBe(-1);
+    });
+
+    it('preserves semicolon inside single-quoted string', () => {
+        const result = parseLineStructure(".text 'a;b'");
+        expect(result.code).toBe(".text 'a;b'");
+        expect(result.commentStart).toBe(-1);
+    });
+
+    it('handles doubled quote escape then comment', () => {
+        const result = parseLineStructure('.text "a""b" ; comment');
+        expect(result.code).toBe('.text "a""b" ');
+        expect(result.commentStart).toBe(13);
+    });
+
+    it('handles comment-only line', () => {
+        const result = parseLineStructure('; this is a comment');
+        expect(result.code).toBe('');
+        expect(result.commentStart).toBe(0);
+    });
+
+    it('handles empty line', () => {
+        const result = parseLineStructure('');
+        expect(result.code).toBe('');
+        expect(result.commentStart).toBe(-1);
+    });
+
+    it('finds first semicolon outside strings', () => {
+        const result = parseLineStructure('lda #1 ; a ; b');
+        expect(result.code).toBe('lda #1 ');
+        expect(result.commentStart).toBe(7);
+    });
+
+    it('handles unclosed string', () => {
+        const result = parseLineStructure('.text "abc');
+        expect(result.code).toBe('.text "abc');
+        expect(result.commentStart).toBe(-1);
+    });
+
+    it('handles comment after string', () => {
+        const result = parseLineStructure('.text "hello" ; msg');
+        expect(result.code).toBe('.text "hello" ');
+        expect(result.commentStart).toBe(14);
+    });
+});
 
 describe('stripComment', () => {
     it('returns line unchanged when no comment', () => {
