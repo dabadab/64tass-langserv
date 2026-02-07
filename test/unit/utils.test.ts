@@ -7,7 +7,8 @@ import {
     extractComment,
     getBlockComment,
     parseNumericValue,
-    formatNumericValue
+    formatNumericValue,
+    escapeRegex
 } from '../../src/server/utils';
 
 describe('parseLineStructure', () => {
@@ -315,5 +316,77 @@ describe('formatNumericValue', () => {
 
     it('formats power of 2', () => {
         expect(formatNumericValue(256)).toBe('%100000000, 256, $100');
+    });
+});
+
+describe('escapeRegex', () => {
+    it('escapes all special regex characters', () => {
+        const input = '.*+?^${}()|[]\\';
+        const escaped = escapeRegex(input);
+        // Should be able to use in RegExp without error
+        expect(() => new RegExp(escaped)).not.toThrow();
+        // Should match literal string, not as regex pattern
+        const pattern = new RegExp(escaped);
+        expect(pattern.test(input)).toBe(true);
+    });
+
+    it('escapes dot character', () => {
+        const escaped = escapeRegex('a.b');
+        const pattern = new RegExp(escaped);
+        expect(pattern.test('a.b')).toBe(true);
+        expect(pattern.test('axb')).toBe(false); // . should not match any char
+    });
+
+    it('escapes asterisk character', () => {
+        const escaped = escapeRegex('a*b');
+        const pattern = new RegExp(escaped);
+        expect(pattern.test('a*b')).toBe(true);
+        expect(pattern.test('ab')).toBe(false); // * should not mean zero or more
+        expect(pattern.test('aaaaab')).toBe(false);
+    });
+
+    it('escapes plus character', () => {
+        const escaped = escapeRegex('a+b');
+        const pattern = new RegExp(escaped);
+        expect(pattern.test('a+b')).toBe(true);
+        expect(pattern.test('ab')).toBe(false); // + should not mean one or more
+    });
+
+    it('escapes parentheses', () => {
+        const escaped = escapeRegex('(abc)');
+        const pattern = new RegExp(escaped);
+        expect(pattern.test('(abc)')).toBe(true);
+    });
+
+    it('escapes square brackets', () => {
+        const escaped = escapeRegex('[abc]');
+        const pattern = new RegExp(escaped);
+        expect(pattern.test('[abc]')).toBe(true);
+        expect(pattern.test('a')).toBe(false); // [abc] should not match character class
+    });
+
+    it('handles symbol names from 64tass code', () => {
+        // Real-world test: symbol names that could be problematic
+        const symbols = ['_local', 'label.sub', 'my$var', 'x+y'];
+        symbols.forEach(sym => {
+            const escaped = escapeRegex(sym);
+            const pattern = new RegExp(`\\b${escaped}\\b`);
+            expect(() => pattern.test('some code')).not.toThrow();
+        });
+    });
+
+    it('throws TypeError for non-string input', () => {
+        expect(() => escapeRegex(null as any)).toThrow(TypeError);
+        expect(() => escapeRegex(undefined as any)).toThrow(TypeError);
+        expect(() => escapeRegex(123 as any)).toThrow(TypeError);
+    });
+
+    it('handles empty string', () => {
+        expect(escapeRegex('')).toBe('');
+    });
+
+    it('handles strings with no special characters', () => {
+        expect(escapeRegex('abc123')).toBe('abc123');
+        expect(escapeRegex('label_name')).toBe('label_name');
     });
 });

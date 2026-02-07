@@ -67,6 +67,7 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
         // Check for scope-closing directives first
         let closedScope = false;
         for (const [open, close] of Object.entries(SCOPE_OPENERS)) {
+            // Safe: directive name from static constant (SCOPE_OPENERS)
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
             if (closePattern.test(lineLower)) {
                 // If closing a macro, extract sub-labels from its body (stored lowercase)
@@ -107,7 +108,7 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
 
         // Check for scope-opening directives with labels: "name .proc", "name .block", etc.
         for (const [open] of Object.entries(SCOPE_OPENERS)) {
-            // Pattern captures: name, optional parameters after the directive
+            // Safe: directive name from static constant (SCOPE_OPENERS)
             const openPattern = new RegExp(`^([a-zA-Z][a-zA-Z0-9_]*)\\s+\\${open}\\b\\s*(.*)`, 'i');
             const match = line.match(openPattern);
             if (match) {
@@ -156,7 +157,7 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
                 continue;
             }
 
-            // Anonymous scope opener: just ".proc" without a name
+            // Safe: directive name from static constant (SCOPE_OPENERS)
             const anonPattern = new RegExp(`^\\s*\\${open}\\b`, 'i');
             if (anonPattern.test(lineLower)) {
                 scopeStack.push({ name: null, directive: open });

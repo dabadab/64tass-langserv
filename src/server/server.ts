@@ -32,7 +32,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
 import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
-import { parseLineStructure, parseNumericValue, formatNumericValue } from './utils';
+import { parseLineStructure, parseNumericValue, formatNumericValue, escapeRegex } from './utils';
 import { parseDocument } from './parser';
 import { getWordAtPosition, findSymbolInfo, findDefinition } from './symbols';
 import { validateDocument } from './diagnostics';
@@ -111,6 +111,7 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {
+            // Safe: directive name from static constant (FOLDING_PAIRS)
             const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`);
             if (openPattern.test(line)) {
                 stack.push({ directive: open, line: lineNum });
@@ -119,6 +120,7 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
 
         // Check for closing directives
         for (const [close, openers] of Object.entries(CLOSING_DIRECTIVES)) {
+            // Safe: directive name from static constant (CLOSING_DIRECTIVES)
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`);
             if (closePattern.test(line)) {
                 // Find the most recent matching opener
@@ -291,7 +293,7 @@ connection.onReferences((params: ReferenceParams): Location[] => {
 
             // Find all occurrences of the symbol name in this line
             const symbolName = symbol.name;
-            const escapedName = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escapedName = escapeRegex(symbolName);
 
             // Pattern to match the symbol as a whole word
             // For local symbols (_name), match with underscore
@@ -300,10 +302,10 @@ connection.onReferences((params: ReferenceParams): Location[] => {
             const patterns: RegExp[] = [];
 
             if (symbol.isLocal) {
-                // Local symbol: match exactly with word boundaries
+                // Safe: symbol name from user file, sanitized via escapeRegex()
                 patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
             } else {
-                // Regular symbol: match as word or as macro call (.name)
+                // Safe: symbol name from user file, sanitized via escapeRegex()
                 patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
                 patterns.push(new RegExp(`\\.${escapedName}\\b`, 'g'));
             }
@@ -436,12 +438,14 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
             const { code, commentStart } = parseLineStructure(line);
 
             const symbolName = symbol.name;
-            const escapedName = symbolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escapedName = escapeRegex(symbolName);
 
             const patterns: RegExp[] = [];
             if (symbol.isLocal) {
+                // Safe: symbol name from user file, sanitized via escapeRegex()
                 patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
             } else {
+                // Safe: symbol name from user file, sanitized via escapeRegex()
                 patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
                 patterns.push(new RegExp(`\\.${escapedName}\\b`, 'g'));
             }
@@ -495,7 +499,7 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
             // Search in comment portion (for all symbols, not just scoped ones)
             if (commentStart >= 0) {
                 const comment = line.substring(commentStart);
-                // Only match whole words in comments (no macro call syntax)
+                // Safe: symbol name from user file, sanitized via escapeRegex()
                 const commentPattern = new RegExp(`\\b${escapedName}\\b`, 'g');
                 let match;
                 while ((match = commentPattern.exec(comment)) !== null) {

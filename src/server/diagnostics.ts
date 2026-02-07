@@ -59,6 +59,7 @@ export function validateDocument(
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {
+            // Safe: directive name from static constant (FOLDING_PAIRS)
             const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`, 'i');
             if (openPattern.test(codeLower)) {
                 blockStack.push({ directive: open, line: lineNum });
@@ -67,6 +68,7 @@ export function validateDocument(
 
         // Check for closing directives
         for (const [close, openers] of Object.entries(CLOSING_DIRECTIVES)) {
+            // Safe: directive name from static constant (CLOSING_DIRECTIVES)
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
             if (closePattern.test(codeLower)) {
                 // Find the most recent matching opener

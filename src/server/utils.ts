@@ -252,3 +252,22 @@ export function tokenizeExpression(expr: string): Token[] {
 
     return tokens;
 }
+
+/**
+ * Escapes special regex characters to prevent regex injection.
+ * Use this when constructing RegExp from user input or file content.
+ *
+ * Security: This function prevents regex injection and ReDoS (Regular Expression Denial of Service)
+ * attacks by escaping all special regex metacharacters.
+ *
+ * @param input - String to escape for use in regex pattern
+ * @returns Escaped string safe for use in RegExp constructor
+ * @throws TypeError if input is not a string
+ */
+export function escapeRegex(input: string): string {
+    if (typeof input !== 'string') {
+        throw new TypeError('escapeRegex expects a string input');
+    }
+    // Escape all special regex characters: . * + ? ^ $ { } ( ) | [ ] \
+    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
