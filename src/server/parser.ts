@@ -10,7 +10,7 @@ import { stripComment, getBlockComment } from './utils';
 
 export type LogFunction = (message: string) => void;
 
-export function parseDocument(document: TextDocument, log?: LogFunction): DocumentIndex {
+export function parseDocument(document: TextDocument, caseSensitive = false, log?: LogFunction): DocumentIndex {
     const labels: LabelDefinition[] = [];
     const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }> = new Map();
     const parametersAtScope: Map<string, string[]> = new Map();
@@ -26,6 +26,11 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
     let currentLocalScope: string | null = null;
     // Track macro bodies for extracting sub-labels: { name, startLine }
     let currentMacroCapture: { name: string; startLine: number } | null = null;
+
+    // Helper to normalize names based on case sensitivity
+    function normalizeName(name: string): string {
+        return caseSensitive ? name : name.toLowerCase();
+    }
 
     function getCurrentScopePath(): string | null {
         const named = scopeStack.filter(s => s.name !== null).map(s => s.name);
@@ -70,7 +75,7 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
             // Safe: directive name from static constant (SCOPE_OPENERS)
             const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
             if (closePattern.test(lineLower)) {
-                // If closing a macro, extract sub-labels from its body (stored lowercase)
+                // If closing a macro, extract sub-labels from its body (stored normalized)
                 if (open === '.macro' && currentMacroCapture) {
                     const subLabels: string[] = [];
                     for (let i = currentMacroCapture.startLine; i < lineNum; i++) {
@@ -78,7 +83,7 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
                         // Look for label definitions at start of line: "name" or "name =" or "name .byte", etc.
                         const labelMatch = macroLine.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:$|:|=|\.)/);
                         if (labelMatch) {
-                            subLabels.push(labelMatch[1].toLowerCase());
+                            subLabels.push(normalizeName(labelMatch[1]));
                         }
                     }
                     if (subLabels.length > 0) {
@@ -117,9 +122,8 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
                 const paramsStr = match[2] ? stripComment(match[2]).trim() : '';
                 const comment = getBlockComment(lines, lineNum);
 
-                const labelNameLower = labelName.toLowerCase();
                 labels.push({
-                    name: labelNameLower,
+                    name: normalizeName(labelName),
                     originalName: labelName,
                     uri: document.uri,
                     range: Range.create(
@@ -132,13 +136,13 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
                     comment
                 });
 
-                // Push named scope (lowercase for case-insensitive matching)
-                scopeStack.push({ name: labelNameLower, directive: open });
+                // Push named scope (normalized for matching)
+                scopeStack.push({ name: normalizeName(labelName), directive: open });
 
-                // Extract parameters for .function and .macro (stored lowercase)
+                // Extract parameters for .function and .macro (stored normalized)
                 if ((open === '.function' || open === '.macro') && paramsStr) {
-                    const newScopePath = getCurrentScopePath() || labelNameLower;
-                    const params = paramsStr.split(',').map(p => p.trim().toLowerCase()).filter(p => p.length > 0);
+                    const newScopePath = getCurrentScopePath() || normalizeName(labelName);
+                    const params = paramsStr.split(',').map(p => normalizeName(p.trim())).filter(p => p.length > 0);
                     if (params.length > 0) {
                         parametersAtScope.set(newScopePath, params);
                     }
@@ -146,7 +150,7 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
 
                 // Start capturing macro body to extract sub-labels
                 if (open === '.macro') {
-                    currentMacroCapture = { name: labelNameLower, startLine: lineNum + 1 };
+                    currentMacroCapture = { name: normalizeName(labelName), startLine: lineNum + 1 };
                 }
 
                 // Update scope for this line after opening
@@ -174,15 +178,14 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
         const codeLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*(:)?\s*(;.*)?$/);
         if (codeLabelMatch) {
             const labelName = codeLabelMatch[1];
-            const labelNameLower = labelName.toLowerCase();
-            currentLocalScope = labelNameLower;
+            currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope
             });
 
             labels.push({
-                name: labelNameLower,
+                name: normalizeName(labelName),
                 originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
@@ -200,15 +203,14 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
         const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+([a-zA-Z]{3})\b/);
         if (codeLabelOpcodeMatch && OPCODES.has(codeLabelOpcodeMatch[2].toLowerCase())) {
             const labelName = codeLabelOpcodeMatch[1];
-            const labelNameLower = labelName.toLowerCase();
-            currentLocalScope = labelNameLower;
+            currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope
             });
 
             labels.push({
-                name: labelNameLower,
+                name: normalizeName(labelName),
                 originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
@@ -226,11 +228,10 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
         const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(?::|=|:=|\s|;|$)/);
         if (localMatch) {
             const labelName = localMatch[2];
-            const labelNameLower = labelName.toLowerCase();
             const startChar = localMatch[1].length;
 
             labels.push({
-                name: labelNameLower,
+                name: normalizeName(labelName),
                 originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
@@ -280,9 +281,8 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
         const dataLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(byte|word|addr|fill|text|ptext|null)\b/i);
         if (dataLabelMatch) {
             const labelName = dataLabelMatch[1];
-            const labelNameLower = labelName.toLowerCase();
             labels.push({
-                name: labelNameLower,
+                name: normalizeName(labelName),
                 originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
@@ -301,12 +301,11 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
         const macroLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
         if (macroLabelMatch) {
             const labelName = macroLabelMatch[1];
-            const labelNameLower = labelName.toLowerCase();
-            const macroCalled = macroLabelMatch[2].toLowerCase();
+            const macroCalled = normalizeName(macroLabelMatch[2]);
             // Skip if this is a scope-creating directive (already handled above)
             if (!Object.keys(SCOPE_OPENERS).includes('.' + macroCalled)) {
                 labels.push({
-                    name: labelNameLower,
+                    name: normalizeName(labelName),
                     originalName: labelName,
                     uri: document.uri,
                     range: Range.create(
@@ -318,7 +317,7 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
                     isLocal: false
                 });
                 // Track the macro used to define this label (for sub-label validation)
-                labelDefinedByMacro.set(labelNameLower, macroCalled);
+                labelDefinedByMacro.set(normalizeName(labelName), macroCalled);
             }
             continue;
         }
@@ -327,13 +326,12 @@ export function parseDocument(document: TextDocument, log?: LogFunction): Docume
         const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=\s*([^;]+)/);
         if (constMatch) {
             const labelName = constMatch[2];
-            const labelNameLower = labelName.toLowerCase();
             const startChar = constMatch[1].length;
             const isLocal = labelName.startsWith('_');
             const value = constMatch[3]?.trim();
 
             labels.push({
-                name: labelNameLower,
+                name: normalizeName(labelName),
                 originalName: labelName,
                 uri: document.uri,
                 range: Range.create(

@@ -356,3 +356,82 @@ describe('findSymbolInfo - anonymous labels', () => {
         expect(symbol!.range.start.line).toBe(3); // Second + label
     });
 });
+
+describe('case sensitivity', () => {
+    it('matches case-insensitively by default', () => {
+        const source = 'MyLabel\n        lda #1';
+        const { documentIndex, docs } = buildIndex({ source });
+
+        // Should find label regardless of case
+        const symbol1 = findSymbolInfo('MyLabel', docs[0].uri, 1, documentIndex, false);
+        const symbol2 = findSymbolInfo('mylabel', docs[0].uri, 1, documentIndex, false);
+        const symbol3 = findSymbolInfo('MYLABEL', docs[0].uri, 1, documentIndex, false);
+
+        expect(symbol1).toBeDefined();
+        expect(symbol2).toBeDefined();
+        expect(symbol3).toBeDefined();
+        expect(symbol1!.originalName).toBe('MyLabel');
+    });
+
+    it('matches case-sensitively when enabled', () => {
+        const source = 'MyLabel\n        lda #1';
+        const { documentIndex, docs } = buildIndex({ source, caseSensitive: true });
+
+        // Should only find exact case match
+        const symbol1 = findSymbolInfo('MyLabel', docs[0].uri, 1, documentIndex, true);
+        const symbol2 = findSymbolInfo('mylabel', docs[0].uri, 1, documentIndex, true);
+        const symbol3 = findSymbolInfo('MYLABEL', docs[0].uri, 1, documentIndex, true);
+
+        expect(symbol1).toBeDefined();
+        expect(symbol1!.originalName).toBe('MyLabel');
+        expect(symbol2).toBeNull(); // Different case, should not match
+        expect(symbol3).toBeNull(); // Different case, should not match
+    });
+
+    it('distinguishes symbols with same name but different case in case-sensitive mode', () => {
+        const source = 'myLabel\nMyLabel\nMYLABEL\n        lda #1';
+        const { documentIndex, docs } = buildIndex({ source, caseSensitive: true });
+
+        // Case-sensitive should find exact matches
+        const match1 = findSymbolInfo('myLabel', docs[0].uri, 3, documentIndex, true);
+        const match2 = findSymbolInfo('MyLabel', docs[0].uri, 3, documentIndex, true);
+        const match3 = findSymbolInfo('MYLABEL', docs[0].uri, 3, documentIndex, true);
+
+        expect(match1).toBeDefined();
+        expect(match1!.originalName).toBe('myLabel');
+        expect(match2).toBeDefined();
+        expect(match2!.originalName).toBe('MyLabel');
+        expect(match3).toBeDefined();
+        expect(match3!.originalName).toBe('MYLABEL');
+    });
+
+    it('applies case sensitivity to local symbols', () => {
+        const source = 'main\n_Local\n        lda _local';
+        const { documentIndex, docs } = buildIndex({ source, caseSensitive: true });
+
+        // Case-sensitive should not match different case
+        const sensitive = findSymbolInfo('_local', docs[0].uri, 2, documentIndex, true);
+        expect(sensitive).toBeNull();
+
+        // Exact case should match
+        const exact = findSymbolInfo('_Local', docs[0].uri, 2, documentIndex, true);
+        expect(exact).toBeDefined();
+    });
+
+    it('applies case sensitivity to dotted references', () => {
+        const source = 'Outer .proc\n    Inner .proc\n        Value = 42\n    .pend\n.pend\nmain\n        lda #Outer.Inner.Value';
+        const { documentIndex, docs } = buildIndex({ source });
+
+        // Case-insensitive should work
+        const insensitive = findSymbolInfo('outer.inner.value', docs[0].uri, 6, documentIndex, false);
+        expect(insensitive).toBeDefined();
+
+        // Case-sensitive should not match different case
+        const sensitive = findSymbolInfo('outer.inner.value', docs[0].uri, 6, documentIndex, true);
+        expect(sensitive).toBeNull();
+
+        // Exact case should match
+        const exact = findSymbolInfo('Outer.Inner.Value', docs[0].uri, 6, documentIndex, true);
+        expect(exact).toBeDefined();
+    });
+});

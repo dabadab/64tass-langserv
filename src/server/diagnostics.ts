@@ -20,7 +20,8 @@ import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 
 export function validateDocument(
     document: TextDocument,
-    documentIndex: Map<string, DocumentIndex>
+    documentIndex: Map<string, DocumentIndex>,
+    caseSensitive = false
 ): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
     const text = document.getText();
@@ -128,7 +129,7 @@ export function validateDocument(
 
             if (!isBuiltinDirective) {
                 // Try to find the macro definition
-                const symbol = findSymbolInfo(fullMatch, document.uri, lineNum, documentIndex);
+                const symbol = findSymbolInfo(fullMatch, document.uri, lineNum, documentIndex, caseSensitive);
                 if (!symbol) {
                     diagnostics.push({
                         severity: DiagnosticSeverity.Warning,
@@ -253,29 +254,30 @@ export function validateDocument(
                 // Skip hex numbers like $FE - if preceded by $ and only contains hex digits
                 if (match.index > 0 && operandNoStrings[match.index - 1] === '$' && /^[0-9A-Fa-f]+$/.test(symName)) continue;
                 // Skip if it's a parameter in the current scope
-                if (isParameter(symName, currentScopePath, index)) continue;
+                if (isParameter(symName, currentScopePath, index, caseSensitive)) continue;
 
                 // For dotted references like param.lo or label.hi
                 if (symName.includes('.')) {
                     const parts = symName.split('.');
                     const parentName = parts[0];
-                    const parentNameLower = parentName.toLowerCase();
-                    const subLabelName = parts[parts.length - 1].toLowerCase();
+                    const parentNameNormalized = caseSensitive ? parentName : parentName.toLowerCase();
+                    const subLabelName = parts[parts.length - 1];
+                    const subLabelNormalized = caseSensitive ? subLabelName : subLabelName.toLowerCase();
 
                     // If parent is a parameter, skip (we can't validate runtime values)
-                    if (isParameter(parentName, currentScopePath, index)) continue;
+                    if (isParameter(parentName, currentScopePath, index, caseSensitive)) continue;
 
                     // Check if parent label was defined via a macro that creates this sub-label
-                    const macroUsed = index.labelDefinedByMacro.get(parentNameLower);
+                    const macroUsed = index.labelDefinedByMacro.get(parentNameNormalized);
                     if (macroUsed) {
                         const macroLabels = index.macroSubLabels.get(macroUsed);
-                        if (macroLabels && macroLabels.includes(subLabelName)) {
+                        if (macroLabels && macroLabels.includes(subLabelNormalized)) {
                             continue; // Valid sub-label from macro
                         }
                     }
                 }
 
-                const symbol = findSymbolInfo(symName, document.uri, lineNum, documentIndex);
+                const symbol = findSymbolInfo(symName, document.uri, lineNum, documentIndex, caseSensitive);
                 if (!symbol) {
                     const startCol = operandStart + match.index;
                     diagnostics.push({

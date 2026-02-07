@@ -42,6 +42,15 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 const documentIndex: Map<string, DocumentIndex> = new Map();
 
+// Configuration settings
+interface Settings {
+    caseSensitive: boolean;
+}
+
+// Default settings
+let globalSettings: Settings = { caseSensitive: false };
+let hasConfigurationCapability = false;
+
 // Tracks which parent documents reference each included file (for cleanup)
 // Maps included file URI -> Set of parent document URIs that include it
 const includeRefCount: Map<string, Set<string>> = new Map();
@@ -74,7 +83,7 @@ function indexDocument(document: TextDocument, indexedUris: Set<string> = new Se
     // The root URI is the top-level document that initiated the indexing
     const effectiveRootUri = rootUri ?? document.uri;
 
-    const index = parseDocument(document, (msg) => connection.console.warn(msg));
+    const index = parseDocument(document, globalSettings.caseSensitive, (msg) => connection.console.warn(msg));
     documentIndex.set(document.uri, index);
 
     // Recursively index included files and track references
@@ -145,7 +154,12 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     return ranges;
 }
 
-connection.onInitialize((_params: InitializeParams): InitializeResult => {
+connection.onInitialize((params: InitializeParams): InitializeResult => {
+    const capabilities = params.capabilities;
+    hasConfigurationCapability = !!(
+        capabilities.workspace && !!capabilities.workspace.configuration
+    );
+
     return {
         capabilities: {
             textDocumentSync: TextDocumentSyncKind.Incremental,
@@ -160,7 +174,40 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => {
 
 connection.onInitialized(() => {
     connection.console.log('64tass language server initialized');
+
+    if (hasConfigurationCapability) {
+        // Request configuration
+        connection.workspace.getConfiguration('64tass').then(
+            (config: any) => {
+                globalSettings = {
+                    caseSensitive: config.caseSensitive ?? false
+                };
+            },
+            (error) => {
+                connection.console.warn(`Failed to get configuration: ${error}`);
+            }
+        );
+    }
+
     documents.all().forEach(doc => indexDocument(doc));
+});
+
+// Handle configuration changes
+connection.onDidChangeConfiguration(() => {
+    if (hasConfigurationCapability) {
+        connection.workspace.getConfiguration('64tass').then(
+            (config: any) => {
+                globalSettings = {
+                    caseSensitive: config.caseSensitive ?? false
+                };
+                // Re-index all documents with new settings
+                documents.all().forEach(doc => indexDocument(doc));
+            },
+            (error) => {
+                connection.console.warn(`Failed to get configuration: ${error}`);
+            }
+        );
+    }
 });
 
 connection.onDefinition((params: DefinitionParams): Location | null => {
@@ -202,7 +249,7 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     const word = getWordAtPosition(document, params.position);
     if (!word) return null;
 
-    return findDefinition(word, params.textDocument.uri, params.position.line, documentIndex);
+    return findDefinition(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
 });
 
 connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
@@ -219,7 +266,7 @@ connection.onHover((params: HoverParams): Hover | null => {
     const word = getWordAtPosition(document, params.position);
     if (!word) return null;
 
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex);
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
     if (!symbol) return null;
 
     let content = `**${symbol.originalName}**`;
@@ -255,7 +302,7 @@ connection.onReferences((params: ReferenceParams): Location[] => {
     if (!word) return [];
 
     // Find the symbol definition to understand its scope
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex);
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
     if (!symbol) return [];
 
     const references: Location[] = [];
@@ -340,7 +387,8 @@ connection.onReferences((params: ReferenceParams): Location[] => {
                             matchText.startsWith('.') ? matchText : symbolName,
                             uri,
                             lineNum,
-                            documentIndex
+                            documentIndex,
+                            globalSettings.caseSensitive
                         );
                         if (!refSymbol || refSymbol.uri !== symbol.uri ||
                             refSymbol.range.start.line !== symbol.range.start.line) {
@@ -374,7 +422,7 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
     if (!word) return null;
 
     // Find the symbol definition
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex);
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
     if (!symbol) return null;
 
     const newName = params.newName;
@@ -478,7 +526,8 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
                                 matchText.startsWith('.') ? matchText : symbolName,
                                 uri,
                                 lineNum,
-                                documentIndex
+                                documentIndex,
+                                globalSettings.caseSensitive
                             );
                             if (!refSymbol || refSymbol.uri !== symbol.uri ||
                                 refSymbol.range.start.line !== symbol.range.start.line) {
@@ -570,7 +619,7 @@ documents.onDidChangeContent(change => {
     clearIncludeRefs(change.document.uri);
     indexDocument(change.document);
 
-    const diagnostics = validateDocument(change.document, documentIndex);
+    const diagnostics = validateDocument(change.document, documentIndex, globalSettings.caseSensitive);
     connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
 });
 

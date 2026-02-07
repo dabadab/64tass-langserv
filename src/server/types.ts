@@ -1,16 +1,16 @@
 import { Range } from 'vscode-languageserver/node';
 
 export interface LabelDefinition {
-    // Symbol name in lowercase (64tass is case-insensitive)
+    // Symbol name in canonical form for matching (lowercase if case-insensitive, original case if case-sensitive)
     name: string;
     // Original symbol name preserving case (for display)
     originalName: string;
     uri: string;
     range: Range;
     // Full scope path for directive-based scopes (e.g., "outer.inner" or null for global)
-    // Stored lowercase for case-insensitive matching
+    // Stored in canonical form for matching
     scopePath: string | null;
-    // For local symbols (_name): the code label they belong to (lowercase)
+    // For local symbols (_name): the code label they belong to (in canonical form)
     localScope: string | null;
     // Whether this is a local symbol (starts with _)
     isLocal: boolean;

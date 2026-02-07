@@ -3,6 +3,13 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex } from './types';
 
+/**
+ * Normalize a name for matching based on case sensitivity
+ */
+function normalizeName(name: string, caseSensitive: boolean): string {
+    return caseSensitive ? name : name.toLowerCase();
+}
+
 export function getWordAtPosition(document: TextDocument, position: Position): string | null {
     const text = document.getText();
     const lines = text.split('\n');
@@ -98,7 +105,8 @@ export function findSymbolInfo(
     word: string,
     fromUri: string,
     fromLine: number,
-    documentIndex: Map<string, DocumentIndex>
+    documentIndex: Map<string, DocumentIndex>,
+    caseSensitive = false
 ): LabelDefinition | null {
     // Check if word is an anonymous label reference
     if (/^[+\-]+$/.test(word)) {
@@ -120,14 +128,15 @@ export function findSymbolInfo(
     if (word.startsWith('.') && !word.includes('.', 1)) {
         lookupWord = word.substring(1);
     }
-    // All stored names are lowercase for case-insensitive matching
-    const lookupName = lookupWord.toLowerCase();
 
-    const isLocalSymbol = lookupWord.startsWith('_');
+    // Normalize for matching
+    lookupWord = normalizeName(lookupWord, caseSensitive);
+
+    const isLocalSymbol = word.startsWith('_'); // Use original word for this check
 
     // Handle dotted references like "scope.symbol"
     if (lookupWord.includes('.')) {
-        const parts = lookupName.split('.');
+        const parts = lookupWord.split('.');
         const targetName = parts[parts.length - 1];
         const targetPath = parts.slice(0, -1).join('.');
 
@@ -148,7 +157,7 @@ export function findSymbolInfo(
     // Local symbol lookup: must match same document, same scopePath, same localScope
     if (isLocalSymbol) {
         for (const label of fromIndex.labels) {
-            if (label.name === lookupName && label.isLocal &&
+            if (label.name === lookupWord && label.isLocal &&
                 label.scopePath === currentScopePath &&
                 label.localScope === currentLocalScope) {
                 return label;
@@ -161,7 +170,7 @@ export function findSymbolInfo(
     // First, try exact scope match
     for (const [, index] of documentIndex) {
         for (const label of index.labels) {
-            if (label.name === lookupName && !label.isLocal && label.scopePath === currentScopePath) {
+            if (label.name === lookupWord && !label.isLocal && label.scopePath === currentScopePath) {
                 return label;
             }
         }
@@ -175,7 +184,7 @@ export function findSymbolInfo(
 
         for (const [, index] of documentIndex) {
             for (const label of index.labels) {
-                if (label.name === lookupName && !label.isLocal && label.scopePath === scopeToTry) {
+                if (label.name === lookupWord && !label.isLocal && label.scopePath === scopeToTry) {
                     return label;
                 }
             }
@@ -185,7 +194,7 @@ export function findSymbolInfo(
     // Finally try global scope
     for (const [, index] of documentIndex) {
         for (const label of index.labels) {
-            if (label.name === lookupName && !label.isLocal && label.scopePath === null) {
+            if (label.name === lookupWord && !label.isLocal && label.scopePath === null) {
                 return label;
             }
         }
@@ -198,9 +207,10 @@ export function findDefinition(
     word: string,
     fromUri: string,
     fromLine: number,
-    documentIndex: Map<string, DocumentIndex>
+    documentIndex: Map<string, DocumentIndex>,
+    caseSensitive = false
 ): Location | null {
-    const label = findSymbolInfo(word, fromUri, fromLine, documentIndex);
+    const label = findSymbolInfo(word, fromUri, fromLine, documentIndex, caseSensitive);
     if (label) {
         return Location.create(label.uri, label.range);
     }
@@ -208,13 +218,13 @@ export function findDefinition(
 }
 
 // Check if a symbol is a parameter in the current scope or any parent scope
-// All parameter names are stored lowercase
-export function isParameter(symName: string, scopePath: string | null, index: DocumentIndex): boolean {
-    const symNameLower = symName.toLowerCase();
+// Parameter names are stored in canonical form
+export function isParameter(symName: string, scopePath: string | null, index: DocumentIndex, caseSensitive = false): boolean {
+    const normalizedName = normalizeName(symName, caseSensitive);
     // Check exact scope
     if (scopePath) {
         const params = index.parametersAtScope.get(scopePath);
-        if (params && params.includes(symNameLower)) {
+        if (params && params.includes(normalizedName)) {
             return true;
         }
         // Check parent scopes
@@ -222,7 +232,7 @@ export function isParameter(symName: string, scopePath: string | null, index: Do
         while (parent.includes('.')) {
             parent = parent.substring(0, parent.lastIndexOf('.'));
             const parentParams = index.parametersAtScope.get(parent);
-            if (parentParams && parentParams.includes(symNameLower)) {
+            if (parentParams && parentParams.includes(normalizedName)) {
                 return true;
             }
         }

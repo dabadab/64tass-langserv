@@ -45,6 +45,16 @@
       "[64tass]": {
         "editor.colorDecorators": false
       }
+    },
+    "configuration": {
+      "title": "64tass Language Support",
+      "properties": {
+        "64tass.caseSensitive": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable case-sensitive symbol matching (equivalent to 64tass -C flag). When disabled (default), symbols are case-insensitive."
+        }
+      }
     }
   },
   "scripts": {
