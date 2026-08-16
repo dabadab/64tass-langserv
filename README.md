@@ -33,6 +33,19 @@ VS Code language support for the [64tass](http://tass64.sourceforge.net/) cross 
   - Unclosed blocks
   - Undefined symbols and macros
 
+## Known Issues
+
+- **Color swatch on `#`-prefixed values** (e.g. `cpx #250`) - VS Code's own built-in
+  color decorator sometimes mistakes a hex-digit-looking immediate operand for a
+  CSS color and draws a swatch/picker over it. This is a VS Code core behavior,
+  not something this extension controls or can suppress. If it bothers you, add
+  this to your workspace or user `settings.json`:
+  ```json
+  "[64tass]": {
+      "editor.colorDecorators": false
+  }
+  ```
+
 ## Supported File Extensions
 
 - `.asm`
