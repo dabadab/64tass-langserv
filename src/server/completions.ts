@@ -12,7 +12,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { DocumentIndex, LabelKind } from './types';
 import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES } from './constants';
-import { collectVisibleLabels } from './symbols';
+import { collectVisibleLabels, collectVisibleParameters } from './symbols';
 
 // Label kinds that represent something addressable, i.e. valid as a bare opcode
 // operand (branch/jump target, or the address a data label points at).
@@ -127,12 +127,20 @@ function getSymbolCompletions(
 ): CompletionItem[] {
     const labels = collectVisibleLabels(document.uri, position.line, documentIndex)
         .filter(label => !onlyOperandKinds || OPERAND_KINDS.has(label.kind));
-    return labels.map(label => ({
+    const items: CompletionItem[] = labels.map(label => ({
         label: label.originalName,
         kind: label.isLocal ? CompletionItemKind.Variable : CompletionItemKind.Field,
         detail: label.scopePath ?? undefined,
         documentation: label.comment
     }));
+
+    // .function/.macro parameters - always valid as an operand (they stand in
+    // for whatever value the caller passes), so no OPERAND_KINDS filtering.
+    for (const param of collectVisibleParameters(document.uri, position.line, documentIndex)) {
+        items.push({ label: param, kind: CompletionItemKind.Variable, detail: 'parameter' });
+    }
+
+    return items;
 }
 
 /**

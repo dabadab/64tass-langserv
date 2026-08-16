@@ -103,6 +103,30 @@ describe('getCompletions - symbols', () => {
         const items = getCompletions(docs[0], Position.create(0, 14), documentIndex);
         expect(items).toHaveLength(0);
     });
+
+    it('suggests .function parameters inside the function body', () => {
+        const source = 'ptr_set .function ptr, val\n        lda p\n.endf';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///params.asm' });
+        const items = getCompletions(docs[0], Position.create(1, 13), documentIndex);
+        const labels = items.map(i => i.label);
+        // Prefix narrowing is left to the client, per LSP convention - both are returned
+        expect(labels).toContain('ptr');
+        expect(labels).toContain('val');
+    });
+
+    it('suggests .macro parameters inside the macro body', () => {
+        const source = 'm .macro a, b\n        lda a\n.endm';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///params2.asm' });
+        const items = getCompletions(docs[0], Position.create(1, 13), documentIndex);
+        expect(items.map(i => i.label)).toContain('b');
+    });
+
+    it('does not suggest parameters outside the function/macro body', () => {
+        const source = 'ptr_set .function ptr, val\n.endf\n        lda p';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///params3.asm' });
+        const items = getCompletions(docs[0], Position.create(2, 13), documentIndex);
+        expect(items.map(i => i.label)).not.toContain('ptr');
+    });
 });
 
 describe('getCompletions - .include file paths', () => {

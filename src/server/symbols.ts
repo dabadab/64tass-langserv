@@ -274,6 +274,38 @@ export function collectVisibleLabels(
     return results;
 }
 
+/**
+ * Collect the names of .function/.macro parameters visible from a given point
+ * in a document (its own scope's parameters, plus any enclosing scope's -
+ * parameters are valid throughout the body they were declared for, same as
+ * isParameter() checks one name at a time). Used for symbol completion.
+ */
+export function collectVisibleParameters(
+    fromUri: string,
+    fromLine: number,
+    documentIndex: Map<string, DocumentIndex>
+): string[] {
+    const fromIndex = documentIndex.get(fromUri);
+    if (!fromIndex) return [];
+
+    const currentScopePath = fromIndex.scopeAtLine.get(fromLine)?.scopePath ?? null;
+
+    const seen = new Set<string>();
+    const results: string[] = [];
+    for (const scopeToTry of getScopeChain(currentScopePath)) {
+        if (scopeToTry === null) continue; // parameters always belong to a named scope
+        for (const [, index] of documentIndex) {
+            for (const param of index.parametersAtScope.get(scopeToTry) ?? []) {
+                if (!seen.has(param)) {
+                    seen.add(param);
+                    results.push(param);
+                }
+            }
+        }
+    }
+    return results;
+}
+
 export function findDefinition(
     word: string,
     fromUri: string,
