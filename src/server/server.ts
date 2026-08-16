@@ -19,7 +19,11 @@ import {
     RenameParams,
     WorkspaceEdit,
     CompletionParams,
-    CompletionItem
+    CompletionItem,
+    DocumentColorParams,
+    ColorInformation,
+    ColorPresentationParams,
+    ColorPresentation
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -181,7 +185,11 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             hoverProvider: true,
             completionProvider: {
                 triggerCharacters: ['.', '"', '/']
-            }
+            },
+            // Registering this - even returning nothing - stops VS Code's built-in
+            // generic color decorator from mistaking "#RGB"-shaped immediate operands
+            // (e.g. "cpx #250") for CSS hex colors and drawing a swatch over them.
+            colorProvider: true
         }
     };
 });
@@ -279,6 +287,11 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
 
     return getCompletions(document, params.position, documentIndex);
 });
+
+// 64tass has no color literals; this exists solely to suppress VS Code's
+// built-in fallback color decorator (see colorProvider registration above).
+connection.onDocumentColor((_params: DocumentColorParams): ColorInformation[] => []);
+connection.onColorPresentation((_params: ColorPresentationParams): ColorPresentation[] => []);
 
 connection.onHover((params: HoverParams): Hover | null => {
     const document = documents.get(params.textDocument.uri);
