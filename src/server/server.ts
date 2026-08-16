@@ -194,12 +194,20 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     };
 });
 
+// Resolves once the initial workspace configuration fetch has completed (or
+// immediately if the client doesn't support it). Every place that reads
+// globalSettings.caseSensitive to index/validate a document as a *reaction to
+// a client notification* (didOpen/didChange, which can arrive before the
+// server's own async workspace/configuration request round-trips) awaits this
+// first - otherwise that first pass silently uses the default caseSensitive:false
+// no matter what the workspace actually has set.
+let configReady: Promise<void> = Promise.resolve();
+
 connection.onInitialized(() => {
     connection.console.log('64tass language server initialized');
 
     if (hasConfigurationCapability) {
-        // Request configuration
-        connection.workspace.getConfiguration('64tass').then(
+        configReady = connection.workspace.getConfiguration('64tass').then(
             (config: any) => {
                 globalSettings = {
                     caseSensitive: config.caseSensitive ?? false
@@ -211,7 +219,9 @@ connection.onInitialized(() => {
         );
     }
 
-    documents.all().forEach(doc => indexDocument(doc));
+    configReady.then(() => {
+        documents.all().forEach(doc => indexDocument(doc));
+    });
 });
 
 // Handle configuration changes
@@ -465,12 +475,17 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
 
 
 documents.onDidChangeContent(change => {
-    // Clear old include references before re-indexing (includes may have changed)
-    clearIncludeRefs(change.document.uri);
-    indexDocument(change.document);
+    // didOpen/didChange can arrive before the initial workspace/configuration
+    // round-trip finishes (see configReady above) - wait for it so the very
+    // first index/validation of a document uses the real caseSensitive setting.
+    configReady.then(() => {
+        // Clear old include references before re-indexing (includes may have changed)
+        clearIncludeRefs(change.document.uri);
+        indexDocument(change.document);
 
-    const diagnostics = validateDocument(change.document, documentIndex, globalSettings.caseSensitive);
-    connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
+        const diagnostics = validateDocument(change.document, documentIndex, globalSettings.caseSensitive);
+        connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
+    });
 });
 
 documents.onDidClose(event => {
