@@ -271,3 +271,26 @@ export function escapeRegex(input: string): string {
     // Escape all special regex characters: . * + ? ^ $ { } ( ) | [ ] \
     return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+// Extension-only pragma comment for overriding case sensitivity per file, e.g.:
+//   ; 64tass-langserv: case-sensitive
+//   ; 64tass-langserv: case-insensitive
+// This is a plain comment as far as 64tass itself is concerned - it has no
+// in-source way to control case sensitivity (only the -C command-line flag),
+// so this pragma only affects how this extension reads the file. It does not
+// change what the real compiler does; keep -C in sync with it yourself.
+const CASE_SENSITIVITY_PRAGMA = /^\s*;\s*64tass-langserv\s*:\s*(case-sensitive|case-insensitive)\s*$/i;
+
+/**
+ * Scan a document's text for the case-sensitivity pragma. Returns the first
+ * match found (top to bottom), or null if the pragma isn't present.
+ */
+export function detectCaseSensitivityPragma(text: string): boolean | null {
+    for (const line of text.split('\n')) {
+        const match = line.match(CASE_SENSITIVITY_PRAGMA);
+        if (match) {
+            return match[1].toLowerCase() === 'case-sensitive';
+        }
+    }
+    return null;
+}

@@ -362,5 +362,5 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
     }
 
-    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, includes };
+    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, includes, caseSensitive };
 }

@@ -8,7 +8,8 @@ import {
     getBlockComment,
     parseNumericValue,
     formatNumericValue,
-    escapeRegex
+    escapeRegex,
+    detectCaseSensitivityPragma
 } from '../../src/server/utils';
 
 describe('parseLineStructure', () => {
@@ -383,6 +384,45 @@ describe('escapeRegex', () => {
 
     it('handles empty string', () => {
         expect(escapeRegex('')).toBe('');
+    });
+});
+
+describe('detectCaseSensitivityPragma', () => {
+    it('detects case-sensitive pragma', () => {
+        expect(detectCaseSensitivityPragma('; 64tass-langserv: case-sensitive')).toBe(true);
+    });
+
+    it('detects case-insensitive pragma', () => {
+        expect(detectCaseSensitivityPragma('; 64tass-langserv: case-insensitive')).toBe(false);
+    });
+
+    it('returns null when no pragma present', () => {
+        const source = 'start\n        lda #1\n        rts';
+        expect(detectCaseSensitivityPragma(source)).toBeNull();
+    });
+
+    it('matches case-insensitively and with varied whitespace', () => {
+        expect(detectCaseSensitivityPragma(';   64TASS-LANGSERV:CASE-SENSITIVE')).toBe(true);
+        expect(detectCaseSensitivityPragma(';64tass-langserv:   case-insensitive  ')).toBe(false);
+    });
+
+    it('finds the pragma anywhere in the file, not just the first line', () => {
+        const source = 'start\n        lda #1\n; 64tass-langserv: case-sensitive\n        rts';
+        expect(detectCaseSensitivityPragma(source)).toBe(true);
+    });
+
+    it('uses the first match when multiple pragmas are present', () => {
+        const source = '; 64tass-langserv: case-sensitive\n; 64tass-langserv: case-insensitive';
+        expect(detectCaseSensitivityPragma(source)).toBe(true);
+    });
+
+    it('does not match a similar-looking but non-pragma comment', () => {
+        const source = '; this file needs 64tass-langserv: case-sensitive support eventually';
+        expect(detectCaseSensitivityPragma(source)).toBeNull();
+    });
+
+    it('does not match plain 64tass directive comments', () => {
+        expect(detectCaseSensitivityPragma('; case-sensitive mode is nice')).toBeNull();
     });
 
     it('handles strings with no special characters', () => {

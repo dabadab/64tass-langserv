@@ -46,4 +46,11 @@ export interface DocumentIndex {
     labelDefinedByMacro: Map<string, string>;
     // URIs of files included via .include directive
     includes: string[];
+    // The effective case-sensitivity this index was built with: either the
+    // workspace's 64tass.caseSensitive setting, or a per-file override from a
+    // "; 64tass-langserv: case-sensitive" / "case-insensitive" pragma (see
+    // detectCaseSensitivityPragma in utils.ts). Query-time lookups should use
+    // this rather than assuming a single global value, since a pragma in one
+    // compilation unit's root doesn't affect a sibling unit with no pragma.
+    caseSensitive: boolean;
 }

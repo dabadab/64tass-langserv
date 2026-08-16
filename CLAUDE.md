@@ -45,6 +45,16 @@ LSP extension with two components:
   - When enabled: `label.name` stores original case for exact matching
   - `originalName` always preserves display casing regardless of setting
   - Index is rebuilt when setting changes
+  - Overridable per compilation unit via a `; 64tass-langserv: case-sensitive` /
+    `case-insensitive` pragma comment (`detectCaseSensitivityPragma` in `utils.ts`).
+    Recognized in a document's own text during indexing; the resolved value cascades
+    from a root document into its `.include` tree (see `indexDocument` in `server.ts`)
+    and is stored per-document as `DocumentIndex.caseSensitive`, since different
+    compilation units in the same workspace can now have different effective settings.
+    Query-time handlers must look up `documentIndex.get(uri)?.caseSensitive` (via the
+    `effectiveCaseSensitive` helper in `server.ts`) rather than assume a single global
+    value - this is a comment as far as 64tass itself is concerned and has no effect
+    on the real compiler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
 
 ## Build Commands
@@ -63,7 +73,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test        # Run all tests (currently 257 tests)
+yarn test        # Run all tests (currently 304 tests)
 yarn test:watch  # Watch mode
 ```
 

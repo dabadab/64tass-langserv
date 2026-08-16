@@ -376,7 +376,10 @@ export function computeRenameEdits(
     }
 
     function resolvesToSymbol(word: string, uri: string, lineNum: number): boolean {
-        const refSymbol = findSymbolInfo(word, uri, lineNum, documentIndex, caseSensitive);
+        // Use the case sensitivity this specific document was actually indexed
+        // with (which may differ per compilation unit via a pragma), falling
+        // back to the caller-supplied default if it isn't indexed at all.
+        const refSymbol = findSymbolInfo(word, uri, lineNum, documentIndex, documentIndex.get(uri)?.caseSensitive ?? caseSensitive);
         return !!refSymbol && refSymbol.uri === symbol.uri &&
             refSymbol.range.start.line === symbol.range.start.line &&
             refSymbol.range.start.character === symbol.range.start.character;
@@ -441,7 +444,10 @@ export function computeRenameEdits(
                             const segStartCol = chainStart + segStart;
                             segStart += seg.length + 1; // skip the '.'
 
-                            if (normalizeName(seg, caseSensitive) !== normalizeName(symbolName, caseSensitive)) {
+                            // Use this document's own effective case sensitivity, not
+                            // necessarily the caller-supplied default (see resolvesToSymbol)
+                            const docCaseSensitive = index.caseSensitive;
+                            if (normalizeName(seg, docCaseSensitive) !== normalizeName(symbolName, docCaseSensitive)) {
                                 continue;
                             }
                             if (isSelfDefinition(uri, lineNum, segStartCol)) continue;

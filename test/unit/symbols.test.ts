@@ -170,7 +170,8 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['m', ['p1', 'p2']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
-            includes: []
+            includes: [],
+            caseSensitive: false
         };
         expect(isParameter('p1', 'm', index)).toBe(true);
     });
@@ -182,7 +183,8 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['outer', ['p1']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
-            includes: []
+            includes: [],
+            caseSensitive: false
         };
         expect(isParameter('p1', 'outer.inner', index)).toBe(true);
     });
@@ -194,7 +196,8 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['m', ['p1']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
-            includes: []
+            includes: [],
+            caseSensitive: false
         };
         expect(isParameter('other', 'm', index)).toBe(false);
     });
@@ -206,7 +209,8 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['m', ['p1']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
-            includes: []
+            includes: [],
+            caseSensitive: false
         };
         expect(isParameter('p1', null, index)).toBe(false);
     });
@@ -218,7 +222,8 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['m', ['param']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
-            includes: []
+            includes: [],
+            caseSensitive: false
         };
         expect(isParameter('PARAM', 'm', index)).toBe(true);
     });

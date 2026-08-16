@@ -33,6 +33,26 @@ VS Code language support for the [64tass](http://tass64.sourceforge.net/) cross 
   - Unclosed blocks
   - Undefined symbols and macros
 
+## Configuration
+
+- **`64tass.caseSensitive`** (default: `false`) - matches 64tass's `-C` command-line
+  flag. When disabled (default), symbol names are matched case-insensitively; when
+  enabled, `MyLabel`, `mylabel`, and `MYLABEL` are distinct symbols.
+
+  This can also be overridden per file with a pragma comment, for cases where
+  different projects/compilation units in the same workspace need different
+  settings without changing the workspace-wide setting:
+  ```
+  ; 64tass-langserv: case-sensitive
+  ; 64tass-langserv: case-insensitive
+  ```
+  The pragma is recognized in a file that is itself the entry point of a build
+  (i.e. not reached via `.include` from elsewhere in the workspace) and applies to
+  that file and everything it `.include`s, overriding the workspace setting for
+  that whole compilation unit. It's a plain comment as far as 64tass itself is
+  concerned - it only affects how this extension reads the file, not what the
+  real compiler does, so keep `-C` in sync with it yourself if you use it.
+
 ## Known Issues
 
 - **Color swatch on `#`-prefixed values** (e.g. `cpx #250`) - VS Code's own built-in

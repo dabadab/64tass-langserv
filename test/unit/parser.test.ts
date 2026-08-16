@@ -6,6 +6,17 @@ function parse(source: string) {
     return parseDocument(createDoc(source));
 }
 
+describe('parseDocument - caseSensitive field', () => {
+    it('records false by default', () => {
+        expect(parse('start\n        lda #1').caseSensitive).toBe(false);
+    });
+
+    it('records true when passed', () => {
+        const index = parseDocument(createDoc('start\n        lda #1'), true);
+        expect(index.caseSensitive).toBe(true);
+    });
+});
+
 describe('parseDocument - label parsing', () => {
     it('parses standalone code label', () => {
         const index = parse('start\n        lda #1');

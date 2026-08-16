@@ -121,3 +121,25 @@ describe('computeRenameEdits - local symbols', () => {
         expect(edits.some(e => e.range.start.line === 5)).toBe(false);
     });
 });
+
+describe('computeRenameEdits - per-document case sensitivity', () => {
+    it('uses the document\'s own indexed case sensitivity, not a stale caller-supplied default', () => {
+        // Indexed as case-sensitive: "Item" is stored with its exact case.
+        const source = 'Item\n        jsr Item';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///cs.asm', caseSensitive: true });
+        const getText = textLookup(docs);
+
+        const symbol = findSymbolInfo('Item', docs[0].uri, 0, documentIndex, true);
+        expect(symbol).not.toBeNull();
+
+        // Caller passes a stale/wrong default (false) - if computeRenameEdits blindly
+        // trusted it instead of reading this document's own stored setting, the
+        // case-sensitive lookup for "Item" would fail (findSymbolInfo would lowercase
+        // it to "item", which doesn't equal the exact-case stored label "Item").
+        const edit = computeRenameEdits(symbol!, 'Element', documentIndex, getText, false);
+        const edits = codeChanges(edit, docs[0].uri);
+
+        expect(edits).toHaveLength(2); // definition + the jsr reference
+        expect(edits.every(e => e.newText === 'Element')).toBe(true);
+    });
+});

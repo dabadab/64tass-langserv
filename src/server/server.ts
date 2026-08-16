@@ -29,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
 import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
-import { parseLineStructure, parseNumericValue, formatNumericValue, escapeRegex } from './utils';
+import { parseLineStructure, parseNumericValue, formatNumericValue, escapeRegex, detectCaseSensitivityPragma } from './utils';
 import { parseDocument } from './parser';
 import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits } from './symbols';
 import { validateDocument } from './diagnostics';
@@ -52,6 +52,14 @@ const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 const documentIndex: Map<string, DocumentIndex> = new Map();
+
+// The case-sensitivity actually used to index a given document - which may
+// differ from the workspace default via a per-file pragma (see
+// detectCaseSensitivityPragma / indexDocument) - or the workspace default
+// itself if the document hasn't been indexed yet.
+function effectiveCaseSensitive(uri: string): boolean {
+    return documentIndex.get(uri)?.caseSensitive ?? globalSettings.caseSensitive;
+}
 
 // Configuration settings
 interface Settings {
@@ -84,7 +92,12 @@ function clearIncludeRefs(rootUri: string): void {
     }
 }
 
-function indexDocument(document: TextDocument, indexedUris: Set<string> = new Set(), rootUri?: string): void {
+function indexDocument(
+    document: TextDocument,
+    indexedUris: Set<string> = new Set(),
+    rootUri?: string,
+    inheritedCaseSensitive: boolean = globalSettings.caseSensitive
+): void {
     // Prevent circular includes
     if (indexedUris.has(document.uri)) {
         return;
@@ -94,7 +107,14 @@ function indexDocument(document: TextDocument, indexedUris: Set<string> = new Se
     // The root URI is the top-level document that initiated the indexing
     const effectiveRootUri = rootUri ?? document.uri;
 
-    const index = parseDocument(document, globalSettings.caseSensitive, (msg) => connection.console.warn(msg));
+    // A "; 64tass-langserv: case-sensitive"/"case-insensitive" pragma in this
+    // file overrides the inherited setting for itself and everything it
+    // .include's; otherwise it inherits from its parent (or the workspace
+    // 64tass.caseSensitive setting, at the top of the include tree).
+    const pragma = detectCaseSensitivityPragma(document.getText());
+    const effectiveCaseSensitive = pragma ?? inheritedCaseSensitive;
+
+    const index = parseDocument(document, effectiveCaseSensitive, (msg) => connection.console.warn(msg));
     documentIndex.set(document.uri, index);
 
     // Recursively index included files and track references
@@ -110,7 +130,7 @@ function indexDocument(document: TextDocument, indexedUris: Set<string> = new Se
                 const includePath = fileURLToPath(includeUri);
                 const content = fs.readFileSync(includePath, 'utf-8');
                 const includeDoc = TextDocument.create(includeUri, '64tass', 1, content);
-                indexDocument(includeDoc, indexedUris, effectiveRootUri);
+                indexDocument(includeDoc, indexedUris, effectiveRootUri, effectiveCaseSensitive);
             } catch (e) {
                 connection.console.warn(`Failed to read included file '${includeUri}': ${e}`);
             }
@@ -273,7 +293,7 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     const word = getWordAtPosition(document, params.position);
     if (!word) return null;
 
-    return findDefinition(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
+    return findDefinition(word, params.textDocument.uri, params.position.line, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
 });
 
 connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
@@ -297,7 +317,7 @@ connection.onHover((params: HoverParams): Hover | null => {
     const word = getWordAtPosition(document, params.position);
     if (!word) return null;
 
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
     if (!symbol) return null;
 
     let content = `**${symbol.originalName}**`;
@@ -333,7 +353,7 @@ connection.onReferences((params: ReferenceParams): Location[] => {
     if (!word) return [];
 
     // Find the symbol definition to understand its scope
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
     if (!symbol) return [];
 
     const references: Location[] = [];
@@ -419,7 +439,7 @@ connection.onReferences((params: ReferenceParams): Location[] => {
                             uri,
                             lineNum,
                             documentIndex,
-                            globalSettings.caseSensitive
+                            effectiveCaseSensitive(uri)
                         );
                         if (!refSymbol || refSymbol.uri !== symbol.uri ||
                             refSymbol.range.start.line !== symbol.range.start.line) {
@@ -453,10 +473,10 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
     if (!word) return null;
 
     // Find the symbol definition
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
+    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
     if (!symbol) return null;
 
-    return computeRenameEdits(symbol, params.newName, documentIndex, getDocumentText, globalSettings.caseSensitive);
+    return computeRenameEdits(symbol, params.newName, documentIndex, getDocumentText, effectiveCaseSensitive(symbol.uri));
 });
 
 
@@ -470,7 +490,9 @@ documents.onDidChangeContent(change => {
         clearIncludeRefs(change.document.uri);
         indexDocument(change.document);
 
-        const diagnostics = validateDocument(change.document, documentIndex, globalSettings.caseSensitive);
+        // indexDocument (above) just resolved this document's effective case
+        // sensitivity (workspace default, or overridden by a pragma) - use that.
+        const diagnostics = validateDocument(change.document, documentIndex, effectiveCaseSensitive(change.document.uri));
         connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
     });
 });
