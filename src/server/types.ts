@@ -1,5 +1,14 @@
 import { Range } from 'vscode-languageserver/node';
 
+// What kind of definition a label came from. Used to decide where it's valid to
+// suggest one (e.g. a .macro name is never a valid opcode operand - macros are
+// invoked as ".name", not referenced as an address).
+export type LabelKind =
+    | 'code'       // plain code label ("start:" or "start lda #1")
+    | 'data'       // data-directive label ("table .byte 1,2,3") or a macro-call label
+    | 'const'      // constant assignment ("val = $FF") or a local (_name) symbol
+    | 'proc' | 'block' | 'macro' | 'function' | 'struct' | 'union' | 'namespace'; // scope openers
+
 export interface LabelDefinition {
     // Symbol name in canonical form for matching (lowercase if case-insensitive, original case if case-sensitive)
     name: string;
@@ -14,6 +23,8 @@ export interface LabelDefinition {
     localScope: string | null;
     // Whether this is a local symbol (starts with _)
     isLocal: boolean;
+    // What kind of definition this came from (see LabelKind)
+    kind: LabelKind;
     // Whether this is an anonymous label (+ or -)
     isAnonymous?: boolean;
     // For anonymous labels: count of symbols in definition (+++  = 3)

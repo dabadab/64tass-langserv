@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
-import { LabelDefinition, DocumentIndex } from './types';
+import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { OPCODES, SCOPE_OPENERS } from './constants';
 import { stripComment, getBlockComment } from './utils';
 
@@ -133,6 +133,7 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                     scopePath: currentPath,
                     localScope: null,
                     isLocal: false,
+                    kind: open.slice(1) as LabelKind,
                     comment
                 });
 
@@ -194,7 +195,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                 ),
                 scopePath: getCurrentScopePath(),
                 localScope: null,
-                isLocal: false
+                isLocal: false,
+                kind: 'code'
             });
             continue;
         }
@@ -220,7 +222,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                 ),
                 scopePath: getCurrentScopePath(),
                 localScope: null,
-                isLocal: false
+                isLocal: false,
+                kind: 'code'
             });
             continue;
         }
@@ -241,7 +244,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                 ),
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope,
-                isLocal: true
+                isLocal: true,
+                kind: 'const'
             });
             continue;
         }
@@ -270,6 +274,7 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                         scopePath: getCurrentScopePath(),
                         localScope: currentLocalScope,
                         isLocal: true,  // Scoped like local symbols
+                        kind: 'code',
                         isAnonymous: true,
                         anonymousCount: i + 1 // 1 for first +, 2 for second +, etc.
                     });
@@ -295,7 +300,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                 ),
                 scopePath: getCurrentScopePath(),
                 localScope: null,
-                isLocal: false
+                isLocal: false,
+                kind: 'data'
             });
             continue;
         }
@@ -321,7 +327,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                     ),
                     scopePath: getCurrentScopePath(),
                     localScope: null,
-                    isLocal: false
+                    isLocal: false,
+                    kind: 'data'
                 });
                 // Track the macro used to define this label (for sub-label validation)
                 labelDefinedByMacro.set(normalizeName(labelName), macroCalled);
@@ -348,6 +355,7 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                 scopePath: getCurrentScopePath(),
                 localScope: isLocal ? currentLocalScope : null,
                 isLocal,
+                kind: 'const',
                 value: value || undefined
             });
             continue;

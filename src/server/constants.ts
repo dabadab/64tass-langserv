@@ -102,6 +102,11 @@ const BUILTIN_DIRECTIVE_NAMES: string[] = (() => {
     return match ? match[1].split('|') : [];
 })();
 
+// Directives whose argument is a name from a fixed vocabulary (encoding name, CPU
+// name, compiler option), never a user-defined symbol - so symbol completion
+// should not fire for their arguments. Names without the leading dot.
+export const NON_SYMBOL_ARG_DIRECTIVES = new Set(['enc', 'cpu', 'option', 'encode']);
+
 export const ALL_DIRECTIVES: string[] = Array.from(new Set([
     ...Object.keys(SCOPE_OPENERS).map(d => d.slice(1)),
     ...Object.keys(OPENER_TO_CLOSERS).map(d => d.slice(1)),

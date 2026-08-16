@@ -73,6 +73,36 @@ describe('getCompletions - symbols', () => {
         const items = getCompletions(docs[0], Position.create(3, 17), documentIndex);
         expect(items.map(i => i.label)).not.toContain('_x');
     });
+
+    it('excludes macro and function names as an opcode operand (bcc target)', () => {
+        const source = 'm .macro\n.endm\nfn .function\n.endf\ntarget\n        bcc t';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///sym3.asm' });
+        const items = getCompletions(docs[0], Position.create(5, 13), documentIndex);
+        const labels = items.map(i => i.label);
+        expect(labels).toContain('target');
+        expect(labels).not.toContain('m');
+        expect(labels).not.toContain('fn');
+    });
+
+    it('includes macro/function names for a non-opcode directive argument (e.g. .assert)', () => {
+        const source = 'm .macro\n.endm\n        .assert m';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///sym4.asm' });
+        const items = getCompletions(docs[0], Position.create(2, 17), documentIndex);
+        expect(items.map(i => i.label)).toContain('m');
+    });
+
+    it('offers no completions for .enc arguments', () => {
+        const source = 'screen_enc\n        .enc s';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///sym5.asm' });
+        const items = getCompletions(docs[0], Position.create(1, 14), documentIndex);
+        expect(items).toHaveLength(0);
+    });
+
+    it('offers no completions for .cpu arguments', () => {
+        const { documentIndex, docs } = buildIndex({ source: '        .cpu 6', uri: 'file:///sym6.asm' });
+        const items = getCompletions(docs[0], Position.create(0, 14), documentIndex);
+        expect(items).toHaveLength(0);
+    });
 });
 
 describe('getCompletions - .include file paths', () => {

@@ -10,9 +10,15 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-import { DocumentIndex } from './types';
-import { OPCODES, ALL_DIRECTIVES } from './constants';
+import { DocumentIndex, LabelKind } from './types';
+import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES } from './constants';
 import { collectVisibleLabels } from './symbols';
+
+// Label kinds that represent something addressable, i.e. valid as a bare opcode
+// operand (branch/jump target, or the address a data label points at).
+// Macros are invoked as ".name" and functions as "name(...)" - never referenced
+// this way - and struct/union/namespace names aren't addresses either.
+const OPERAND_KINDS = new Set<LabelKind>(['code', 'data', 'const', 'proc', 'block']);
 
 // File extensions considered "source" for .include/.binclude completion.
 // .binary can pull in any file (raw data), so it isn't filtered.
@@ -107,13 +113,20 @@ function getOpcodeCompletions(prefix: string): CompletionItem[] {
     return items;
 }
 
-/** Suggest labels/symbols visible from this point in the document. */
+/**
+ * Suggest labels/symbols visible from this point in the document.
+ * @param onlyOperandKinds - restrict to kinds valid as a bare opcode operand
+ *   (excludes macro/function/struct/union/namespace names, which are never
+ *   referenced as a plain address).
+ */
 function getSymbolCompletions(
     document: TextDocument,
     position: Position,
-    documentIndex: Map<string, DocumentIndex>
+    documentIndex: Map<string, DocumentIndex>,
+    onlyOperandKinds = false
 ): CompletionItem[] {
-    const labels = collectVisibleLabels(document.uri, position.line, documentIndex);
+    const labels = collectVisibleLabels(document.uri, position.line, documentIndex)
+        .filter(label => !onlyOperandKinds || OPERAND_KINDS.has(label.kind));
     return labels.map(label => ({
         label: label.originalName,
         kind: label.isLocal ? CompletionItemKind.Variable : CompletionItemKind.Field,
@@ -169,11 +182,26 @@ export function getCompletions(
         return getOpcodeCompletions(prefix);
     }
 
+    const firstToken = tokens[0].toLowerCase();
+
+    // A directive's argument: never an opcode. Directives with a fixed,
+    // non-symbol vocabulary (.enc, .cpu, ...) get no completions at all;
+    // everything else (.byte, .assert, .dstruct, ...) may reference a symbol.
+    if (firstToken.startsWith('.')) {
+        if (NON_SYMBOL_ARG_DIRECTIVES.has(firstToken.slice(1))) {
+            return [];
+        }
+        return getSymbolCompletions(document, position, documentIndex);
+    }
+
     // Second token, with the first not a recognized opcode: that first token is
     // a code label ("label INX"), so this position is the opcode.
-    if (tokens.length === 1 && !OPCODES.has(tokens[0].toLowerCase())) {
+    if (tokens.length === 1 && !OPCODES.has(firstToken)) {
         return getOpcodeCompletions(prefix);
     }
 
-    return getSymbolCompletions(document, position, documentIndex);
+    // Operand position after a real opcode: only addressable kinds make sense
+    // (macro/function names are never referenced as a bare operand).
+    const afterOpcode = OPCODES.has(firstToken) || (tokens.length > 1 && OPCODES.has(tokens[1].toLowerCase()));
+    return getSymbolCompletions(document, position, documentIndex, afterOpcode);
 }
