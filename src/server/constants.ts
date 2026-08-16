@@ -93,3 +93,18 @@ export const BUILTINS = new Set([
 
 // Built-in directives regex pattern for validation
 export const BUILTIN_DIRECTIVES_PATTERN = /^\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|align|binary|include|binclude|org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|let|const|here|as|option|eor|seed|else|elsif|elif|case|default|shift|shiftl|proff|pron|hidemac|showmac|continue|break|breakif|continueif|sfunction|lbl|goto|databank|dpage|autsiz|mansiz|char|dint|lint|sint|dsection|dstruct|dunion|offs|tdef|al|alignind|alignpageind|check|from|xl|xs|end)$/i;
+
+// Canonical list of all directive names (without the leading dot), for completion.
+// Derived from the other directive sources above so there's a single source of
+// truth instead of a separately hand-maintained list that could drift out of sync.
+const BUILTIN_DIRECTIVE_NAMES: string[] = (() => {
+    const match = BUILTIN_DIRECTIVES_PATTERN.source.match(/^\^\\\.\((.+)\)\$$/);
+    return match ? match[1].split('|') : [];
+})();
+
+export const ALL_DIRECTIVES: string[] = Array.from(new Set([
+    ...Object.keys(SCOPE_OPENERS).map(d => d.slice(1)),
+    ...Object.keys(OPENER_TO_CLOSERS).map(d => d.slice(1)),
+    ...Object.values(OPENER_TO_CLOSERS).flat().map(d => d.slice(1)),
+    ...BUILTIN_DIRECTIVE_NAMES
+])).sort();

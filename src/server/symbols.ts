@@ -21,6 +21,19 @@ function normalizeName(name: string, caseSensitive: boolean): string {
     return caseSensitive ? name : name.toLowerCase();
 }
 
+// Ordered list of scope paths to search, from the given scope outward to global
+// (null), e.g. "outer.inner" -> ["outer.inner", "outer", null].
+function getScopeChain(scopePath: string | null): (string | null)[] {
+    const chain: (string | null)[] = [scopePath];
+    let current = scopePath;
+    while (current !== null) {
+        const lastDot = current.lastIndexOf('.');
+        current = lastDot >= 0 ? current.substring(0, lastDot) : null;
+        chain.push(current);
+    }
+    return chain;
+}
+
 export function getWordAtPosition(document: TextDocument, position: Position): string | null {
     const text = document.getText();
     const lines = text.split('\n');
@@ -199,22 +212,8 @@ export function findSymbolInfo(
         return null;
     }
 
-    // Regular symbol lookup: search current scope, then parent scopes
-    // First, try exact scope match
-    for (const [, index] of documentIndex) {
-        for (const label of index.labels) {
-            if (label.name === lookupWord && !label.isLocal && label.scopePath === currentScopePath) {
-                return label;
-            }
-        }
-    }
-
-    // Then try parent scopes up to global
-    let scopeToTry = currentScopePath;
-    while (scopeToTry !== null) {
-        const lastDot = scopeToTry.lastIndexOf('.');
-        scopeToTry = lastDot >= 0 ? scopeToTry.substring(0, lastDot) : null;
-
+    // Regular symbol lookup: search current scope, then parent scopes, out to global
+    for (const scopeToTry of getScopeChain(currentScopePath)) {
         for (const [, index] of documentIndex) {
             for (const label of index.labels) {
                 if (label.name === lookupWord && !label.isLocal && label.scopePath === scopeToTry) {
@@ -224,16 +223,55 @@ export function findSymbolInfo(
         }
     }
 
-    // Finally try global scope
-    for (const [, index] of documentIndex) {
-        for (const label of index.labels) {
-            if (label.name === lookupWord && !label.isLocal && label.scopePath === null) {
-                return label;
+    return null;
+}
+
+/**
+ * Collect every non-local label visible from a given point in a document, plus
+ * every local (`_name`) symbol valid in its current localScope - i.e. everything
+ * findSymbolInfo could resolve a bare (non-dotted) reference to from this point,
+ * gathered instead of stopping at the first match. Used for symbol completion.
+ * Closer scopes shadow same-named labels from farther out (nearest wins).
+ */
+export function collectVisibleLabels(
+    fromUri: string,
+    fromLine: number,
+    documentIndex: Map<string, DocumentIndex>
+): LabelDefinition[] {
+    const fromIndex = documentIndex.get(fromUri);
+    if (!fromIndex) return [];
+
+    const lineScope = fromIndex.scopeAtLine.get(fromLine);
+    const currentScopePath = lineScope?.scopePath ?? null;
+    const currentLocalScope = lineScope?.localScope ?? null;
+
+    const seen = new Set<string>();
+    const results: LabelDefinition[] = [];
+
+    // Local symbols valid at this point (same document, same scopePath + localScope)
+    for (const label of fromIndex.labels) {
+        if (label.isLocal && !label.isAnonymous &&
+            label.scopePath === currentScopePath && label.localScope === currentLocalScope) {
+            if (!seen.has(label.name)) {
+                seen.add(label.name);
+                results.push(label);
             }
         }
     }
 
-    return null;
+    // Non-local symbols, nearest scope first so closer definitions shadow farther ones
+    for (const scopeToTry of getScopeChain(currentScopePath)) {
+        for (const [, index] of documentIndex) {
+            for (const label of index.labels) {
+                if (!label.isLocal && label.scopePath === scopeToTry && !seen.has(label.name)) {
+                    seen.add(label.name);
+                    results.push(label);
+                }
+            }
+        }
+    }
+
+    return results;
 }
 
 export function findDefinition(

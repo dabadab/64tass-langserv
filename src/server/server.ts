@@ -17,7 +17,9 @@ import {
     MarkupKind,
     ReferenceParams,
     RenameParams,
-    WorkspaceEdit
+    WorkspaceEdit,
+    CompletionParams,
+    CompletionItem
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -31,6 +33,7 @@ import { parseLineStructure, parseNumericValue, formatNumericValue, escapeRegex 
 import { parseDocument } from './parser';
 import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits } from './symbols';
 import { validateDocument } from './diagnostics';
+import { getCompletions } from './completions';
 
 // Get the current text of a document by URI: prefer the open in-memory buffer,
 // fall back to reading the file from disk (for indexed-but-unopened .include files).
@@ -175,7 +178,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             referencesProvider: true,
             renameProvider: true,
             foldingRangeProvider: true,
-            hoverProvider: true
+            hoverProvider: true,
+            completionProvider: {
+                triggerCharacters: ['.', '"', '/']
+            }
         }
     };
 });
@@ -265,6 +271,13 @@ connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
     if (!document) return [];
 
     return computeFoldingRanges(document);
+});
+
+connection.onCompletion((params: CompletionParams): CompletionItem[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+
+    return getCompletions(document, params.position, documentIndex);
 });
 
 connection.onHover((params: HoverParams): Hover | null => {

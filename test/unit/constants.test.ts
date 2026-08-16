@@ -6,7 +6,8 @@ import {
     CLOSING_DIRECTIVES,
     FOLDING_PAIRS,
     BUILTINS,
-    BUILTIN_DIRECTIVES_PATTERN
+    BUILTIN_DIRECTIVES_PATTERN,
+    ALL_DIRECTIVES
 } from '../../src/server/constants';
 
 describe('OPCODES', () => {
@@ -103,5 +104,30 @@ describe('BUILTIN_DIRECTIVES_PATTERN', () => {
     it('does not match user macros', () => {
         expect(BUILTIN_DIRECTIVES_PATTERN.test('.mymacro')).toBe(false);
         expect(BUILTIN_DIRECTIVES_PATTERN.test('.custom')).toBe(false);
+    });
+});
+
+describe('ALL_DIRECTIVES', () => {
+    it('includes scope openers and closers', () => {
+        expect(ALL_DIRECTIVES).toContain('proc');
+        expect(ALL_DIRECTIVES).toContain('pend');
+        expect(ALL_DIRECTIVES).toContain('macro');
+        expect(ALL_DIRECTIVES).toContain('endm');
+    });
+
+    it('includes non-scope-creating directives', () => {
+        expect(ALL_DIRECTIVES).toContain('byte');
+        expect(ALL_DIRECTIVES).toContain('include');
+        expect(ALL_DIRECTIVES).toContain('binary');
+    });
+
+    it('has no duplicates', () => {
+        expect(new Set(ALL_DIRECTIVES).size).toBe(ALL_DIRECTIVES.length);
+    });
+
+    it('stores names without a leading dot', () => {
+        for (const d of ALL_DIRECTIVES) {
+            expect(d.startsWith('.')).toBe(false);
+        }
     });
 });
