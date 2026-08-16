@@ -146,6 +146,16 @@ describe('undefined macro warnings', () => {
         const undef = diags.filter(d => d.message.includes("Undefined macro 'byte'"));
         expect(undef).toHaveLength(0);
     });
+
+    it('does not treat dot-tags inside a string literal as macro calls', () => {
+        const diags = warnings('\t.ptext "{rght}{grn} .kOd. .gfx. .leon. .Arok. .2026.{END}"');
+        expect(diags.filter(d => d.message.includes('Undefined macro'))).toHaveLength(0);
+    });
+
+    it('still warns for an undefined macro call after a string on the same line', () => {
+        const diags = warnings('\t.ptext "text" .nonexistent');
+        expect(diags.some(d => d.message.includes("Undefined macro 'nonexistent'"))).toBe(true);
+    });
 });
 
 describe('data directive operator validation', () => {

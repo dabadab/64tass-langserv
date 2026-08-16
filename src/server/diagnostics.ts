@@ -109,15 +109,19 @@ export function validateDocument(
         if (/^[a-zA-Z_][a-zA-Z0-9_]*\s+\.(macro|function|proc|block|struct|union)\b/i.test(code)) continue;
 
         // Check macro calls like .macroname
+        // Scan with string contents blanked out (positions preserved) so tag-like
+        // text inside a string literal - e.g. .ptext "{grn} .kOd. .gfx."- isn't
+        // mistaken for a macro call.
+        const codeNoStrings = stripStrings(code);
         let match;
         macroCallPattern.lastIndex = 0;
-        while ((match = macroCallPattern.exec(code)) !== null) {
+        while ((match = macroCallPattern.exec(codeNoStrings)) !== null) {
             const macroName = match[1];
             const fullMatch = match[0];
             const startCol = match.index;
 
             // Skip if this is part of a dotted reference (e.g., tbl.lo - the .lo is not a macro call)
-            if (startCol > 0 && /[a-zA-Z0-9_]/.test(code[startCol - 1])) {
+            if (startCol > 0 && /[a-zA-Z0-9_]/.test(codeNoStrings[startCol - 1])) {
                 continue;
             }
 
