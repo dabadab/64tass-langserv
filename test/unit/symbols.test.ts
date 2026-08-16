@@ -20,9 +20,26 @@ describe('getWordAtPosition', () => {
         expect(getWordAtPosition(doc, Position.create(0, 7))).toBe('lda');
     });
 
-    it('returns dotted reference', () => {
+    it('returns full dotted reference when cursor is on the last segment', () => {
         const doc = createDoc('        lda scope.label');
-        expect(getWordAtPosition(doc, Position.create(0, 15))).toBe('scope.label');
+        // 'label' starts at column 18
+        expect(getWordAtPosition(doc, Position.create(0, 20))).toBe('scope.label');
+    });
+
+    it('returns only the prefix segment when cursor is on an earlier segment', () => {
+        const doc = createDoc('        lda scope.label');
+        // 'scope' spans columns 12-16
+        expect(getWordAtPosition(doc, Position.create(0, 15))).toBe('scope');
+    });
+
+    it('isolates the clicked segment in a 3-level dotted reference', () => {
+        const doc = createDoc('        lda outer.inner.label');
+        // 'outer' spans columns 12-16
+        expect(getWordAtPosition(doc, Position.create(0, 14))).toBe('outer');
+        // 'inner' spans columns 18-22
+        expect(getWordAtPosition(doc, Position.create(0, 20))).toBe('outer.inner');
+        // 'label' spans columns 24-28
+        expect(getWordAtPosition(doc, Position.create(0, 26))).toBe('outer.inner.label');
     });
 
     it('returns null on whitespace', () => {

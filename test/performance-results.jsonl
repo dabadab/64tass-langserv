@@ -21,3 +21,6 @@
 {"timestamp":"2026-02-07T15:03:20.316Z","implementation":"CURRENT","iterations":4000,"totalMs":22.007380000000012,"avgMs":0.005501845000000003}
 {"timestamp":"2026-02-07T15:13:58.107Z","implementation":"CURRENT","iterations":4000,"totalMs":22.408159999999953,"avgMs":0.005602039999999988}
 {"timestamp":"2026-02-07T15:46:13.368Z","implementation":"CURRENT","iterations":4000,"totalMs":23.933239999999955,"avgMs":0.005983309999999989}
+{"timestamp":"2026-08-16T20:44:31.661Z","implementation":"CURRENT","iterations":4000,"totalMs":26.611878000000047,"avgMs":0.006652969500000012}
+{"timestamp":"2026-08-16T20:54:51.491Z","implementation":"CURRENT","iterations":4000,"totalMs":28.10706600000003,"avgMs":0.007026766500000008}
+{"timestamp":"2026-08-16T20:55:26.261Z","implementation":"CURRENT","iterations":4000,"totalMs":28.31510800000001,"avgMs":0.007078777000000002}

@@ -33,6 +33,35 @@ describe('parseDocument - label parsing', () => {
         expect(index.labels[0].name).toBe('table');
     });
 
+    it('parses data label with colon', () => {
+        const index = parse('table: .byte 1, 2, 3');
+        expect(index.labels).toHaveLength(1);
+        expect(index.labels[0].name).toBe('table');
+    });
+
+    it('parses data labels with colon inside a .proc', () => {
+        const index = parse('random .proc\n\tLO: .byte $00\n\tHI: .byte $00\ninit:\n\trts\n.pend');
+        const names = index.labels.map(l => l.name);
+        expect(names).toContain('lo');
+        expect(names).toContain('hi');
+        const lo = index.labels.find(l => l.name === 'lo');
+        expect(lo!.scopePath).toBe('random');
+        const hi = index.labels.find(l => l.name === 'hi');
+        expect(hi!.scopePath).toBe('random');
+    });
+
+    it('parses code label with colon followed by opcode', () => {
+        const index = parse('loop: inx\n        rts');
+        expect(index.labels).toHaveLength(1);
+        expect(index.labels[0].name).toBe('loop');
+    });
+
+    it('parses label with colon followed by macro call', () => {
+        const index = parse('m .macro\n.endm\nfoo: .m');
+        const foo = index.labels.find(l => l.name === 'foo');
+        expect(foo).toBeDefined();
+    });
+
     it('parses .text data label', () => {
         const index = parse('msg .text "hello"');
         expect(index.labels).toHaveLength(1);

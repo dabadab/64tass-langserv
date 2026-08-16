@@ -1,7 +1,18 @@
-import { Location, Position } from 'vscode-languageserver/node';
+import {
+    Location,
+    Position,
+    Range,
+    WorkspaceEdit,
+    TextEdit,
+    AnnotatedTextEdit,
+    ChangeAnnotation,
+    TextDocumentEdit,
+    OptionalVersionedTextDocumentIdentifier
+} from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex } from './types';
+import { parseLineStructure, escapeRegex } from './utils';
 
 /**
  * Normalize a name for matching based on case sensitivity
@@ -49,7 +60,29 @@ export function getWordAtPosition(document: TextDocument, position: Position): s
     }
 
     const word = line.substring(start, end);
-    return word.length > 0 ? word : null;
+    if (word.length === 0) return null;
+
+    // Dotted references (e.g. "scope.member") are ambiguous: clicking on an
+    // earlier segment (the scope prefix) should resolve to that segment alone,
+    // not the whole path - otherwise it's impossible to target the prefix
+    // symbol itself (e.g. renaming "scope" in "scope.member").
+    // Clicking on the last segment keeps the full dotted path, since that's
+    // what scope-qualified lookup (findSymbolInfo) needs to resolve it.
+    if (word.includes('.')) {
+        const cursorOffset = position.character - start;
+        const segments = word.split('.');
+        let segStart = 0;
+        for (let i = 0; i < segments.length; i++) {
+            const segEnd = segStart + segments[i].length;
+            const isLast = i === segments.length - 1;
+            if (isLast || cursorOffset <= segEnd) {
+                return isLast ? word : segments.slice(0, i + 1).join('.');
+            }
+            segStart = segEnd + 1; // skip the '.'
+        }
+    }
+
+    return word;
 }
 
 /**
@@ -215,6 +248,198 @@ export function findDefinition(
         return Location.create(label.uri, label.range);
     }
     return null;
+}
+
+/**
+ * Compute the workspace edit for renaming a symbol across all indexed documents.
+ *
+ * Handles three kinds of references for non-local symbols:
+ *  - bare occurrences of the name
+ *  - macro-call style: ".name" (leading dot, single segment)
+ *  - dotted-chain occurrences, where the name is one segment of a longer path
+ *    (e.g. renaming "scope" in "scope.member", or "member" in "scope.member").
+ *    Each segment is verified independently via findSymbolInfo so that renaming
+ *    a scope prefix never touches a member name sharing the reference, and vice versa.
+ *
+ * @param symbol - The label definition being renamed (its own definition is included in the edits)
+ * @param newName - The new name to substitute
+ * @param documentIndex - Document index map (all indexed documents are searched for references)
+ * @param getDocumentText - Returns the current text of a document by URI (open buffer or disk), or null if unavailable
+ * @param caseSensitive - Whether symbol matching is case-sensitive
+ */
+export function computeRenameEdits(
+    symbol: LabelDefinition,
+    newName: string,
+    documentIndex: Map<string, DocumentIndex>,
+    getDocumentText: (uri: string) => string | null,
+    caseSensitive = false
+): WorkspaceEdit {
+    const codeEdits: Map<string, TextEdit[]> = new Map();
+    const commentEdits: Map<string, AnnotatedTextEdit[]> = new Map();
+    const addedEdits = new Set<string>();
+
+    function addCodeEdit(uri: string, range: Range) {
+        const key = `${uri}:${range.start.line}:${range.start.character}`;
+        if (addedEdits.has(key)) return;
+        addedEdits.add(key);
+        if (!codeEdits.has(uri)) codeEdits.set(uri, []);
+        codeEdits.get(uri)!.push(TextEdit.replace(range, newName));
+    }
+
+    function addCommentEdit(uri: string, range: Range) {
+        const key = `${uri}:${range.start.line}:${range.start.character}`;
+        if (addedEdits.has(key)) return;
+        addedEdits.add(key);
+        if (!commentEdits.has(uri)) commentEdits.set(uri, []);
+        commentEdits.get(uri)!.push(AnnotatedTextEdit.replace(range, newName, 'commentRename'));
+    }
+
+    // Add the definition itself
+    addCodeEdit(symbol.uri, symbol.range);
+
+    const symbolName = symbol.name;
+    // Safe: symbol name from user file, sanitized via escapeRegex()
+    const escapedName = escapeRegex(symbolName);
+
+    function isSelfDefinition(uri: string, lineNum: number, col: number): boolean {
+        return uri === symbol.uri && lineNum === symbol.range.start.line && col === symbol.range.start.character;
+    }
+
+    function resolvesToSymbol(word: string, uri: string, lineNum: number): boolean {
+        const refSymbol = findSymbolInfo(word, uri, lineNum, documentIndex, caseSensitive);
+        return !!refSymbol && refSymbol.uri === symbol.uri &&
+            refSymbol.range.start.line === symbol.range.start.line &&
+            refSymbol.range.start.character === symbol.range.start.character;
+    }
+
+    for (const [uri, index] of documentIndex) {
+        const docContent = getDocumentText(uri);
+        if (docContent === null) continue;
+
+        const lines = docContent.split('\n');
+
+        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+            const line = lines[lineNum];
+            const { code, commentStart } = parseLineStructure(line);
+
+            if (code.trim() !== '') {
+                if (symbol.isLocal) {
+                    // Safe: symbol name from user file, sanitized via escapeRegex()
+                    const pattern = new RegExp(`\\b${escapedName}\\b`, 'g');
+                    let match;
+                    while ((match = pattern.exec(code)) !== null) {
+                        const startCol = match.index;
+                        if (isSelfDefinition(uri, lineNum, startCol)) continue;
+
+                        const lineScope = index.scopeAtLine.get(lineNum);
+                        const lineScopePath = lineScope?.scopePath ?? null;
+                        const lineLocalScope = lineScope?.localScope ?? null;
+                        if (lineScopePath !== symbol.scopePath || lineLocalScope !== symbol.localScope) {
+                            continue;
+                        }
+
+                        addCodeEdit(uri, Range.create(
+                            Position.create(lineNum, startCol),
+                            Position.create(lineNum, startCol + symbolName.length)
+                        ));
+                    }
+                } else {
+                    // Macro-call style reference: ".name" (leading dot, single segment)
+                    // Safe: symbol name from user file, sanitized via escapeRegex()
+                    const macroCallPattern = new RegExp(`\\.${escapedName}\\b(?!\\.[a-zA-Z_])`, 'g');
+                    let macroMatch;
+                    while ((macroMatch = macroCallPattern.exec(code)) !== null) {
+                        const startCol = macroMatch.index + 1; // skip the leading dot
+                        if (!resolvesToSymbol(macroMatch[0], uri, lineNum)) continue;
+
+                        addCodeEdit(uri, Range.create(
+                            Position.create(lineNum, startCol),
+                            Position.create(lineNum, startCol + symbolName.length)
+                        ));
+                    }
+
+                    // Bare / dotted-chain references: "name", "name.member", "scope.name", "scope.name.member"
+                    const chainPattern = /\b[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*/g;
+                    let chainMatch;
+                    while ((chainMatch = chainPattern.exec(code)) !== null) {
+                        const segments = chainMatch[0].split('.');
+                        const chainStart = chainMatch.index;
+
+                        let segStart = 0;
+                        for (let i = 0; i < segments.length; i++) {
+                            const seg = segments[i];
+                            const segStartCol = chainStart + segStart;
+                            segStart += seg.length + 1; // skip the '.'
+
+                            if (normalizeName(seg, caseSensitive) !== normalizeName(symbolName, caseSensitive)) {
+                                continue;
+                            }
+                            if (isSelfDefinition(uri, lineNum, segStartCol)) continue;
+
+                            const prefix = segments.slice(0, i + 1).join('.');
+                            if (!resolvesToSymbol(prefix, uri, lineNum)) continue;
+
+                            addCodeEdit(uri, Range.create(
+                                Position.create(lineNum, segStartCol),
+                                Position.create(lineNum, segStartCol + seg.length)
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // Search in comment portion (for all symbols, not just scoped ones)
+            if (commentStart >= 0) {
+                const comment = line.substring(commentStart);
+                // Safe: symbol name from user file, sanitized via escapeRegex()
+                const commentPattern = new RegExp(`\\b${escapedName}\\b`, 'g');
+                let match;
+                while ((match = commentPattern.exec(comment)) !== null) {
+                    const startCol = commentStart + match.index;
+                    addCommentEdit(uri, Range.create(
+                        Position.create(lineNum, startCol),
+                        Position.create(lineNum, startCol + symbolName.length)
+                    ));
+                }
+            }
+        }
+    }
+
+    // Build the workspace edit
+    if (commentEdits.size > 0) {
+        // Use documentChanges with annotations to force preview
+        const documentChanges: TextDocumentEdit[] = [];
+        const changeAnnotations: { [id: string]: ChangeAnnotation } = {
+            'commentRename': {
+                label: 'Rename in comments',
+                needsConfirmation: true,
+                description: 'Also rename occurrences in comments'
+            }
+        };
+
+        const allUris = new Set([...codeEdits.keys(), ...commentEdits.keys()]);
+        for (const uri of allUris) {
+            const edits: (TextEdit | AnnotatedTextEdit)[] = [];
+            const uriCodeEdits = codeEdits.get(uri);
+            if (uriCodeEdits) edits.push(...uriCodeEdits);
+            const uriCommentEdits = commentEdits.get(uri);
+            if (uriCommentEdits) edits.push(...uriCommentEdits);
+            if (edits.length > 0) {
+                documentChanges.push({
+                    textDocument: OptionalVersionedTextDocumentIdentifier.create(uri, null),
+                    edits
+                });
+            }
+        }
+
+        return { documentChanges, changeAnnotations };
+    } else {
+        const changes: { [uri: string]: TextEdit[] } = {};
+        for (const [uri, edits] of codeEdits) {
+            changes[uri] = edits;
+        }
+        return { changes };
+    }
 }
 
 // Check if a symbol is a parameter in the current scope or any parent scope

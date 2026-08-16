@@ -200,7 +200,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
 
         // Code label followed by opcode (also a local scope boundary)
-        const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+([a-zA-Z]{3})\b/);
+        // Allow an optional colon between the name and the opcode: "LOOP: INX"
+        const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*:?\s+([a-zA-Z]{3})\b/);
         if (codeLabelOpcodeMatch && OPCODES.has(codeLabelOpcodeMatch[2].toLowerCase())) {
             const labelName = codeLabelOpcodeMatch[1];
             currentLocalScope = normalizeName(labelName);
@@ -278,16 +279,19 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
 
         // Labels with data directives (not scope-creating)
-        const dataLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.(byte|word|addr|fill|text|ptext|null)\b/i);
+        // Allow an optional colon between the name and the directive: "HI: .byte $00"
+        // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
+        const dataLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)\s*:?\s+\.(byte|word|addr|fill|text|ptext|null)\b/i);
         if (dataLabelMatch) {
-            const labelName = dataLabelMatch[1];
+            const labelName = dataLabelMatch[2];
+            const startChar = dataLabelMatch[1].length;
             labels.push({
                 name: normalizeName(labelName),
                 originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
-                    Position.create(lineNum, 0),
-                    Position.create(lineNum, labelName.length)
+                    Position.create(lineNum, startChar),
+                    Position.create(lineNum, startChar + labelName.length)
                 ),
                 scopePath: getCurrentScopePath(),
                 localScope: null,
@@ -298,10 +302,13 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
 
         // Labels defined via macro calls (e.g., "label .macro_name args")
         // Track which macro was used so we can validate sub-label references
-        const macroLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s+\.([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
+        // Allow an optional colon between the name and the macro call: "label: .macro_name args"
+        // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
+        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)\s*:?\s+\.([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
         if (macroLabelMatch) {
-            const labelName = macroLabelMatch[1];
-            const macroCalled = normalizeName(macroLabelMatch[2]);
+            const labelName = macroLabelMatch[2];
+            const startChar = macroLabelMatch[1].length;
+            const macroCalled = normalizeName(macroLabelMatch[3]);
             // Skip if this is a scope-creating directive (already handled above)
             if (!Object.keys(SCOPE_OPENERS).includes('.' + macroCalled)) {
                 labels.push({
@@ -309,8 +316,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                     originalName: labelName,
                     uri: document.uri,
                     range: Range.create(
-                        Position.create(lineNum, 0),
-                        Position.create(lineNum, labelName.length)
+                        Position.create(lineNum, startChar),
+                        Position.create(lineNum, startChar + labelName.length)
                     ),
                     scopePath: getCurrentScopePath(),
                     localScope: null,

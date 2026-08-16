@@ -17,12 +17,7 @@ import {
     MarkupKind,
     ReferenceParams,
     RenameParams,
-    WorkspaceEdit,
-    TextEdit,
-    AnnotatedTextEdit,
-    ChangeAnnotation,
-    TextDocumentEdit,
-    OptionalVersionedTextDocumentIdentifier
+    WorkspaceEdit
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -34,8 +29,21 @@ import { DocumentIndex } from './types';
 import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
 import { parseLineStructure, parseNumericValue, formatNumericValue, escapeRegex } from './utils';
 import { parseDocument } from './parser';
-import { getWordAtPosition, findSymbolInfo, findDefinition } from './symbols';
+import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits } from './symbols';
 import { validateDocument } from './diagnostics';
+
+// Get the current text of a document by URI: prefer the open in-memory buffer,
+// fall back to reading the file from disk (for indexed-but-unopened .include files).
+function getDocumentText(uri: string): string | null {
+    const openDoc = documents.get(uri);
+    if (openDoc) return openDoc.getText();
+    try {
+        return fs.readFileSync(fileURLToPath(uri), 'utf-8');
+    } catch (e) {
+        connection.console.warn(`Failed to read file for rename '${uri}': ${e}`);
+        return null;
+    }
+}
 
 const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
@@ -425,194 +433,10 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
     const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, globalSettings.caseSensitive);
     if (!symbol) return null;
 
-    const newName = params.newName;
-
-    // Track edits by URI, separating code and comment edits
-    const codeEdits: Map<string, TextEdit[]> = new Map();
-    const commentEdits: Map<string, AnnotatedTextEdit[]> = new Map();
-
-    // Track added edits to avoid duplicates
-    const addedEdits = new Set<string>();
-
-    // Helper to add a code edit
-    function addCodeEdit(uri: string, range: Range) {
-        const key = `${uri}:${range.start.line}:${range.start.character}`;
-        if (addedEdits.has(key)) return;
-        addedEdits.add(key);
-
-        if (!codeEdits.has(uri)) {
-            codeEdits.set(uri, []);
-        }
-        codeEdits.get(uri)!.push(TextEdit.replace(range, newName));
-    }
-
-    // Helper to add a comment edit (with annotation)
-    function addCommentEdit(uri: string, range: Range) {
-        const key = `${uri}:${range.start.line}:${range.start.character}`;
-        if (addedEdits.has(key)) return;
-        addedEdits.add(key);
-
-        if (!commentEdits.has(uri)) {
-            commentEdits.set(uri, []);
-        }
-        commentEdits.get(uri)!.push(
-            AnnotatedTextEdit.replace(range, newName, 'commentRename')
-        );
-    }
-
-    // Add the definition
-    addCodeEdit(symbol.uri, symbol.range);
-
-    // Search all indexed documents for references
-    for (const [uri, index] of documentIndex) {
-        let docContent: string;
-        const openDoc = documents.get(uri);
-        if (openDoc) {
-            docContent = openDoc.getText();
-        } else {
-            try {
-                const filePath = fileURLToPath(uri);
-                docContent = fs.readFileSync(filePath, 'utf-8');
-            } catch (e) {
-                connection.console.warn(`Failed to read file for rename '${uri}': ${e}`);
-                continue;
-            }
-        }
-
-        const lines = docContent.split('\n');
-
-        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-            const line = lines[lineNum];
-            const { code, commentStart } = parseLineStructure(line);
-
-            const symbolName = symbol.name;
-            const escapedName = escapeRegex(symbolName);
-
-            const patterns: RegExp[] = [];
-            if (symbol.isLocal) {
-                // Safe: symbol name from user file, sanitized via escapeRegex()
-                patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
-            } else {
-                // Safe: symbol name from user file, sanitized via escapeRegex()
-                patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
-                patterns.push(new RegExp(`\\.${escapedName}\\b`, 'g'));
-            }
-
-            // Search in code portion
-            if (code.trim() !== '') {
-                for (const pattern of patterns) {
-                    let match;
-                    while ((match = pattern.exec(code)) !== null) {
-                        const startCol = match.index;
-                        const matchText = match[0];
-
-                        // Skip if this is the definition itself (already added)
-                        if (uri === symbol.uri && lineNum === symbol.range.start.line &&
-                            startCol === symbol.range.start.character) {
-                            continue;
-                        }
-
-                        const lineScope = index.scopeAtLine.get(lineNum);
-                        const lineScopePath = lineScope?.scopePath ?? null;
-                        const lineLocalScope = lineScope?.localScope ?? null;
-
-                        if (symbol.isLocal) {
-                            if (lineScopePath !== symbol.scopePath ||
-                                lineLocalScope !== symbol.localScope) {
-                                continue;
-                            }
-                        } else {
-                            const refSymbol = findSymbolInfo(
-                                matchText.startsWith('.') ? matchText : symbolName,
-                                uri,
-                                lineNum,
-                                documentIndex,
-                                globalSettings.caseSensitive
-                            );
-                            if (!refSymbol || refSymbol.uri !== symbol.uri ||
-                                refSymbol.range.start.line !== symbol.range.start.line) {
-                                continue;
-                            }
-                        }
-
-                        const actualStartCol = matchText.startsWith('.') ? startCol + 1 : startCol;
-
-                        addCodeEdit(uri, Range.create(
-                            Position.create(lineNum, actualStartCol),
-                            Position.create(lineNum, actualStartCol + symbolName.length)
-                        ));
-                    }
-                }
-            }
-
-            // Search in comment portion (for all symbols, not just scoped ones)
-            if (commentStart >= 0) {
-                const comment = line.substring(commentStart);
-                // Safe: symbol name from user file, sanitized via escapeRegex()
-                const commentPattern = new RegExp(`\\b${escapedName}\\b`, 'g');
-                let match;
-                while ((match = commentPattern.exec(comment)) !== null) {
-                    const startCol = commentStart + match.index;
-
-                    addCommentEdit(uri, Range.create(
-                        Position.create(lineNum, startCol),
-                        Position.create(lineNum, startCol + symbolName.length)
-                    ));
-                }
-            }
-        }
-    }
-
-    // Build the workspace edit
-    const hasCommentEdits = commentEdits.size > 0;
-
-    if (hasCommentEdits) {
-        // Use documentChanges with annotations to force preview
-        const documentChanges: TextDocumentEdit[] = [];
-        const changeAnnotations: { [id: string]: ChangeAnnotation } = {
-            'commentRename': {
-                label: 'Rename in comments',
-                needsConfirmation: true,
-                description: 'Also rename occurrences in comments'
-            }
-        };
-
-        // Collect all URIs
-        const allUris = new Set([...codeEdits.keys(), ...commentEdits.keys()]);
-
-        for (const uri of allUris) {
-            const edits: (TextEdit | AnnotatedTextEdit)[] = [];
-
-            // Add code edits
-            const uriCodeEdits = codeEdits.get(uri);
-            if (uriCodeEdits) {
-                edits.push(...uriCodeEdits);
-            }
-
-            // Add comment edits (annotated)
-            const uriCommentEdits = commentEdits.get(uri);
-            if (uriCommentEdits) {
-                edits.push(...uriCommentEdits);
-            }
-
-            if (edits.length > 0) {
-                documentChanges.push({
-                    textDocument: OptionalVersionedTextDocumentIdentifier.create(uri, null),
-                    edits
-                });
-            }
-        }
-
-        return { documentChanges, changeAnnotations };
-    } else {
-        // No comment edits, use simple changes format
-        const changes: { [uri: string]: TextEdit[] } = {};
-        for (const [uri, edits] of codeEdits) {
-            changes[uri] = edits;
-        }
-        return { changes };
-    }
+    return computeRenameEdits(symbol, params.newName, documentIndex, getDocumentText, globalSettings.caseSensitive);
 });
+
+
 
 documents.onDidChangeContent(change => {
     // Clear old include references before re-indexing (includes may have changed)
