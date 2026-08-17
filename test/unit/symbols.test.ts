@@ -325,25 +325,57 @@ describe('findAnonymousLabel', () => {
         expect(result).toBeNull();
     });
 
-    it('respects local scope boundaries', () => {
+    // Verified against the assembler: named code labels do NOT delimit anonymous
+    // labels - only .proc/.block style scopes do.
+    it('resolves across an intervening named code label', () => {
         const source = 'first\n-\nsecond\n-\n        nop';
         const { documentIndex, docs } = buildIndex({ source });
 
-        // From line 4 under 'second' scope, find backward - should only see - at line 3
-        const result = findAnonymousLabel('-', 1, docs[0].uri, 4, documentIndex);
-        expect(result).toBeDefined();
-        expect(result!.range.start.line).toBe(3); // - under 'second' scope
-        expect(result!.localScope).toBe('second');
+        // Nearest backward from line 4 is the - on line 3
+        const near = findAnonymousLabel('-', 1, docs[0].uri, 4, documentIndex);
+        expect(near).not.toBeNull();
+        expect(near!.range.start.line).toBe(3);
+
+        // -- reaches past the 'second' code label to the - on line 1
+        const far = findAnonymousLabel('-', 2, docs[0].uri, 4, documentIndex);
+        expect(far).not.toBeNull();
+        expect(far!.range.start.line).toBe(1);
     });
 
-    it('does not find labels from different scopes', () => {
-        const source = 'func1\n+\nfunc2\n        nop';
+    it('resolves a backward label defined before a named code label', () => {
+        // The exact case from the review: "first inx / - iny / second dey / bne -"
+        const source = 'first   inx\n-       iny\nsecond  dey\n        bne -';
         const { documentIndex, docs } = buildIndex({ source });
 
-        // From line 3 under 'func2' scope, try to find backward +
-        // Should not find the + from 'func1' scope
+        const result = findAnonymousLabel('-', 1, docs[0].uri, 3, documentIndex);
+        expect(result).not.toBeNull();
+        expect(result!.range.start.line).toBe(1);
+    });
+
+    it('does not reach into a nested scope', () => {
+        // A - inside a .block is not visible from outside it
+        const source = 'b .block\n-\n.bend\n        nop';
+        const { documentIndex, docs } = buildIndex({ source });
+
         const result = findAnonymousLabel('-', 1, docs[0].uri, 3, documentIndex);
         expect(result).toBeNull();
+    });
+
+    it('does not reach into a sibling scope', () => {
+        const source = 'a .block\n-\n.bend\nb .block\n        nop\n.bend';
+        const { documentIndex, docs } = buildIndex({ source });
+
+        const result = findAnonymousLabel('-', 1, docs[0].uri, 4, documentIndex);
+        expect(result).toBeNull();
+    });
+
+    it('sees an enclosing scope\'s label from inside a nested scope', () => {
+        const source = '-\nb .block\n        nop\n.bend';
+        const { documentIndex, docs } = buildIndex({ source });
+
+        const result = findAnonymousLabel('-', 1, docs[0].uri, 2, documentIndex);
+        expect(result).not.toBeNull();
+        expect(result!.range.start.line).toBe(0);
     });
 });
 

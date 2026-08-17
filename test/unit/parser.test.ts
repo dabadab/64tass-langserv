@@ -453,7 +453,9 @@ describe('parseDocument - anonymous labels', () => {
         expect(label).toBeDefined();
         expect(label!.anonymousCount).toBe(1);
         expect(label!.originalName).toBe('+');
-        expect(label!.isLocal).toBe(true);
+        // Not a local (_name) symbol: scoped by .proc/.block only
+        expect(label!.isLocal).toBe(false);
+        expect(label!.localScope).toBeNull();
     });
 
     it('parses single - label', () => {
@@ -484,11 +486,21 @@ describe('parseDocument - anonymous labels', () => {
         expect(labels[1].anonymousCount).toBe(2);
     });
 
-    it('scopes anonymous labels to current code label', () => {
+    it('does not bind anonymous labels to the current code label', () => {
+        // Named code labels do not scope anonymous labels (verified against the assembler)
         const index = parse('main\n+\n        nop');
         const label = index.labels.find(l => l.isAnonymous);
         expect(label).toBeDefined();
-        expect(label!.localScope).toBe('main');
+        expect(label!.localScope).toBeNull();
+        expect(label!.scopePath).toBeNull();
+    });
+
+    it('scopes anonymous labels to the enclosing .proc/.block', () => {
+        const index = parse('outer .proc\n+\n        nop\n.pend');
+        const label = index.labels.find(l => l.isAnonymous);
+        expect(label).toBeDefined();
+        expect(label!.scopePath).toBe('outer');
+        expect(label!.localScope).toBeNull();
     });
 
     it('rejects mixed +- symbols', () => {
@@ -503,12 +515,20 @@ describe('parseDocument - anonymous labels', () => {
         expect(label).toBeDefined();
     });
 
-    it('preserves anonymous labels across different scopes', () => {
+    it('keeps separate entries for labels under different code labels', () => {
         const index = parse('func1\n+\n        nop\nfunc2\n+\n        nop');
         const plusLabels = index.labels.filter(l => l.isAnonymous && l.name === '+');
         expect(plusLabels).toHaveLength(2);
-        expect(plusLabels[0].localScope).toBe('func1');
-        expect(plusLabels[1].localScope).toBe('func2');
+        // Both are in the same (global) scope - the code labels do not separate them
+        expect(plusLabels.map(l => l.scopePath)).toEqual([null, null]);
+        expect(plusLabels.map(l => l.localScope)).toEqual([null, null]);
+    });
+
+    it('separates anonymous labels by enclosing .block scope', () => {
+        const index = parse('a .block\n+\n.bend\nb .block\n+\n.bend');
+        const plusLabels = index.labels.filter(l => l.isAnonymous && l.name === '+');
+        expect(plusLabels).toHaveLength(2);
+        expect(plusLabels.map(l => l.scopePath)).toEqual(['a', 'b']);
     });
 
     it('parses anonymous label followed by instruction on same line', () => {

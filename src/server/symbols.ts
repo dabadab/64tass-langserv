@@ -118,14 +118,18 @@ export function findAnonymousLabel(
     const fromIndex = documentIndex.get(fromUri);
     if (!fromIndex) return null;
 
-    const lineScope = fromIndex.scopeAtLine.get(fromLine);
-    const currentLocalScope = lineScope?.localScope ?? null;
+    const currentScopePath = fromIndex.scopeAtLine.get(fromLine)?.scopePath ?? null;
 
-    // Filter anonymous labels matching direction and local scope
+    // Anonymous labels follow the ordinary scope chain, NOT local (_name) scoping:
+    // one defined in an enclosing scope is reachable from a nested .proc/.block,
+    // but one defined inside a scope is not reachable from outside it or from a
+    // sibling scope. Named code labels do not delimit them at all (verified
+    // against the assembler), so localScope is deliberately not consulted here.
+    const visibleScopes = new Set(getScopeChain(currentScopePath));
     const candidates = fromIndex.labels.filter(l =>
         l.isAnonymous &&
         l.name === direction &&
-        l.localScope === currentLocalScope
+        visibleScopes.has(l.scopePath)
     );
 
     if (direction === '+') {
@@ -259,11 +263,12 @@ export function collectVisibleLabels(
         }
     }
 
-    // Non-local symbols, nearest scope first so closer definitions shadow farther ones
+    // Non-local symbols, nearest scope first so closer definitions shadow farther ones.
+    // Anonymous labels are excluded: "+"/"-" are never completed by name.
     for (const scopeToTry of getScopeChain(currentScopePath)) {
         for (const [, index] of documentIndex) {
             for (const label of index.labels) {
-                if (!label.isLocal && label.scopePath === scopeToTry && !seen.has(label.name)) {
+                if (!label.isLocal && !label.isAnonymous && label.scopePath === scopeToTry && !seen.has(label.name)) {
                     seen.add(label.name);
                     results.push(label);
                 }

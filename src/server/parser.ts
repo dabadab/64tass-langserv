@@ -282,8 +282,11 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                             Position.create(lineNum, leadingWhitespace + i + 1)
                         ),
                         scopePath: getCurrentScopePath(),
-                        localScope: currentLocalScope,
-                        isLocal: true,  // Scoped like local symbols
+                        // Scoped by the enclosing .proc/.block only - unlike _local
+                        // symbols, anonymous labels are not bound to the nearest code
+                        // label, so localScope is not recorded for them.
+                        localScope: null,
+                        isLocal: false,
                         kind: 'code',
                         isAnonymous: true,
                         anonymousCount: i + 1 // 1 for first +, 2 for second +, etc.
