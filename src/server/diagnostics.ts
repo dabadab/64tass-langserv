@@ -109,15 +109,27 @@ export function validateDocument(
         // Symbol validation - skip empty lines and label definitions
         if (code.trim() === '') continue;
 
-        // Skip lines that are label definitions (they define, not reference)
-        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*[:=]/.test(code)) continue;
-        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s+\.(macro|function|proc|block|struct|union)\b/i.test(code)) continue;
+        // Scope openers only introduce a name (and parameter names), nothing to check
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*:?\s*\.(macro|function|proc|block|struct|union)\b/i.test(code)) continue;
+
+        // A leading label definition names a symbol rather than referencing one, but
+        // the REST of the line still references symbols: both "loop: lda undef" and
+        // "foo = undef + 1" need checking. Blank out just the defined name and its
+        // ":" / "=" / ":=", keeping the line length so reported columns stay right.
+        const defPrefix = code.match(/^(\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(?::=|=|:))/);
+        const assignmentRhs = defPrefix && /[:=]=?$/.test(defPrefix[1]) && defPrefix[1].trimEnd().endsWith('=');
+        const codeForRefs = defPrefix
+            ? ' '.repeat(defPrefix[1].length) + code.slice(defPrefix[1].length)
+            : code;
+
+        // Nothing after the definition (e.g. a bare "loop:") - nothing to validate
+        if (codeForRefs.trim() === '') continue;
 
         // Check macro calls like .macroname
         // Scan with string contents blanked out (positions preserved) so tag-like
         // text inside a string literal - e.g. .ptext "{grn} .kOd. .gfx."- isn't
         // mistaken for a macro call.
-        const codeNoStrings = stripStrings(code);
+        const codeNoStrings = stripStrings(codeForRefs);
         let match;
         macroCallPattern.lastIndex = 0;
         while ((match = macroCallPattern.exec(codeNoStrings)) !== null) {
@@ -153,21 +165,31 @@ export function validateDocument(
             }
         }
 
-        // Check regular symbol references (after opcodes or data directives)
+        // Check regular symbol references (after opcodes or data directives).
+        // Uses codeForRefs so a "label:" prefix no longer hides the rest of the line.
         // Look for symbols after opcodes
-        const opcodeMatch = code.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?([a-zA-Z]{3})\s+(.+)$/i);
+        const opcodeMatch = codeForRefs.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?([a-zA-Z]{3})\s+(.+)$/i);
         // Look for symbols after data directives like .text, .byte, .word, etc.
-        const dataDirectiveMatch = code.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|char|dint|lint|sint)\s+(.+)$/i);
+        const dataDirectiveMatch = codeForRefs.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|char|dint|lint|sint)\s+(.+)$/i);
 
         let operand: string | null = null;
         let operandStart = 0;
 
         if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
             operand = opcodeMatch[2];
-            operandStart = code.indexOf(operand);
+            operandStart = codeForRefs.indexOf(operand);
         } else if (dataDirectiveMatch) {
             operand = dataDirectiveMatch[2];
-            operandStart = code.indexOf(operand);
+            operandStart = codeForRefs.indexOf(operand);
+        } else if (assignmentRhs) {
+            // "foo = undef + 1": the right-hand side is an expression whose symbols
+            // should be checked, but there is no opcode or directive to anchor on.
+            const rhs = codeForRefs.replace(/\s+$/, '');
+            const from = rhs.length - rhs.trimStart().length;
+            if (rhs.trim() !== '') {
+                operand = rhs.slice(from);
+                operandStart = from;
+            }
         }
 
         if (operand) {

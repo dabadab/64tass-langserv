@@ -460,3 +460,52 @@ describe('block directives inside string literals', () => {
         expect(diags.some(d => d.message.includes('without matching'))).toBe(true);
     });
 });
+
+describe('label definitions do not silence the rest of the line', () => {
+    it('checks the operand after a colon-terminated label', () => {
+        const diags = warnings('loop: lda undefined_thing');
+        expect(diags.some(d => d.message.includes("Undefined symbol 'undefined_thing'"))).toBe(true);
+    });
+
+    it('reports the operand at the right column after a colon label', () => {
+        const [d] = warnings('loop: lda undefined_thing');
+        expect(d.range.start.character).toBe('loop: lda '.length);
+    });
+
+    it('checks the operand after a colon-terminated data label', () => {
+        const diags = warnings('tbl: .byte undefined_thing');
+        expect(diags.some(d => d.message.includes("Undefined symbol 'undefined_thing'"))).toBe(true);
+    });
+
+    it('checks the right-hand side of an = assignment', () => {
+        const diags = warnings('foo = undefined_thing + 1');
+        expect(diags.some(d => d.message.includes("Undefined symbol 'undefined_thing'"))).toBe(true);
+        expect(diags[0].range.start.character).toBe('foo = '.length);
+    });
+
+    it('checks the right-hand side of a := assignment', () => {
+        const diags = warnings('foo := undefined_thing + 1');
+        expect(diags.some(d => d.message.includes("Undefined symbol 'undefined_thing'"))).toBe(true);
+        expect(diags[0].range.start.character).toBe('foo := '.length);
+    });
+
+    it('does not warn when the right-hand side is defined', () => {
+        const diags = warnings('val = 1\nfoo = val + 1');
+        expect(diags.filter(d => d.message.includes('Undefined'))).toHaveLength(0);
+    });
+
+    it('does not warn for the defined name itself', () => {
+        expect(warnings('loop:')).toHaveLength(0);
+        expect(warnings('loop:\tinx')).toHaveLength(0);
+    });
+
+    it('still ignores scope openers, with or without a colon', () => {
+        expect(errors('p: .proc\n.pend').filter(d => d.message.includes('Undefined'))).toHaveLength(0);
+        expect(warnings('m: .macro a\n.endm').filter(d => d.message.includes("'a'"))).toHaveLength(0);
+    });
+
+    it('checks operator placement after a colon label', () => {
+        const diags = errors('tbl: .byte 1 2');
+        expect(diags.some(d => d.message.includes('operator'))).toBe(true);
+    });
+});
