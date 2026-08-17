@@ -2,6 +2,20 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [0.9.0] - 2026-08-17
+
+### Added
+- **Code Completion** - Completion for labels, opcodes, directives and function parameters
+- **Case Sensitivity Pragma** - `; 64tass-langserv: case-sensitive` / `case-insensitive` comment
+  overrides the `64tass.caseSensitive` setting per compilation unit, cascading into `.include` files
+
+### Improved
+- **Parsing accuracy** - Many fixes
+- **`.for` Loop Variables** - Loop variables are now indexed as symbols
+- **Symbols and renaming** - Various fixes
+- **Configuration** - Fixed settings not being loaded before the first requests were served
+
+
 ## [0.8.0] - 2026-02-07
 
 ### Added
