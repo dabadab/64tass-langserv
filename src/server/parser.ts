@@ -209,8 +209,11 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
 
         // Code label followed by opcode (also a local scope boundary)
-        // Allow an optional colon between the name and the opcode: "LOOP: INX"
-        const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*:?\s+([a-zA-Z]{3})\b/);
+        // Separated by whitespace or a colon: "LOOP: INX", "LOOP:INX", "LOOP INX".
+        // Deliberately still anchored at column 0 with no indent group: an indented
+        // "<opcode> <opcode>" line (e.g. "  jsr rts") would otherwise be read as a
+        // label followed by an opcode.
+        const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([a-zA-Z]{3})\b/);
         if (codeLabelOpcodeMatch && OPCODES.has(codeLabelOpcodeMatch[2].toLowerCase())) {
             const labelName = codeLabelOpcodeMatch[1];
             currentLocalScope = normalizeName(labelName);
@@ -291,9 +294,9 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
 
         // Labels with data directives (not scope-creating)
-        // Allow an optional colon between the name and the directive: "HI: .byte $00"
+        // Separated by whitespace or a colon: "HI: .byte $00", even "HI:.byte $00"
         // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
-        const dataLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)\s*:?\s+\.(byte|word|addr|fill|text|ptext|null)\b/i);
+        const dataLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.(byte|word|addr|fill|text|ptext|null)\b/i);
         if (dataLabelMatch) {
             const labelName = dataLabelMatch[2];
             const startChar = dataLabelMatch[1].length;
@@ -315,9 +318,9 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
 
         // Labels defined via macro calls (e.g., "label .macro_name args")
         // Track which macro was used so we can validate sub-label references
-        // Allow an optional colon between the name and the macro call: "label: .macro_name args"
+        // Separated by whitespace or a colon: "label: .macro_name args", even "label:.macro_name"
         // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
-        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)\s*:?\s+\.([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
+        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
         if (macroLabelMatch) {
             const labelName = macroLabelMatch[2];
             const startChar = macroLabelMatch[1].length;

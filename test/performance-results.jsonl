@@ -38,3 +38,5 @@
 {"timestamp":"2026-08-17T18:46:41.769Z","implementation":"CURRENT","iterations":4000,"totalMs":22.246079999999893,"avgMs":0.0055615199999999735}
 {"timestamp":"2026-08-17T18:47:45.669Z","implementation":"CURRENT","iterations":4000,"totalMs":29.348574999999983,"avgMs":0.007337143749999995}
 {"timestamp":"2026-08-17T18:51:44.195Z","implementation":"CURRENT","iterations":4000,"totalMs":22.862649000000033,"avgMs":0.005715662250000008}
+{"timestamp":"2026-08-17T19:07:21.513Z","implementation":"CURRENT","iterations":4000,"totalMs":28.545172999999977,"avgMs":0.007136293249999994}
+{"timestamp":"2026-08-17T19:08:38.431Z","implementation":"CURRENT","iterations":4000,"totalMs":21.671147999999903,"avgMs":0.005417786999999976}

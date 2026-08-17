@@ -50,6 +50,47 @@ describe('parseDocument - label parsing', () => {
         expect(index.labels[0].name).toBe('table');
     });
 
+    it('parses labels with no space after the colon', () => {
+        // Verified against the real assembler: all of these compile
+        const cases: [string, string, string][] = [
+            ['table:.byte 1, 2, 3', 'table', 'data'],
+            ['msg:.text "hi"', 'msg', 'data'],
+            ['lbl:.word $1234', 'lbl', 'data'],
+            ['loop:inx', 'loop', 'code'],
+            ['foo:.mymacro 1', 'foo', 'data'],
+        ];
+        for (const [source, expectedName, expectedKind] of cases) {
+            const index = parse(source);
+            expect(index.labels, source).toHaveLength(1);
+            expect(index.labels[0].name, source).toBe(expectedName);
+            expect(index.labels[0].kind, source).toBe(expectedKind);
+            expect(index.labels[0].range.start.character, source).toBe(0);
+            expect(index.labels[0].range.end.character, source).toBe(expectedName.length);
+        }
+    });
+
+    it('parses an indented label with no space after the colon', () => {
+        const index = parse('outer .proc\n\tHI:.byte $00\n.pend');
+        const hi = index.labels.find(l => l.name === 'hi');
+        expect(hi).toBeDefined();
+        expect(hi!.scopePath).toBe('outer');
+        expect(hi!.range.start.character).toBe(1); // after the tab
+    });
+
+    it('does not mistake a dotted reference for a data label', () => {
+        // "tbl.byte" is a qualified reference, not "tbl" defining a .byte
+        const index = parse('        lda tbl.byte');
+        expect(index.labels.find(l => l.name === 'tbl')).toBeUndefined();
+    });
+
+    it('still requires a separator before an opcode', () => {
+        // An indented instruction is not a label definition
+        expect(parse('        nop').labels).toHaveLength(0);
+        expect(parse('        inx').labels).toHaveLength(0);
+        // Run-together text has no separator, so it is not split into label + opcode
+        expect(parse('loopinx').labels.find(l => l.name === 'loop')).toBeUndefined();
+    });
+
     it('parses data labels with colon inside a .proc', () => {
         const index = parse('random .proc\n\tLO: .byte $00\n\tHI: .byte $00\ninit:\n\trts\n.pend');
         const names = index.labels.map(l => l.name);
