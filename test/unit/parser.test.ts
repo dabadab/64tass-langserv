@@ -622,3 +622,32 @@ describe('parseDocument - loop variables', () => {
         expect(index.labels.find(l => l.name === 'i')?.scopePath).toBe('p');
     });
 });
+
+describe('parseDocument - labelled loops', () => {
+    it('indexes both the label and the loop variable of a labelled .for', () => {
+        // Verified against the assembler: "squarelo .for i = ..." is valid and
+        // squarelo is usable as a label afterwards
+        const index = parse('squarelo\t.for i = 0, i < 21, i = i + 1\n\t\t.byte <(i * i)\n\t\t.next');
+        const label = index.labels.find(l => l.name === 'squarelo');
+        expect(label).toBeDefined();
+        expect(label!.kind).toBe('data');
+        expect(label!.range.start.character).toBe(0);
+
+        const loopVar = index.labels.find(l => l.name === 'i');
+        expect(loopVar).toBeDefined();
+        expect(loopVar!.kind).toBe('var');
+        expect(loopVar!.range.start.character).toBe('squarelo\t.for '.length);
+    });
+
+    it('handles a colon after the loop label', () => {
+        const index = parse('tbl: .for n = 0, n < 4, n = n + 1\n\t.next');
+        expect(index.labels.find(l => l.name === 'tbl')).toBeDefined();
+        expect(index.labels.find(l => l.name === 'n')?.kind).toBe('var');
+    });
+
+    it('still handles an unlabelled .for', () => {
+        const index = parse('\t.for i = 0, i < 4, i = i + 1\n\t.next');
+        expect(index.labels).toHaveLength(1);
+        expect(index.labels[0].name).toBe('i');
+    });
+});

@@ -242,10 +242,35 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         // a re-assignable 'var': the assembler keeps it defined after .next and lets
         // a later loop reuse the same name, so it must not trip the duplicate check.
         // .while/.rept take no variable, so they are deliberately not matched here.
-        const forVarMatch = line.match(/^(\s*\.b?for\s+)([a-zA-Z_][a-zA-Z0-9_]*)\s*=/i);
+        // The loop may itself be labelled ("squarelo .for i = 0, ..."), in which case
+        // that label is a data label for the emitted bytes and is recorded too.
+        const forVarMatch = line.match(
+            /^(\s*)((?:[a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+))?(\.b?for\s+)([a-zA-Z_][a-zA-Z0-9_]*)\s*=/i
+        );
         if (forVarMatch) {
-            const startChar = forVarMatch[1].length;
-            const labelName = forVarMatch[2];
+            const indent = forVarMatch[1].length;
+            const loopLabel = forVarMatch[2];
+
+            // Optional label in front of the loop, e.g. "squarelo .for ..."
+            if (loopLabel) {
+                const loopLabelName = loopLabel.replace(/[\s:]+$/, '');
+                labels.push({
+                    name: normalizeName(loopLabelName),
+                    originalName: loopLabelName,
+                    uri: document.uri,
+                    range: Range.create(
+                        Position.create(lineNum, indent),
+                        Position.create(lineNum, indent + loopLabelName.length)
+                    ),
+                    scopePath: getCurrentScopePath(),
+                    localScope: null,
+                    isLocal: false,
+                    kind: 'data'
+                });
+            }
+
+            const startChar = indent + (loopLabel?.length ?? 0) + forVarMatch[3].length;
+            const labelName = forVarMatch[4];
             const isLocal = labelName.startsWith('_');
 
             labels.push({

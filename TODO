@@ -1,0 +1,128 @@
+Remaining items from the code & test review (2026-08-17)
+https://claude.ai/code/artifact/c24a279f-b66e-4b6f-ab0a-a7c8ba2df0d8
+
+DONE so far: C1-C8 (all correctness defects) - see git log e123fd0..b2e1d57
+STILL OPEN: the server lifecycle (L), missing capabilities (M) and test (T) items below.
+
+Suggested order from the review: T2 + T5 first (CI + corpus test, makes everything
+after it verifiable), then L1, then T1 + L2-L4, then M1.
+
+NOTE on the corpus/T5 idea: "assert zero errors on files that compile standalone"
+is weaker than it sounds - 64tass skips unreferenced .proc bodies, so a file that is
+one big .proc passes trivially while validating nothing. A real corpus test must
+reference the procs or assemble each file through its actual parent.
+
+optional: case-insensitive labels
+
+-----------------------
+
+SERVER LIFECYCLE (all in server.ts, which has no tests)
+
+L1 (High) - configuration changes never reach the server
+	connection.onDidChangeConfiguration cannot fire: vscode-languageclient only
+	sends workspace/didChangeConfiguration if the client sets
+	synchronize.configurationSection or the server dynamically registers for it,
+	and we do neither (clientOptions.synchronize is {} in extension.ts).
+	So changing 64tass.caseSensitive does nothing until the window is reloaded -
+	contradicting the CHANGELOG's "Index automatically rebuilds when setting changes".
+	fix: register DidChangeConfigurationNotification.type in onInitialized when
+	hasConfigurationCapability. While there: that handler also needs to clear include
+	refs and re-publish diagnostics for open documents - today it re-indexes but
+	leaves stale diagnostics on screen.
+
+L2 (Medium) - closing an included file drops it from the index
+	onDidClose calls documentIndex.delete(uri) unconditionally. If that file is
+	.include'd by a still-open document, the parent loses every symbol it provided.
+	includeRefCount already holds what's needed to decide this.
+	fix: only delete when no other root still references the URI.
+
+L3 (Medium) - re-indexing reads includes from disk, discarding unsaved buffers
+	indexDocument always fs.readFileSync's an included file even when it is open with
+	unsaved edits, so editing the parent silently reverts the include's index.
+	fix: reuse getDocumentText (server.ts), which already checks the open buffer first.
+
+L4 (Medium) - diagnostics published only for the document that changed
+	Editing an include never refreshes the parent's diagnostics. No
+	didChangeWatchedFiles registration either, so edits made outside the editor are
+	invisible.
+	fix: revalidate the include graph the changed document participates in; register
+	a file watcher for the handled extensions.
+
+L5 (Low) - no workspace scan on startup
+	Only open documents and their include trees are indexed, so go-to-definition and
+	find-references silently return nothing for symbols in unopened files, with no
+	signal distinguishing "not found" from "not looked at".
+	This is the main remaining source of "Undefined symbol" noise in the corpus.
+	fix: scan workspace folders for the handled extensions on initialize.
+
+-----------------------
+
+DESIGN CALL - symbols in inactive .if branches
+
+	64tass never evaluates inactive branches so the code assembles; the validator has
+	no conditional evaluation and reports the symbols as undefined anyway.
+	Three options, ascending cost: suppress undefined-symbol warnings inside any
+	conditional block; evaluate constant conditions where operands are known at index
+	time; or leave it and document the behaviour.
+
+-----------------------
+
+MISSING CAPABILITIES (ordered by value/effort; first three are nearly free)
+
+M1 - documentSymbol. No outline, no breadcrumbs, no Ctrl+Shift+O. DocumentIndex.labels
+     already carries name, kind, range and scope path - it is a mapping function.
+M2 - workspaceSymbol (Ctrl+T). Blocked on L5 being useful.
+M3 - prepareRename. DONE as part of the C8 fix (bfa4fd8).
+M4 - signatureHelp for macro/function calls; parametersAtScope is already populated.
+M5 - definition on .binclude / .binary paths (onDefinition handles .include only,
+     while completions.ts already covers all three).
+M6 - documentHighlight (occurrences of the symbol under the cursor).
+M7 - semantic tokens, to disambiguate what the TextMate grammar cannot.
+M8 - no debounce on validation: every keystroke re-indexes the whole include tree
+     and runs a full validation pass.
+
+-----------------------
+
+TEST SUITE
+
+T1  - server.ts has zero tests, and 5 of the 13 defects lived there. computeFoldingRanges
+      in particular should move to its own module so folding is testable at all
+      (the C6 fix touched the folding path and could NOT be covered by a test).
+T2  - nothing runs the tests in CI. release.yml fires only on v* tags and never
+      invokes yarn test or yarn typecheck. Highest-value single addition.
+T3  - the release workflow runs npm install against a yarn.lock, so the lockfile is
+      ignored. Either commit package-lock.json or use yarn install --frozen-lockfile.
+T4  - integration tests vanish silently off this machine: TASS_PATH is hardcoded to
+      /home/db/bin/64tass and describe.skipIf turns its absence into a green run.
+      Make it env-overridable and hard-fail under a REQUIRE_TASS flag.
+T5  - no false-positive corpus test (see the NOTE at the top about why the obvious
+      version of this is misleading).
+T6  - case sensitivity is never verified against the compiler; compile() takes
+      extraFlags but -C is never passed anywhere.
+T7  - buildIndex() cannot build a mixed-sensitivity index: it reads caseSensitive from
+      args[0] and applies it to every document (test/helpers/doc.ts), so the
+      per-document pragma cascade cannot be tested across documents.
+T8  - rename tests do not cover renaming across files, the comment-edit annotation
+      path (needsConfirmation), or rejection of invalid identifiers.
+T9  - no assertions on diagnostic ranges in most tests. operandStart is computed with
+      code.indexOf(operand), which finds the first occurrence, not the operand's
+      actual position - an off-by-column risk.
+T10 - performance.test.ts is a benchmark in the unit directory, running and appending
+      to performance-results.jsonl on every yarn test. (Left as-is deliberately.)
+T11 - no coverage tooling (@vitest/coverage-v8 not installed).
+T12 - yarn lint is broken: the script is declared but ESLint is not a dependency and
+      no config file exists, so it exits 2.
+
+-----------------------
+
+DOCS & HYGIENE
+
+D1 - completions are undocumented: directive, opcode, symbol, parameter and file-path
+     completion ship in completions.ts but appear in neither README nor CHANGELOG.
+D2 - CHANGELOG stops at 0.8.0 while package.json reads 0.8.2. Nothing since is
+     documented anywhere a user would look (case-sensitivity pragma, completions,
+     and the whole C1-C8 series).
+D3 - the CHANGELOG states something untrue: "Index automatically rebuilds when setting
+     changes" (0.8.0). Per L1 it does not.
+D4 - tsconfig.json includes only src/**/*, so yarn typecheck never type-checks the
+     test suite; vitest transpiles without checking, so type errors in tests go unnoticed.
