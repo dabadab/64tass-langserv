@@ -440,20 +440,29 @@ describe('case sensitivity', () => {
         expect(exact).toBeDefined();
     });
 
-    it('applies case sensitivity to dotted references', () => {
-        const source = 'Outer .proc\n    Inner .proc\n        Value = 42\n    .pend\n.pend\nmain\n        lda #Outer.Inner.Value';
-        const { documentIndex, docs } = buildIndex({ source });
+    // These two must build the index with the same case sensitivity they look up
+    // with: a case-insensitive index stores names lowercased, so probing it with a
+    // case-sensitive lookup (or vice versa) tests nothing meaningful.
+    const DOTTED_SOURCE = 'Outer .proc\n    Inner .proc\n        Value = 42\n    .pend\n.pend\nmain\n        lda #Outer.Inner.Value';
 
-        // Case-insensitive should work
-        const insensitive = findSymbolInfo('outer.inner.value', docs[0].uri, 6, documentIndex, false);
-        expect(insensitive).toBeDefined();
+    it('resolves dotted references case-insensitively when case-insensitive', () => {
+        const { documentIndex, docs } = buildIndex({ source: DOTTED_SOURCE });
 
-        // Case-sensitive should not match different case
-        const sensitive = findSymbolInfo('outer.inner.value', docs[0].uri, 6, documentIndex, true);
-        expect(sensitive).toBeNull();
+        // Any casing resolves against a case-insensitive index
+        expect(findSymbolInfo('outer.inner.value', docs[0].uri, 6, documentIndex, false)).not.toBeNull();
+        expect(findSymbolInfo('OUTER.INNER.VALUE', docs[0].uri, 6, documentIndex, false)).not.toBeNull();
+        expect(findSymbolInfo('Outer.Inner.Value', docs[0].uri, 6, documentIndex, false)).not.toBeNull();
+    });
 
-        // Exact case should match
-        const exact = findSymbolInfo('Outer.Inner.Value', docs[0].uri, 6, documentIndex, true);
-        expect(exact).toBeDefined();
+    it('applies case sensitivity to dotted references when case-sensitive', () => {
+        const { documentIndex, docs } = buildIndex({ source: DOTTED_SOURCE, caseSensitive: true });
+
+        // Exact case matches, including the scope path segments
+        expect(findSymbolInfo('Outer.Inner.Value', docs[0].uri, 6, documentIndex, true)).not.toBeNull();
+
+        // Wrong case does not - in the name or in any scope segment
+        expect(findSymbolInfo('outer.inner.value', docs[0].uri, 6, documentIndex, true)).toBeNull();
+        expect(findSymbolInfo('Outer.Inner.value', docs[0].uri, 6, documentIndex, true)).toBeNull();
+        expect(findSymbolInfo('outer.Inner.Value', docs[0].uri, 6, documentIndex, true)).toBeNull();
     });
 });

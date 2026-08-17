@@ -133,6 +133,73 @@ describe('parseDocument - scope tracking', () => {
         expect(innerScope?.scopePath).toBe('myproc');
     });
 
+    it('parses an indented named scope opener', () => {
+        const index = parse('    myproc .proc\n        nop\n    .pend');
+        expect(index.labels).toHaveLength(1);
+        expect(index.labels[0].name).toBe('myproc');
+        // Range must start at the label, not at column 0
+        expect(index.labels[0].range.start.character).toBe(4);
+        expect(index.labels[0].range.end.character).toBe(4 + 'myproc'.length);
+        expect(index.scopeAtLine.get(1)?.scopePath).toBe('myproc');
+    });
+
+    it('parses a nested indented scope inside a .proc', () => {
+        // Verified against the real assembler: this compiles cleanly
+        const index = parse([
+            'outer   .proc',
+            '    inner .proc',
+            '        val = 5',
+            '    .pend',
+            '.pend'
+        ].join('\n'));
+
+        const inner = index.labels.find(l => l.name === 'inner');
+        expect(inner).toBeDefined();
+        expect(inner!.scopePath).toBe('outer');
+        expect(inner!.kind).toBe('proc');
+
+        // The nested scope's contents belong to it, not to the parent
+        const val = index.labels.find(l => l.name === 'val');
+        expect(val).toBeDefined();
+        expect(val!.scopePath).toBe('outer.inner');
+    });
+
+    it('parses a tab-indented named scope opener', () => {
+        const index = parse('outer\t.proc\n\tblk .block\n\t\tbval = 7\n\t.bend\n.pend');
+        const blk = index.labels.find(l => l.name === 'blk');
+        expect(blk).toBeDefined();
+        expect(blk!.scopePath).toBe('outer');
+        expect(index.labels.find(l => l.name === 'bval')!.scopePath).toBe('outer.blk');
+    });
+
+    it('parses a scope opener with a colon after the label', () => {
+        // Verified against the real assembler: all of these compile
+        for (const source of ['outer: .proc\n    val = 5\n.pend', 'outer:  .proc\n    val = 5\n.pend', 'outer:.proc\n    val = 5\n.pend']) {
+            const index = parse(source);
+            const outer = index.labels.find(l => l.name === 'outer');
+            expect(outer, source).toBeDefined();
+            expect(outer!.kind, source).toBe('proc');
+            expect(index.labels.find(l => l.name === 'val')!.scopePath, source).toBe('outer');
+        }
+    });
+
+    it('parses an indented colon scope opener with parameters', () => {
+        const index = parse('    mac: .macro a, b\n        nop\n    .endm');
+        const mac = index.labels.find(l => l.name === 'mac');
+        expect(mac).toBeDefined();
+        expect(mac!.kind).toBe('macro');
+        expect(mac!.range.start.character).toBe(4);
+        // The colon must not be swallowed into the parameter list
+        expect(index.parametersAtScope.get('mac')).toEqual(['a', 'b']);
+    });
+
+    it('does not mistake a dotted reference for a scope opener', () => {
+        // "outer.proc" is a qualified symbol reference, not "outer" opening a .proc
+        const index = parse('outer.proc\n        nop');
+        expect(index.labels.find(l => l.name === 'outer' && l.kind === 'proc')).toBeUndefined();
+        expect(index.scopeAtLine.get(1)?.scopePath).toBeNull();
+    });
+
     it('parses named .block scope', () => {
         const index = parse('myblock .block\n        nop\n.bend');
         expect(index.labels[0].name).toBe('myblock');

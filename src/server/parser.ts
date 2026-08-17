@@ -112,14 +112,21 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
 
         // Check for scope-opening directives with labels: "name .proc", "name .block", etc.
+        // Allow leading indentation - 64tass accepts an indented named scope opener
+        // (e.g. a nested "    inner .proc"), same as the data/macro-call label branches below.
+        // The label may also be followed by a colon ("outer: .proc", even "outer:.proc").
+        // The separator is deliberately "whitespace OR colon" rather than an optional
+        // colon plus optional whitespace: allowing neither would make a plain dotted
+        // reference like "outer.proc" parse as label "outer" opening a .proc scope.
         for (const [open] of Object.entries(SCOPE_OPENERS)) {
             // Safe: directive name from static constant (SCOPE_OPENERS)
-            const openPattern = new RegExp(`^([a-zA-Z][a-zA-Z0-9_]*)\\s+\\${open}\\b\\s*(.*)`, 'i');
+            const openPattern = new RegExp(`^(\\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\\s*:\\s*|\\s+)\\${open}\\b\\s*(.*)`, 'i');
             const match = line.match(openPattern);
             if (match) {
-                const labelName = match[1];
+                const startChar = match[1].length;
+                const labelName = match[2];
                 const currentPath = getCurrentScopePath();
-                const paramsStr = match[2] ? stripComment(match[2]).trim() : '';
+                const paramsStr = match[3] ? stripComment(match[3]).trim() : '';
                 const comment = getBlockComment(lines, lineNum);
 
                 labels.push({
@@ -127,8 +134,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                     originalName: labelName,
                     uri: document.uri,
                     range: Range.create(
-                        Position.create(lineNum, 0),
-                        Position.create(lineNum, labelName.length)
+                        Position.create(lineNum, startChar),
+                        Position.create(lineNum, startChar + labelName.length)
                     ),
                     scopePath: currentPath,
                     localScope: null,

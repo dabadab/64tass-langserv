@@ -34,3 +34,7 @@
 {"timestamp":"2026-08-16T23:20:26.228Z","implementation":"CURRENT","iterations":4000,"totalMs":23.181808000000046,"avgMs":0.005795452000000012}
 {"timestamp":"2026-08-16T23:22:24.947Z","implementation":"CURRENT","iterations":4000,"totalMs":20.830332999999996,"avgMs":0.005207583249999999}
 {"timestamp":"2026-08-16T23:23:33.020Z","implementation":"CURRENT","iterations":4000,"totalMs":22.27293999999995,"avgMs":0.005568234999999987}
+{"timestamp":"2026-08-16T23:27:42.666Z","implementation":"CURRENT","iterations":4000,"totalMs":20.588861000000065,"avgMs":0.0051472152500000165}
+{"timestamp":"2026-08-17T18:46:41.769Z","implementation":"CURRENT","iterations":4000,"totalMs":22.246079999999893,"avgMs":0.0055615199999999735}
+{"timestamp":"2026-08-17T18:47:45.669Z","implementation":"CURRENT","iterations":4000,"totalMs":29.348574999999983,"avgMs":0.007337143749999995}
+{"timestamp":"2026-08-17T18:51:44.195Z","implementation":"CURRENT","iterations":4000,"totalMs":22.862649000000033,"avgMs":0.005715662250000008}
