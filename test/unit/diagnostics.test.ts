@@ -397,3 +397,32 @@ describe('anonymous label diagnostics', () => {
         expect(anonWarnings).toHaveLength(0);
     });
 });
+
+describe('loop variables', () => {
+    it('does not flag the .for loop variable as undefined', () => {
+        const diags = warnings('        .for i = 0, i < 13, i = i + 1\n        .byte i\n        .next');
+        expect(diags.filter(d => d.message.includes("'i'"))).toHaveLength(0);
+    });
+
+    it('does not flag a loop variable used in an expression', () => {
+        const diags = warnings([
+            'colortab .byte 1, 2, 3',
+            'screen = $0400',
+            '        .for i = 0, i < 13, i = i + 1',
+            '        lda colortab + 13 - i,y',
+            '        sta screen + i * 40,x',
+            '        .next'
+        ].join('\n'));
+        expect(diags.filter(d => d.message.includes("'i'"))).toHaveLength(0);
+    });
+
+    it('does not report the same loop variable in two loops as a duplicate', () => {
+        const diags = errors([
+            '        .for i = 0, i < 2, i = i + 1',
+            '        .next',
+            '        .for i = 0, i < 2, i = i + 1',
+            '        .next'
+        ].join('\n'));
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+});

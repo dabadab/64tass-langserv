@@ -586,3 +586,39 @@ describe('parseDocument - anonymous labels', () => {
         expect(label).toBeDefined();
     });
 });
+
+describe('parseDocument - loop variables', () => {
+    it('indexes the .for loop variable', () => {
+        const index = parse('        .for i = 0, i < 13, i = i + 1\n        .byte i\n        .next');
+        const i = index.labels.find(l => l.name === 'i');
+        expect(i).toBeDefined();
+        expect(i!.kind).toBe('var');
+        // Range points at the variable, not the directive
+        expect(i!.range.start.character).toBe('        .for '.length);
+    });
+
+    it('indexes the .bfor loop variable', () => {
+        const index = parse('        .bfor n = 0, n < 3, n = n + 1\n        .next');
+        expect(index.labels.find(l => l.name === 'n')?.kind).toBe('var');
+    });
+
+    it('handles tight spacing in the .for header', () => {
+        const index = parse('\t.for  n=0 , n<3 , n=n+1\n\t.next');
+        expect(index.labels.find(l => l.name === 'n')).toBeDefined();
+    });
+
+    it('handles an expression initializer', () => {
+        const index = parse('w = 4\n        .for i = w / 2, i < 3, i = i + 1\n        .next');
+        expect(index.labels.find(l => l.name === 'i')).toBeDefined();
+    });
+
+    it('does not index a variable for .while or .rept', () => {
+        expect(parse('        .while n < 3\n        .next').labels).toHaveLength(0);
+        expect(parse('        .rept 3\n        .next').labels).toHaveLength(0);
+    });
+
+    it('records the loop variable inside the enclosing scope', () => {
+        const index = parse('p .proc\n        .for i = 0, i < 3, i = i + 1\n        .next\n.pend');
+        expect(index.labels.find(l => l.name === 'i')?.scopePath).toBe('p');
+    });
+});

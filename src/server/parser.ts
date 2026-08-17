@@ -238,6 +238,32 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
             continue;
         }
 
+        // Loop variable of ".for i = 0, i < 13, i = i + 1" (and .bfor). Recorded as
+        // a re-assignable 'var': the assembler keeps it defined after .next and lets
+        // a later loop reuse the same name, so it must not trip the duplicate check.
+        // .while/.rept take no variable, so they are deliberately not matched here.
+        const forVarMatch = line.match(/^(\s*\.b?for\s+)([a-zA-Z_][a-zA-Z0-9_]*)\s*=/i);
+        if (forVarMatch) {
+            const startChar = forVarMatch[1].length;
+            const labelName = forVarMatch[2];
+            const isLocal = labelName.startsWith('_');
+
+            labels.push({
+                name: normalizeName(labelName),
+                originalName: labelName,
+                uri: document.uri,
+                range: Range.create(
+                    Position.create(lineNum, startChar),
+                    Position.create(lineNum, startChar + labelName.length)
+                ),
+                scopePath: getCurrentScopePath(),
+                localScope: isLocal ? currentLocalScope : null,
+                isLocal,
+                kind: 'var'
+            });
+            continue;
+        }
+
         // Re-assignable variable: "v .var 1". Unlike "=" constants these may be
         // redefined (the normal way to use them, e.g. an accumulator in a .for
         // loop), so they are tagged 'var' and exempted from the duplicate check.
