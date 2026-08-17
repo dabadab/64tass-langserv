@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { WorkspaceEdit } from 'vscode-languageserver/node';
-import { computeRenameEdits, findSymbolInfo } from '../../src/server/symbols';
+import { computeRenameEdits, findSymbolInfo, isRenameable } from '../../src/server/symbols';
 import { buildIndex } from '../helpers/doc';
 
 // Helper: build a getDocumentText function backed by the (immutable) source docs.
@@ -9,8 +9,8 @@ function textLookup(docs: { uri: string; getText(): string }[]) {
     return (uri: string) => map.get(uri) ?? null;
 }
 
-function codeChanges(edit: WorkspaceEdit, uri: string) {
-    return edit.changes?.[uri] ?? [];
+function codeChanges(edit: WorkspaceEdit | null, uri: string) {
+    return edit?.changes?.[uri] ?? [];
 }
 
 describe('computeRenameEdits - .proc scope rename (regression for HI/LO/random.init bug)', () => {
@@ -141,5 +141,52 @@ describe('computeRenameEdits - per-document case sensitivity', () => {
 
         expect(edits).toHaveLength(2); // definition + the jsr reference
         expect(edits.every(e => e.newText === 'Element')).toBe(true);
+    });
+});
+
+describe('computeRenameEdits - anonymous labels', () => {
+    // Renaming an anonymous label used to rewrite its definition while leaving
+    // every "bne -" pointing at nothing, silently breaking the file.
+    const source = 'main\n-\tinx\n\tbne -\n\tbne -';
+
+    it('refuses to rename a backward anonymous label', () => {
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///anon.asm' });
+        const getText = textLookup(docs);
+
+        const symbol = findSymbolInfo('-', docs[0].uri, 2, documentIndex);
+        expect(symbol).not.toBeNull();
+        expect(symbol!.isAnonymous).toBe(true);
+
+        expect(computeRenameEdits(symbol!, 'newname', documentIndex, getText, false)).toBeNull();
+    });
+
+    it('refuses to rename a forward anonymous label', () => {
+        const fwd = 'main\n\tbcc +\n+\tinx';
+        const { documentIndex, docs } = buildIndex({ source: fwd, uri: 'file:///anon2.asm' });
+        const getText = textLookup(docs);
+
+        const symbol = findSymbolInfo('+', docs[0].uri, 1, documentIndex);
+        expect(symbol).not.toBeNull();
+        expect(computeRenameEdits(symbol!, 'newname', documentIndex, getText, false)).toBeNull();
+    });
+
+    it('isRenameable rejects anonymous labels but accepts named ones', () => {
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///anon3.asm' });
+
+        const anon = findSymbolInfo('-', docs[0].uri, 2, documentIndex);
+        expect(isRenameable(anon!)).toBe(false);
+
+        const named = findSymbolInfo('main', docs[0].uri, 2, documentIndex);
+        expect(isRenameable(named!)).toBe(true);
+    });
+
+    it('still renames a normal label in a file that contains anonymous labels', () => {
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///anon4.asm' });
+        const getText = textLookup(docs);
+
+        const symbol = findSymbolInfo('main', docs[0].uri, 0, documentIndex);
+        const edit = computeRenameEdits(symbol!, 'entry', documentIndex, getText, false);
+        expect(edit).not.toBeNull();
+        expect(codeChanges(edit, docs[0].uri)).toHaveLength(1);
     });
 });

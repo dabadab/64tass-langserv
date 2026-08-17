@@ -19,7 +19,10 @@ import {
     RenameParams,
     WorkspaceEdit,
     CompletionParams,
-    CompletionItem
+    CompletionItem,
+    PrepareRenameParams,
+    ResponseError,
+    ErrorCodes
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -31,7 +34,7 @@ import { DocumentIndex } from './types';
 import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
 import { parseLineStructure, parseNumericValue, formatNumericValue, escapeRegex, detectCaseSensitivityPragma } from './utils';
 import { parseDocument } from './parser';
-import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits } from './symbols';
+import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits, isRenameable } from './symbols';
 import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
 
@@ -196,7 +199,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             textDocumentSync: TextDocumentSyncKind.Incremental,
             definitionProvider: true,
             referencesProvider: true,
-            renameProvider: true,
+            // prepareProvider lets the client ask whether a rename is valid before
+            // prompting for the new name (used to refuse anonymous labels)
+            renameProvider: { prepareProvider: true },
             foldingRangeProvider: true,
             hoverProvider: true,
             completionProvider: {
@@ -465,18 +470,55 @@ connection.onReferences((params: ReferenceParams): Location[] => {
     return references;
 });
 
-connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
-    const document = documents.get(params.textDocument.uri);
+// Resolve the symbol under the cursor for a rename request, or null if there
+// isn't one. Shared by prepareRename and the rename itself so both agree on
+// what is renameable.
+function resolveRenameTarget(uri: string, position: Position) {
+    const document = documents.get(uri);
     if (!document) return null;
 
-    const word = getWordAtPosition(document, params.position);
+    const word = getWordAtPosition(document, position);
     if (!word) return null;
 
-    // Find the symbol definition
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
+    const symbol = findSymbolInfo(word, uri, position.line, documentIndex, effectiveCaseSensitive(uri));
     if (!symbol) return null;
 
-    return computeRenameEdits(symbol, params.newName, documentIndex, getDocumentText, effectiveCaseSensitive(symbol.uri));
+    return { document, word, symbol };
+}
+
+// Let the editor reject an invalid rename target up front, with a reason,
+// instead of failing generically after the user has typed a new name.
+connection.onPrepareRename((params: PrepareRenameParams): Range | ResponseError<void> => {
+    const target = resolveRenameTarget(params.textDocument.uri, params.position);
+    if (!target) {
+        return new ResponseError(ErrorCodes.InvalidRequest, 'You cannot rename this element.');
+    }
+    if (!isRenameable(target.symbol)) {
+        return new ResponseError(
+            ErrorCodes.InvalidRequest,
+            'Anonymous labels (+ / -) cannot be renamed - they are referenced by direction and distance, not by name.'
+        );
+    }
+
+    // Range of the identifier under the cursor, so the editor pre-fills it
+    const line = params.position.line;
+    const text = target.document.getText().split('\n')[line] ?? '';
+    const start = text.indexOf(target.word, Math.max(0, params.position.character - target.word.length));
+    const from = start >= 0 ? start : params.position.character;
+    return Range.create(Position.create(line, from), Position.create(line, from + target.word.length));
+});
+
+connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
+    const target = resolveRenameTarget(params.textDocument.uri, params.position);
+    if (!target) return null;
+
+    return computeRenameEdits(
+        target.symbol,
+        params.newName,
+        documentIndex,
+        getDocumentText,
+        effectiveCaseSensitive(target.symbol.uri)
+    );
 });
 
 

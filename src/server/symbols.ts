@@ -326,7 +326,19 @@ export function findDefinition(
 }
 
 /**
+ * Whether a symbol can be renamed at all.
+ *
+ * Anonymous labels (+ / -) cannot: they have no name, and references to them are
+ * resolved by direction and distance rather than by text. Renaming one would
+ * rewrite the definition while leaving every "bne -" pointing at nothing.
+ */
+export function isRenameable(symbol: LabelDefinition): boolean {
+    return !symbol.isAnonymous;
+}
+
+/**
  * Compute the workspace edit for renaming a symbol across all indexed documents.
+ * Returns null if the symbol cannot be renamed (see isRenameable).
  *
  * Handles three kinds of references for non-local symbols:
  *  - bare occurrences of the name
@@ -348,7 +360,11 @@ export function computeRenameEdits(
     documentIndex: Map<string, DocumentIndex>,
     getDocumentText: (uri: string) => string | null,
     caseSensitive = false
-): WorkspaceEdit {
+): WorkspaceEdit | null {
+    // Refused here rather than only in the LSP handler, so no caller can produce
+    // an edit that silently corrupts the source.
+    if (!isRenameable(symbol)) return null;
+
     const codeEdits: Map<string, TextEdit[]> = new Map();
     const commentEdits: Map<string, AnnotatedTextEdit[]> = new Map();
     const addedEdits = new Set<string>();
