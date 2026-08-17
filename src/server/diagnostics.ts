@@ -62,7 +62,10 @@ export function validateDocument(
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
         const { code } = parseLineStructure(line);
-        const codeLower = code.toLowerCase();
+        // Blank out string contents before looking for block directives, so a
+        // directive name inside a literal (.text "a .proc b") isn't counted as a
+        // real one. stripStrings preserves offsets, so positions stay correct.
+        const codeLower = stripStrings(code).toLowerCase();
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {

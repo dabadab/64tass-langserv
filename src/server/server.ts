@@ -32,7 +32,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
 import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
-import { parseLineStructure, parseNumericValue, formatNumericValue, escapeRegex, detectCaseSensitivityPragma } from './utils';
+import { parseLineStructure, stripStrings, parseNumericValue, formatNumericValue, escapeRegex, detectCaseSensitivityPragma } from './utils';
 import { parseDocument } from './parser';
 import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits, isRenameable } from './symbols';
 import { validateDocument } from './diagnostics';
@@ -150,7 +150,9 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const { code } = parseLineStructure(lines[lineNum]);
-        const line = code.toLowerCase();
+        // Blank out string contents first, so a directive name inside a literal
+        // (.text "a .proc b") doesn't push a phantom entry onto the fold stack
+        const line = stripStrings(code).toLowerCase();
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {

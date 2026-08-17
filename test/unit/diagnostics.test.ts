@@ -426,3 +426,37 @@ describe('loop variables', () => {
         expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
     });
 });
+
+describe('block directives inside string literals', () => {
+    // ".text "a .proc b"" assembles cleanly; the directive name is just text
+    it('does not open a block for a directive inside a string', () => {
+        const diags = errors('\t.text "text with .proc inside"');
+        expect(diags.filter(d => d.message.includes('Unclosed'))).toHaveLength(0);
+    });
+
+    it('does not close a block for a directive inside a string', () => {
+        const diags = errors('\t.text "close it .pend here"');
+        expect(diags.filter(d => d.message.includes('without matching'))).toHaveLength(0);
+    });
+
+    it('does not open a .macro for a directive inside a string', () => {
+        const diags = errors('\t.text "a .macro b"');
+        expect(diags.filter(d => d.message.includes('Unclosed'))).toHaveLength(0);
+    });
+
+    it('leaves a real block around a string containing a directive name intact', () => {
+        const diags = errors('p .proc\n\t.text "nested .proc word"\n.pend');
+        expect(diags.filter(d => d.message.includes('Unclosed'))).toHaveLength(0);
+        expect(diags.filter(d => d.message.includes('without matching'))).toHaveLength(0);
+    });
+
+    it('still detects a genuinely unclosed block', () => {
+        const diags = errors('p .proc\n\t.text "harmless"');
+        expect(diags.some(d => d.message.includes('Unclosed'))).toBe(true);
+    });
+
+    it('still detects a genuinely unmatched closer', () => {
+        const diags = errors('\t.text "harmless"\n.pend');
+        expect(diags.some(d => d.message.includes('without matching'))).toBe(true);
+    });
+});
