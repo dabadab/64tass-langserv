@@ -238,6 +238,35 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
             continue;
         }
 
+        // Re-assignable variable: "v .var 1". Unlike "=" constants these may be
+        // redefined (the normal way to use them, e.g. an accumulator in a .for
+        // loop), so they are tagged 'var' and exempted from the duplicate check.
+        // Must be tested before the macro-call branch below, which would otherwise
+        // claim ".var" as an ordinary macro invocation and file it as 'data'.
+        const varLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.var\b\s*([^;]*)/i);
+        if (varLabelMatch) {
+            const labelName = varLabelMatch[2];
+            const startChar = varLabelMatch[1].length;
+            const isLocal = labelName.startsWith('_');
+            const value = varLabelMatch[3]?.trim();
+
+            labels.push({
+                name: normalizeName(labelName),
+                originalName: labelName,
+                uri: document.uri,
+                range: Range.create(
+                    Position.create(lineNum, startChar),
+                    Position.create(lineNum, startChar + labelName.length)
+                ),
+                scopePath: getCurrentScopePath(),
+                localScope: isLocal ? currentLocalScope : null,
+                isLocal,
+                kind: 'var',
+                value: value || undefined
+            });
+            continue;
+        }
+
         // Local symbol: starts with underscore
         const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(?::|=|:=|\s|;|$)/);
         if (localMatch) {
@@ -319,6 +348,7 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
             continue;
         }
 
+
         // Labels defined via macro calls (e.g., "label .macro_name args")
         // Track which macro was used so we can validate sub-label references
         // Separated by whitespace or a colon: "label: .macro_name args", even "label:.macro_name"
@@ -349,13 +379,16 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
             continue;
         }
 
-        // Constant assignment
-        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=\s*([^;]+)/);
+        // Constant assignment ("v = 1") or re-assignable variable ("v := 1").
+        // The assembler rejects redefining "=" but allows redefining ":=", so the
+        // two are tagged differently for the duplicate check.
+        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*(:?)=\s*([^;]+)/);
         if (constMatch) {
             const labelName = constMatch[2];
             const startChar = constMatch[1].length;
             const isLocal = labelName.startsWith('_');
-            const value = constMatch[3]?.trim();
+            const isReassignable = constMatch[3] === ':';
+            const value = constMatch[4]?.trim();
 
             labels.push({
                 name: normalizeName(labelName),
@@ -368,7 +401,7 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                 scopePath: getCurrentScopePath(),
                 localScope: isLocal ? currentLocalScope : null,
                 isLocal,
-                kind: 'const',
+                kind: isReassignable ? 'var' : 'const',
                 value: value || undefined
             });
             continue;

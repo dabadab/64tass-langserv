@@ -33,6 +33,42 @@ describe('duplicate label detection', () => {
         expect(dupes).toHaveLength(0);
     });
 
+    // Verified against the assembler: .var and := are re-assignable, "=" is not
+    it('allows .var to be reassigned', () => {
+        const diags = errors('v\t.var 1\nv\t.var 2');
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+
+    it('allows := to be reassigned', () => {
+        const diags = errors('v := 1\nv := 2');
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+
+    it('still flags a redefined = constant', () => {
+        const diags = errors('v = 1\nv = 2');
+        expect(diags.some(d => d.message.includes('Duplicate'))).toBe(true);
+    });
+
+    it('allows a local .var to be reassigned', () => {
+        const diags = errors('main\n_acc\t.var 0\n_acc\t.var 1');
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+
+    it('allows .var reassignment inside a .for loop in a macro', () => {
+        // Reduced from example/azure/_common/sinus.asm, which assembles cleanly
+        const diags = errors([
+            'gensin\t.macro',
+            'last\t.var\t0',
+            '\t.for i = 1, i <= 4, i = i + 1',
+            'cur\t.var\ti * 2',
+            '\t.byte <(cur - last)',
+            'last\t.var cur',
+            '\t.next',
+            '\t.endm'
+        ].join('\n'));
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+
     it('flags duplicate local under same parent', () => {
         const diags = errors('main\n_x = 1\n_x = 2');
         const dupes = diags.filter(d => d.message.includes('Duplicate'));

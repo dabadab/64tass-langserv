@@ -7,6 +7,7 @@ export type LabelKind =
     | 'code'       // plain code label ("start:" or "start lda #1")
     | 'data'       // data-directive label ("table .byte 1,2,3") or a macro-call label
     | 'const'      // constant assignment ("val = $FF") or a local (_name) symbol
+    | 'var'        // re-assignable variable ("v .var 1" or "v := 1") - may be redefined
     | 'proc' | 'block' | 'macro' | 'function' | 'struct' | 'union' | 'namespace'; // scope openers
 
 export interface LabelDefinition {

@@ -134,6 +134,42 @@ describe('parseDocument - label parsing', () => {
         expect(index.labels[0].value).toBe('42');
     });
 
+    it('distinguishes re-assignable variables from constants', () => {
+        // Verified against the assembler: "=" may not be redefined, ":=" and ".var" may
+        expect(parse('val = 42').labels[0].kind).toBe('const');
+        expect(parse('val := 42').labels[0].kind).toBe('var');
+        expect(parse('val\t.var 42').labels[0].kind).toBe('var');
+    });
+
+    it('parses .var definitions', () => {
+        const index = parse('last\t.var\t0');
+        expect(index.labels).toHaveLength(1);
+        expect(index.labels[0].name).toBe('last');
+        expect(index.labels[0].kind).toBe('var');
+        expect(index.labels[0].value).toBe('0');
+    });
+
+    it('parses .var with an expression value and trailing comment', () => {
+        const index = parse('cur\t.var round(a * sin(i)) ; accumulator');
+        expect(index.labels).toHaveLength(1);
+        expect(index.labels[0].kind).toBe('var');
+        expect(index.labels[0].value).toBe('round(a * sin(i))');
+    });
+
+    it('parses a local .var symbol', () => {
+        const index = parse('main\n_acc\t.var 0');
+        const acc = index.labels.find(l => l.name === '_acc');
+        expect(acc).toBeDefined();
+        expect(acc!.kind).toBe('var');
+        expect(acc!.isLocal).toBe(true);
+        expect(acc!.localScope).toBe('main');
+    });
+
+    it('does not treat .var as a macro call', () => {
+        const index = parse('v\t.var 1');
+        expect(index.labelDefinedByMacro.has('v')).toBe(false);
+    });
+
     it('stores name lowercase and preserves originalName', () => {
         const index = parse('MyLabel\n        lda #1');
         expect(index.labels[0].name).toBe('mylabel');

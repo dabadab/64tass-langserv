@@ -37,6 +37,8 @@ export function validateDocument(
     for (const label of index.labels) {
         // Anonymous labels can have multiple instances in the same scope
         if (label.isAnonymous) continue;
+        // Re-assignable variables (.var / :=) are meant to be redefined
+        if (label.kind === 'var') continue;
 
         const key = `${label.scopePath ?? 'global'}:${label.localScope ?? 'none'}:${label.name}`;
         const existing = seenLabels.get(key);

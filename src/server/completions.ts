@@ -18,7 +18,7 @@ import { collectVisibleLabels, collectVisibleParameters } from './symbols';
 // operand (branch/jump target, or the address a data label points at).
 // Macros are invoked as ".name" and functions as "name(...)" - never referenced
 // this way - and struct/union/namespace names aren't addresses either.
-const OPERAND_KINDS = new Set<LabelKind>(['code', 'data', 'const', 'proc', 'block']);
+const OPERAND_KINDS = new Set<LabelKind>(['code', 'data', 'const', 'var', 'proc', 'block']);
 
 // File extensions considered "source" for .include/.binclude completion.
 // .binary can pull in any file (raw data), so it isn't filtered.
