@@ -229,6 +229,37 @@ describe('data directive operator validation', () => {
         expect(opErrors).toHaveLength(0);
     });
 
+    // All of these forms are accepted by the assembler (verified); each used to be
+    // split into two adjacent values and reported as a missing operator.
+    it.each([
+        ['float literal', '        .byte 360.0/4'],
+        ['leading-dot float', '        .byte 1 + .5'],
+        ['trailing-dot float', '        .byte 1. + 1'],
+        ['exponent', '        .byte 1e2'],
+        ['negative exponent', '        .byte 2.5e-3'],
+        ['numbered macro argument', '        .byte \\1 * 2'],
+        ['named macro argument', '        .byte \\name + 1'],
+        ['dotted reference', '        .word tbl.lo'],
+        ['multi-level dotted reference', '        .word scope.sub.val'],
+        ['the sinus.asm expression', '        .byte <\\1 * sin(range(\\2) * rad(360.0/\\2))'],
+    ])('accepts %s', (_name, source) => {
+        const diags = errors(source);
+        const opErrors = diags.filter(d => d.message.includes('operator'));
+        expect(opErrors).toHaveLength(0);
+    });
+
+    // The check must still catch genuinely adjacent values
+    it.each([
+        ['two numbers', '        .byte 1 2'],
+        ['two identifiers', '        .byte a b'],
+        ['number then identifier', '        .byte 1 tbl'],
+        ['two floats', '        .byte 1.5 2.5'],
+        ['two dotted references', '        .word a.b c.d'],
+    ])('still errors on %s', (_name, source) => {
+        const diags = errors(source);
+        expect(diags.some(d => d.message.includes('operator'))).toBe(true);
+    });
+
     it('errors on .text with missing operator between strings', () => {
         const diags = errors('        .text "hello" "world"');
         expect(diags.some(d => d.message.includes('operator'))).toBe(true);

@@ -9,7 +9,8 @@ import {
     parseNumericValue,
     formatNumericValue,
     escapeRegex,
-    detectCaseSensitivityPragma
+    detectCaseSensitivityPragma,
+    tokenizeExpression
 } from '../../src/server/utils';
 
 describe('parseLineStructure', () => {
@@ -384,6 +385,62 @@ describe('escapeRegex', () => {
 
     it('handles empty string', () => {
         expect(escapeRegex('')).toBe('');
+    });
+});
+
+describe('tokenizeExpression', () => {
+    // Compare as "type:text" so both the split points and the classification are pinned
+    const shape = (expr: string) => tokenizeExpression(expr).map(t => `${t.type}:${t.text}`);
+
+    it('tokenizes integers, operators and parens', () => {
+        expect(shape('2*(3+4)')).toEqual([
+            'value:2', 'operator:*', 'paren:(', 'value:3', 'operator:+', 'value:4', 'paren:)'
+        ]);
+    });
+
+    it('tokenizes the numeric bases', () => {
+        expect(shape('$FF, 0xAB, %1010, 0b11, 12')).toEqual([
+            'value:$FF', 'operator:,', 'value:0xAB', 'operator:,',
+            'value:%1010', 'operator:,', 'value:0b11', 'operator:,', 'value:12'
+        ]);
+    });
+
+    it('keeps a float as a single value', () => {
+        expect(shape('360.0')).toEqual(['value:360.0']);
+        expect(shape('.5')).toEqual(['value:.5']);
+        expect(shape('1.')).toEqual(['value:1.']);
+        expect(shape('360.0/4')).toEqual(['value:360.0', 'operator:/', 'value:4']);
+    });
+
+    it('keeps exponent notation as a single value', () => {
+        expect(shape('1e2')).toEqual(['value:1e2']);
+        expect(shape('2.5e-3')).toEqual(['value:2.5e-3']);
+        expect(shape('1E+4')).toEqual(['value:1E+4']);
+    });
+
+    it('keeps a dotted reference as a single value', () => {
+        expect(shape('tbl.lo')).toEqual(['value:tbl.lo']);
+        expect(shape('scope.sub.val')).toEqual(['value:scope.sub.val']);
+    });
+
+    it('tokenizes macro arguments', () => {
+        expect(shape('\\1')).toEqual(['value:\\1']);
+        expect(shape('\\@')).toEqual(['value:\\@']);
+        expect(shape('\\name')).toEqual(['value:\\name']);
+        expect(shape('\\1 * 2')).toEqual(['value:\\1', 'operator:*', 'value:2']);
+    });
+
+    it('treats a string literal as one value', () => {
+        expect(shape('"hello", "wor""ld"')).toEqual(['value:"hello"', 'operator:,', 'value:"wor""ld"']);
+    });
+
+    it('reports adjacent values for a genuinely missing operator', () => {
+        expect(shape('1 2')).toEqual(['value:1', 'value:2']);
+        expect(shape('1.5 2.5')).toEqual(['value:1.5', 'value:2.5']);
+    });
+
+    it('records the start offset of each token', () => {
+        expect(tokenizeExpression('360.0 / x').map(t => t.start)).toEqual([0, 6, 8]);
     });
 });
 

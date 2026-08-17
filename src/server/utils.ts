@@ -173,13 +173,31 @@ export interface Token {
     start: number;
 }
 
+// A single value in an expression. Order matters: the longest/most specific
+// alternatives come first, since the regex takes the first that matches.
+//   - floats before integers, so "360.0" is one value and not 360 / . / 0
+//     (all of "360.0", ".5", "1." and exponents like "1e2" are valid to 64tass)
+//   - dotted identifiers as one value, so a scope-qualified reference like
+//     "tbl.lo" is not read as two values with a missing operator between them
+//   - macro arguments ("\1", "\@", "\name") as values rather than being skipped
+//     as unknown characters
+const VALUE_PATTERN = new RegExp('^(' + [
+    '\\$[0-9a-fA-F]+',                              // $FF
+    '0x[0-9a-fA-F]+',                               // 0xFF
+    '%[01]+',                                       // %1010
+    '0b[01]+',                                      // 0b1010
+    '\\\\(?:@|\\d+|[a-zA-Z_][a-zA-Z0-9_]*)',        // \1, \@, \name
+    '(?:\\d+\\.\\d*|\\.\\d+|\\d+)(?:[eE][+-]?\\d+)?', // 360.0, 1., .5, 1e2, 2.5e-3
+    '[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*' // name, tbl.lo, a.b.c
+].join('|') + ')');
+
 // Tokenize an expression into values, operators, and parentheses
 // Used for validating operator presence between data directive values
 export function tokenizeExpression(expr: string): Token[] {
     const tokens: Token[] = [];
     const operators = /^(,|\+|-|\*|\/|&|\||<<|>>|<|>|\^)/;
     const parens = /^[()]/;
-    const value = /^(\$[0-9a-fA-F]+|0x[0-9a-fA-F]+|%[01]+|0b[01]+|\d+|[a-zA-Z_][a-zA-Z0-9_]*)/;
+    const value = VALUE_PATTERN;
 
     let pos = 0;
     while (pos < expr.length) {

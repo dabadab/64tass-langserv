@@ -57,3 +57,8 @@
 {"timestamp":"2026-08-17T19:35:35.982Z","commit":"0a8ff7a","iterations":4000,"totalMs":21.81440299999997,"avgMs":0.005453600749999993}
 {"timestamp":"2026-08-17T19:35:37.547Z","commit":"0a8ff7a-dirty","iterations":4000,"totalMs":21.68559300000004,"avgMs":0.00542139825000001}
 {"timestamp":"2026-08-17T19:36:15.949Z","commit":"0a8ff7a-dirty","iterations":4000,"totalMs":28.96654799999999,"avgMs":0.007241636999999997}
+{"timestamp":"2026-08-17T19:40:25.430Z","commit":"0141e99-dirty","iterations":4000,"totalMs":23.680821000000037,"avgMs":0.005920205250000009}
+{"timestamp":"2026-08-17T19:41:15.847Z","commit":"0141e99-dirty","iterations":4000,"totalMs":21.934238999999934,"avgMs":0.005483559749999984}
+{"timestamp":"2026-08-17T19:41:27.180Z","commit":"0141e99","iterations":4000,"totalMs":22.557393000000047,"avgMs":0.005639348250000012}
+{"timestamp":"2026-08-17T19:41:28.691Z","commit":"0141e99-dirty","iterations":4000,"totalMs":24.748032999999964,"avgMs":0.006187008249999991}
+{"timestamp":"2026-08-17T19:42:03.646Z","commit":"0141e99-dirty","iterations":4000,"totalMs":28.464093000000048,"avgMs":0.007116023250000012}
