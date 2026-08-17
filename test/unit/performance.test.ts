@@ -4,6 +4,23 @@ import { buildIndex } from '../helpers/doc';
 import { findSymbolInfo } from '../../src/server/symbols';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
+
+// Identifies the code state that produced a measurement, so results in
+// performance-results.jsonl can be correlated with git history to see which
+// commits actually moved the numbers. "-dirty" is appended if src/ has
+// uncommitted changes, since those measurements aren't reproducible from the
+// commit hash alone. Falls back to 'unknown' outside a git checkout.
+function getCommitLabel(): string {
+    const cwd = path.join(__dirname, '..', '..');
+    try {
+        const hash = execSync('git rev-parse --short HEAD', { cwd, encoding: 'utf-8' }).trim();
+        const dirty = execSync('git status --porcelain -- src', { cwd, encoding: 'utf-8' }).trim().length > 0;
+        return dirty ? `${hash}-dirty` : hash;
+    } catch {
+        return 'unknown';
+    }
+}
 
 describe('Performance benchmarks', () => {
     beforeEach(() => {
@@ -34,9 +51,10 @@ describe('Performance benchmarks', () => {
 
         const duration = performance.now() - start;
         const avgMs = duration / (iterations * 4);  // 4 lookups per iteration
+        const commit = getCommitLabel();
 
         console.log('\n=== PERFORMANCE RESULTS ===');
-        console.log(`Implementation: CURRENT`);
+        console.log(`Commit: ${commit}`);
         console.log(`Total lookups: ${iterations * 4}`);
         console.log(`Total time: ${duration.toFixed(2)}ms`);
         console.log(`Average per lookup: ${avgMs.toFixed(4)}ms`);
@@ -45,7 +63,7 @@ describe('Performance benchmarks', () => {
         // Log to file for comparison
         const results = {
             timestamp: new Date().toISOString(),
-            implementation: 'CURRENT',
+            commit,
             iterations: iterations * 4,
             totalMs: duration,
             avgMs
