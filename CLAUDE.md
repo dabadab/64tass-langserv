@@ -62,7 +62,12 @@ cannot be imported from a test.
   so a missing mnemonic means a file indexes to *no labels at all*.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`
 - **Local symbols**: Start with `_`, scoped to the nearest code label above them
-- **Scope resolution**: Searches from current scope up to global
+- **Scope resolution**: Searches from current scope up to global, then any scopes
+  imported by an enclosing `.with`. `.with X` makes X's members visible unqualified
+  but does NOT change where definitions land - a label defined inside a `.with` block
+  belongs to the enclosing scope (verified). So it is recorded per line as
+  `scopeAtLine[n].withScopes` (raw names, resolved at query time since the target may
+  live in another file), never pushed onto the scope stack.
 - **Case sensitivity**: Configurable via `64tass.caseSensitive` setting (equivalent to 64tass `-C` flag)
   - When disabled (default): `label.name` stores lowercase, matches 64tass default behavior
   - When enabled: `label.name` stores original case for exact matching
@@ -111,7 +116,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 688 tests)
+yarn test          # Run all tests (currently 699 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```

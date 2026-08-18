@@ -12,7 +12,7 @@ export type LogFunction = (message: string) => void;
 
 export function parseDocument(document: TextDocument, caseSensitive = false, log?: LogFunction): DocumentIndex {
     const labels: LabelDefinition[] = [];
-    const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }> = new Map();
+    const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null; withScopes: string[] }> = new Map();
     const parametersAtScope: Map<string, string[]> = new Map();
     const macroSubLabels: Map<string, string[]> = new Map();
     const labelDefinedByMacro: Map<string, string> = new Map();
@@ -24,6 +24,9 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
     const scopeStack: { name: string | null; directive: string }[] = [];
     // Current code label for local symbol scoping
     let currentLocalScope: string | null = null;
+    // Scopes imported by enclosing `.with` directives, innermost last. Recorded as
+    // written and resolved at query time, since the target may live in another file.
+    const withScopes: string[] = [];
     // Track macro bodies for extracting sub-labels: { name, startLine }
     let currentMacroCapture: { name: string; startLine: number } | null = null;
 
@@ -64,7 +67,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         // Record scope info for this line
         scopeAtLine.set(lineNum, {
             scopePath: getCurrentScopePath(),
-            localScope: currentLocalScope
+            localScope: currentLocalScope,
+            withScopes: [...withScopes]
         });
 
         // Skip empty lines and comment-only lines
@@ -87,6 +91,29 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
             } catch (e) {
                 log?.(`Failed to resolve .include path '${includePath}': ${e}`);
             }
+        }
+
+        // `.with scope` imports a scope for unqualified lookups until `.endwith`.
+        // Deliberately not pushed onto scopeStack: a label DEFINED inside a .with
+        // block belongs to the enclosing scope, not the imported one (verified).
+        const withMatch = line.match(/(?:^|\s)\.with\s+([a-zA-Z_][a-zA-Z0-9_.]*)/i);
+        if (withMatch) {
+            scopeAtLine.set(lineNum, {
+                scopePath: getCurrentScopePath(),
+                localScope: currentLocalScope,
+                withScopes: [...withScopes]
+            });
+            withScopes.push(normalizeName(withMatch[1]));
+            continue;
+        }
+        if (/(?:^|\s)\.endwith\b/i.test(lineLower)) {
+            withScopes.pop();
+            scopeAtLine.set(lineNum, {
+                scopePath: getCurrentScopePath(),
+                localScope: currentLocalScope,
+                withScopes: [...withScopes]
+            });
+            continue;
         }
 
         // Check for scope-closing directives first
@@ -126,7 +153,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
             // Update scope after closing
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope
+                localScope: currentLocalScope,
+                withScopes: [...withScopes]
             });
             continue;
         }
@@ -184,7 +212,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                 // Update scope for this line after opening
                 scopeAtLine.set(lineNum, {
                     scopePath: getCurrentScopePath(),
-                    localScope: currentLocalScope
+                    localScope: currentLocalScope,
+                    withScopes: [...withScopes]
                 });
                 continue;
             }
@@ -195,7 +224,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
                 scopeStack.push({ name: null, directive: open });
                 scopeAtLine.set(lineNum, {
                     scopePath: getCurrentScopePath(),
-                    localScope: currentLocalScope
+                    localScope: currentLocalScope,
+                    withScopes: [...withScopes]
                 });
             }
         }
@@ -209,7 +239,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
             currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope
+                localScope: currentLocalScope,
+                withScopes: [...withScopes]
             });
 
             labels.push({
@@ -239,7 +270,8 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
             currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope
+                localScope: currentLocalScope,
+                withScopes: [...withScopes]
             });
 
             labels.push({

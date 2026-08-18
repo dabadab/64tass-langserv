@@ -539,3 +539,83 @@ describe('mixed case sensitivity across documents', () => {
         expect(documentIndex.get('file:///b.asm')!.labels[0].name).toBe('Beta');
     });
 });
+
+describe('.with imported scopes', () => {
+    // Verified against the assembler: `.with X` makes X's members visible
+    // unqualified until `.endwith`, without changing where definitions land.
+    const BLOCK = 'scope   .block\nbar     .byte 1\n        .bend\n';
+
+    it('resolves an unqualified member inside the block', () => {
+        const source = BLOCK + '        .with scope\n        lda bar\n        .endwith';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w1.asm' });
+        const found = findSymbolInfo('bar', docs[0].uri, 4, documentIndex);
+        expect(found).not.toBeNull();
+        expect(found!.scopePath).toBe('scope');
+    });
+
+    it('still resolves the qualified form inside the block', () => {
+        const source = BLOCK + '        .with scope\n        lda scope.bar\n        .endwith';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w2.asm' });
+        expect(findSymbolInfo('scope.bar', docs[0].uri, 4, documentIndex)).not.toBeNull();
+    });
+
+    it('does not resolve after .endwith', () => {
+        const source = BLOCK + '        .with scope\n        .endwith\n        lda bar';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w3.asm' });
+        expect(findSymbolInfo('bar', docs[0].uri, 5, documentIndex)).toBeNull();
+    });
+
+    it('does not resolve before the .with', () => {
+        const source = BLOCK + '        lda bar\n        .with scope\n        .endwith';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w4.asm' });
+        expect(findSymbolInfo('bar', docs[0].uri, 3, documentIndex)).toBeNull();
+    });
+
+    it('resolves through nested .with blocks', () => {
+        const source = [
+            'a .block', 'b .block', 'deep .byte 1', '.bend', '.bend',
+            '        .with a', '        .with b', '        lda deep',
+            '        .endwith', '        .endwith'
+        ].join('\n');
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w5.asm' });
+        const found = findSymbolInfo('deep', docs[0].uri, 7, documentIndex);
+        expect(found).not.toBeNull();
+        expect(found!.scopePath).toBe('a.b');
+    });
+
+    it('pops only the innermost scope at .endwith', () => {
+        const source = [
+            'a .block', 'aa .byte 1', '.bend',
+            'b .block', 'bb .byte 2', '.bend',
+            '        .with a', '        .with b',
+            '        .endwith',
+            '        lda aa',   // still inside .with a
+            '        lda bb',   // b was popped
+            '        .endwith'
+        ].join('\n');
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w6.asm' });
+        expect(findSymbolInfo('aa', docs[0].uri, 9, documentIndex)).not.toBeNull();
+        expect(findSymbolInfo('bb', docs[0].uri, 10, documentIndex)).toBeNull();
+    });
+
+    it('works with a .proc as the imported scope', () => {
+        const source = 'p .proc\nbar .byte 1\n.pend\n        .with p\n        lda bar\n        .endwith';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w7.asm' });
+        expect(findSymbolInfo('bar', docs[0].uri, 4, documentIndex)).not.toBeNull();
+    });
+
+    it('a label defined inside a .with belongs to the enclosing scope', () => {
+        // Verified: the assembler resolves it as "newlbl", not "scope.newlbl"
+        const source = BLOCK + '        .with scope\nnewlbl  nop\n        .endwith';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w8.asm' });
+        const label = documentIndex.get(docs[0].uri)!.labels.find(l => l.name === 'newlbl');
+        expect(label).toBeDefined();
+        expect(label!.scopePath).toBeNull();
+    });
+
+    it('still reports a genuinely undefined symbol inside a .with', () => {
+        const source = BLOCK + '        .with scope\n        lda nope\n        .endwith';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w9.asm' });
+        expect(findSymbolInfo('nope', docs[0].uri, 4, documentIndex)).toBeNull();
+    });
+});

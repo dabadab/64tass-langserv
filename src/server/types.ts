@@ -38,7 +38,11 @@ export interface LabelDefinition {
 export interface DocumentIndex {
     labels: LabelDefinition[];
     // Maps line number to { scopePath, localScope }
-    scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null }>;
+    // Per line: the enclosing scope, the code label local symbols belong to, and
+    // any scopes imported by an enclosing `.with` (innermost last). `.with` makes a
+    // scope's members visible unqualified WITHOUT changing where definitions land,
+    // so it is a lookup aid rather than part of scopePath.
+    scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null; withScopes: string[] }>;
     // Maps scope path to list of parameter names (for .function and .macro)
     parametersAtScope: Map<string, string[]>;
     // Maps macro name to list of sub-labels it defines in its body

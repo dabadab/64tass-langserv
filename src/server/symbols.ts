@@ -229,6 +229,16 @@ export function findSymbolInfo(
         }
     }
 
+    // Finally, scopes imported by an enclosing `.with`, innermost first. Resolving
+    // "with.name" reuses the qualified-reference path above, which already matches a
+    // scope by suffix - so `.with b` nested inside `.with a` finds a member of a.b.
+    const imported = lineScope?.withScopes ?? [];
+    for (let i = imported.length - 1; i >= 0; i--) {
+        const viaWith = findSymbolInfo(
+            `${imported[i]}.${lookupWord}`, fromUri, fromLine, documentIndex, caseSensitive);
+        if (viaWith) return viaWith;
+    }
+
     return null;
 }
 
