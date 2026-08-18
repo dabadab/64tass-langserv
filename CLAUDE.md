@@ -85,6 +85,10 @@ cannot be imported from a test.
   branch reported, so the evaluator can suppress but never invent. Supports literals,
   index-resolved symbols, `!` `&&` `||`, `= == != < > <= >=`, arithmetic and parens;
   the program counter `*` and strings are undecidable.
+  `computeBranchPaths`/`areMutuallyExclusive` (same module) record which branch of
+  which chain each line sits in. The duplicate-label check uses those rather than
+  `findDeadLines`: the assembler assembles at most one branch, so two definitions in
+  different branches never collide *even when the condition is undecidable*.
 - **Build-time defines**: a `; 64tass-langserv: define NAME = VALUE` pragma
   (`detectDefinePragmas` in `utils.ts`) mirrors 64tass's `-D` flag and is indexed by
   `parseDocument` as a normal `kind: 'var'` label, so it resolves like any other
@@ -107,7 +111,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 660 tests)
+yarn test          # Run all tests (currently 681 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```

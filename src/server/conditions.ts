@@ -1,6 +1,6 @@
 import { DocumentIndex } from './types';
 import { findSymbolInfo } from './symbols';
-import { parseNumericValue } from './utils';
+import { parseNumericValue, parseLineStructure, stripStrings } from './utils';
 
 /**
  * Result of evaluating a conditional expression.
@@ -190,4 +190,69 @@ class Parser {
         // The value may itself be an expression over other constants
         return evalExpr(symbol.value, { ...this.ctx, seen: new Set([...seen, name]) });
     }
+}
+
+/** One step of a line's position through nested conditionals. */
+export interface BranchStep {
+    /** Identifies the .if/.elsif/.else/.endif chain */
+    chain: number;
+    /** Which branch of that chain: 0 = .if, 1 = first .elsif/.else, ... */
+    branch: number;
+}
+
+/**
+ * Where each line sits within the document's conditional structure.
+ *
+ * Used to tell apart labels that merely *look* duplicated: the assembler
+ * assembles at most one branch of a chain, so two definitions in different
+ * branches never collide - regardless of whether the condition can be decided
+ * statically. A line outside any conditional gets an empty path.
+ */
+export function computeBranchPaths(lines: string[]): Map<number, BranchStep[]> {
+    const paths = new Map<number, BranchStep[]>();
+    const stack: BranchStep[] = [];
+    let nextChain = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+        const code = stripStrings(parseLineStructure(lines[i]).code);
+
+        if (/(?:^|\s)\.(endif|fi)\b/i.test(code)) {
+            stack.pop();
+            paths.set(i, [...stack]);
+            continue;
+        }
+
+        if (/(?:^|\s)\.(if|ifeq|ifne|ifmi|ifpl)\b/i.test(code)) {
+            paths.set(i, [...stack]);
+            stack.push({ chain: nextChain++, branch: 0 });
+            continue;
+        }
+
+        if (/(?:^|\s)\.(elsif|elif|else)\b/i.test(code) && stack.length > 0) {
+            // Replace the frame rather than mutating it: the stored paths share
+            // these step objects, so mutating would retroactively rewrite the
+            // branch recorded for every line already seen in this chain.
+            const top = stack[stack.length - 1];
+            stack[stack.length - 1] = { chain: top.chain, branch: top.branch + 1 };
+            paths.set(i, [...stack]);
+            continue;
+        }
+
+        paths.set(i, [...stack]);
+    }
+
+    return paths;
+}
+
+/**
+ * Whether two lines can never both be assembled, because somewhere they sit in
+ * different branches of the same conditional chain.
+ */
+export function areMutuallyExclusive(a: BranchStep[] = [], b: BranchStep[] = []): boolean {
+    const shared = Math.min(a.length, b.length);
+    for (let i = 0; i < shared; i++) {
+        if (a[i].chain !== b[i].chain) return false; // diverged into unrelated chains
+        if (a[i].branch !== b[i].branch) return true;
+    }
+    return false;
 }

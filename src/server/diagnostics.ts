@@ -17,7 +17,7 @@ import {
 } from './constants';
 import { parseLineStructure, stripStrings, tokenizeExpression } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
-import { evaluateCondition } from './conditions';
+import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
 /**
  * Lines that sit inside a conditional branch which provably cannot be taken.
@@ -107,7 +107,13 @@ export function validateDocument(
     // Check for duplicate labels (same name, same scopePath, same localScope)
     // All names are stored lowercase, so simple comparison works
     // Skip anonymous labels - they're allowed to have multiple instances
-    const seenLabels = new Map<string, LabelDefinition>();
+    //
+    // Definitions in different branches of the same conditional chain are NOT
+    // duplicates: the assembler assembles at most one branch, so they can never
+    // both exist. That holds even when the condition cannot be decided statically,
+    // which is why this uses branch paths rather than findDeadLines.
+    const branchPaths = computeBranchPaths(lines);
+    const seenLabels = new Map<string, LabelDefinition[]>();
     for (const label of index.labels) {
         // Anonymous labels can have multiple instances in the same scope
         if (label.isAnonymous) continue;
@@ -115,16 +121,24 @@ export function validateDocument(
         if (label.kind === 'var') continue;
 
         const key = `${label.scopePath ?? 'global'}:${label.localScope ?? 'none'}:${label.name}`;
-        const existing = seenLabels.get(key);
-        if (existing) {
-            diagnostics.push({
-                severity: DiagnosticSeverity.Error,
-                range: label.range,
-                message: `Duplicate label '${label.originalName}'`,
-                source: '64tass'
-            });
+        const priorDefinitions = seenLabels.get(key);
+
+        if (priorDefinitions) {
+            const path = branchPaths.get(label.range.start.line);
+            const collides = priorDefinitions.some(prior =>
+                !areMutuallyExclusive(path, branchPaths.get(prior.range.start.line)));
+
+            if (collides) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Error,
+                    range: label.range,
+                    message: `Duplicate label '${label.originalName}'`,
+                    source: '64tass'
+                });
+            }
+            priorDefinitions.push(label);
         } else {
-            seenLabels.set(key, label);
+            seenLabels.set(key, [label]);
         }
     }
 

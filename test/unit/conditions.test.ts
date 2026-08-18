@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateCondition } from '../../src/server/conditions';
+import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from '../../src/server/conditions';
 import { buildIndex } from '../helpers/doc';
 
 /** Evaluate `cond` against a document containing `defs` above it. */
@@ -98,5 +98,101 @@ describe('evaluateCondition - undecidable input', () => {
 
     it('returns null for a string comparison', () => {
         expect(evalWith('"a" = "b"')).toBeNull();
+    });
+});
+
+describe('computeBranchPaths', () => {
+    const paths = (src: string) => computeBranchPaths(src.split('\n'));
+
+    it('gives lines outside any conditional an empty path', () => {
+        const p = paths('start\n        nop');
+        expect(p.get(0)).toEqual([]);
+        expect(p.get(1)).toEqual([]);
+    });
+
+    it('numbers the branches of a chain in order', () => {
+        const p = paths([
+            '        .if 1',   // 0
+            'a',               // 1 -> branch 0
+            '        .elsif 1',// 2
+            'b',               // 3 -> branch 1
+            '        .else',   // 4
+            'c',               // 5 -> branch 2
+            '        .endif',  // 6
+            'd'                // 7 -> outside
+        ].join('\n'));
+        expect(p.get(1)![0].branch).toBe(0);
+        expect(p.get(3)![0].branch).toBe(1);
+        expect(p.get(5)![0].branch).toBe(2);
+        expect(p.get(7)).toEqual([]);
+    });
+
+    it('nests paths', () => {
+        const p = paths([
+            '        .if 1',   // 0
+            '        .if 1',   // 1
+            'inner',           // 2
+            '        .endif',  // 3
+            '        .endif'   // 4
+        ].join('\n'));
+        expect(p.get(2)).toHaveLength(2);
+    });
+
+    it('gives separate chains distinct ids', () => {
+        const p = paths([
+            '        .if 1', 'a', '        .endif',
+            '        .if 1', 'b', '        .endif'
+        ].join('\n'));
+        expect(p.get(1)![0].chain).not.toBe(p.get(4)![0].chain);
+    });
+
+    it('ignores a conditional inside a string literal', () => {
+        const p = paths('        .text "a .if b"\nstart');
+        expect(p.get(1)).toEqual([]);
+    });
+});
+
+describe('areMutuallyExclusive', () => {
+    const paths = (src: string) => computeBranchPaths(src.split('\n'));
+
+    it('is false for two lines outside any conditional', () => {
+        expect(areMutuallyExclusive([], [])).toBe(false);
+    });
+
+    it('is true for different branches of one chain', () => {
+        const p = paths('        .if 1\na\n        .else\nb\n        .endif');
+        expect(areMutuallyExclusive(p.get(1), p.get(3))).toBe(true);
+    });
+
+    it('is false within the same branch', () => {
+        const p = paths('        .if 1\na\nb\n        .endif');
+        expect(areMutuallyExclusive(p.get(1), p.get(2))).toBe(false);
+    });
+
+    it('is false for inside versus outside a conditional', () => {
+        // The assembler DOES reject this pair, so they must not be excluded
+        const p = paths('a\n        .if 1\nb\n        .endif');
+        expect(areMutuallyExclusive(p.get(0), p.get(2))).toBe(false);
+    });
+
+    it('is true when an outer chain diverges, even from a nested branch', () => {
+        const p = paths([
+            '        .if 1',   // 0
+            '        .if 1',   // 1
+            'a',               // 2
+            '        .endif',  // 3
+            '        .else',   // 4
+            'b',               // 5
+            '        .endif'   // 6
+        ].join('\n'));
+        expect(areMutuallyExclusive(p.get(2), p.get(5))).toBe(true);
+    });
+
+    it('is false for unrelated chains', () => {
+        const p = paths([
+            '        .if 1', 'a', '        .endif',
+            '        .if 1', 'b', '        .endif'
+        ].join('\n'));
+        expect(areMutuallyExclusive(p.get(1), p.get(4))).toBe(false);
     });
 });

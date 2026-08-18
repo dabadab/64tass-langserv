@@ -651,3 +651,59 @@ describe('undefined macro range', () => {
         expect(d.range.end.character).toBe(source.length);
     });
 });
+
+describe('duplicate labels across conditional branches', () => {
+    // Each case below was checked against the assembler: it accepts definitions in
+    // different branches of a chain, and rejects the rest.
+    it('accepts the same label in .if and .else', () => {
+        const diags = errors('        .if 1\nfoo     nop\n        .else\nfoo     lda #1\n        .endif');
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+
+    it('accepts it even when the condition cannot be decided', () => {
+        // Mutual exclusion holds regardless of whether we can evaluate the flag
+        const diags = errors('        .if unknown_flag\nfoo     nop\n        .else\nfoo     lda #1\n        .endif');
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+
+    it('accepts it across an .if/.elsif/.else chain', () => {
+        const diags = errors([
+            '        .if 0', 'foo     nop',
+            '        .elsif 1', 'foo     lda #1',
+            '        .else', 'foo     iny',
+            '        .endif'
+        ].join('\n'));
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+
+    it('accepts a nested branch versus the outer .else', () => {
+        const diags = errors([
+            '        .if 1', '        .if 1', 'foo     nop', '        .endif',
+            '        .else', 'foo     lda #1', '        .endif'
+        ].join('\n'));
+        expect(diags.filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+
+    // ...and still reports the cases the assembler rejects
+    it('still flags a duplicate within the same branch', () => {
+        const diags = errors('        .if 1\nfoo     nop\nfoo     lda #1\n        .endif');
+        expect(diags.some(d => d.message.includes("Duplicate label 'foo'"))).toBe(true);
+    });
+
+    it('still flags a label defined inside a branch and outside it', () => {
+        const diags = errors('foo     nop\n        .if 1\nfoo     lda #1\n        .endif');
+        expect(diags.some(d => d.message.includes("Duplicate label 'foo'"))).toBe(true);
+    });
+
+    it('still flags duplicates in unrelated conditional chains', () => {
+        const diags = errors([
+            '        .if 1', 'foo     nop', '        .endif',
+            '        .if 1', 'foo     lda #1', '        .endif'
+        ].join('\n'));
+        expect(diags.some(d => d.message.includes("Duplicate label 'foo'"))).toBe(true);
+    });
+
+    it('still flags a plain duplicate with no conditionals at all', () => {
+        expect(errors('foo\nfoo').some(d => d.message.includes('Duplicate'))).toBe(true);
+    });
+});
