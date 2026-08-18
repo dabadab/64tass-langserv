@@ -17,12 +17,11 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: '22'
-          cache: yarn
 
-      # --frozen-lockfile: fail rather than silently resolving new transitive
-      # versions, so CI builds what yarn.lock actually pins
+      # yarn.lock is gitignored in this repo, so there is nothing to cache against
+      # and nothing to freeze: dependencies are resolved fresh on every run.
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Lint
         run: yarn lint
