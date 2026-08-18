@@ -8,10 +8,10 @@ DONE: C1-C8, the .if design call, and the whole L series (L1-L5).
 Suggested order from the review: T2 + T5 first (CI + corpus test, makes everything
 after it verifiable), then L1, then T1 + L2-L4, then M1.
 
-NOTE on the corpus/T5 idea: "assert zero errors on files that compile standalone"
+NOTE (kept for reference): "assert zero errors on files that compile standalone"
 is weaker than it sounds - 64tass skips unreferenced .proc bodies, so a file that is
-one big .proc passes trivially while validating nothing. A real corpus test must
-reference the procs or assemble each file through its actual parent.
+one big .proc passes trivially while validating nothing. The T5 corpus fixtures
+reference every proc so their bodies are genuinely assembled.
 
 optional: case-insensitive labels
 
@@ -128,8 +128,16 @@ T4  - [DONE] TASS_PATH is now env-overridable, a missing binary prints a visible
       skips there (20 tests). Installing 64tass in CI + setting REQUIRE_TASS=1 would
       close that properly - left open deliberately, since it needs a build of the
       assembler in the workflow.
-T5  - no false-positive corpus test (see the NOTE at the top about why the obvious
-      version of this is misleading).
+T5  - [DONE] test/integration/corpus.test.ts over test/fixtures/corpus/*.asm.
+      Deliberately uses TRACKED fixtures, not example/, which is gitignored and so
+      would not exist in CI.
+      Each fixture is verified to assemble (with 64tass, skipped if absent) BEFORE
+      the zero-error assertions - otherwise a fixture could quietly stop compiling
+      and the assertions would prove nothing. Fixtures avoid the unreferenced-.proc
+      trap described in the NOTE at the top: every proc is referenced.
+      Currently 0 errors and 0 warnings; the warning budget is asserted at 0.
+      Verified it has teeth: reverting the C4 float fix and the dead-branch
+      suppression makes it fail.
 T6  - case sensitivity is never verified against the compiler; compile() takes
       extraFlags but -C is never passed anywhere.
 T7  - buildIndex() cannot build a mixed-sensitivity index: it reads caseSensitive from
