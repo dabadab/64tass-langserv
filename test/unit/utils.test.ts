@@ -201,6 +201,28 @@ describe('extractComment', () => {
     it('extracts inline comment', () => {
         expect(extractComment('lda #1 ; load value')).toBe('load value');
     });
+
+    // A ';' inside a string literal is not a comment. Ignoring that turned
+    // `msg .text "a;b"` into the phantom documentation comment `b"`.
+    it('ignores a semicolon inside a double-quoted string', () => {
+        expect(extractComment('msg .text "a;b"')).toBeNull();
+    });
+
+    it('ignores a semicolon inside a single-quoted string', () => {
+        expect(extractComment("msg .text 'x;y'")).toBeNull();
+    });
+
+    it('handles a doubled-quote escape before a semicolon', () => {
+        expect(extractComment('msg .text "a"";"";b"')).toBeNull();
+    });
+
+    it('still finds a real comment after a string containing a semicolon', () => {
+        expect(extractComment('msg .text "a;b" ; real comment')).toBe('real comment');
+    });
+
+    it('still finds a comment after a plain string', () => {
+        expect(extractComment('msg .text "hello" ; greeting')).toBe('greeting');
+    });
 });
 
 describe('getBlockComment', () => {
@@ -243,6 +265,16 @@ describe('getBlockComment', () => {
     it('stops at non-comment line above', () => {
         const lines = ['; c1', 'code', '; c2', 'label'];
         expect(getBlockComment(lines, 3)).toBe('c2');
+    });
+});
+
+describe('getBlockComment - strings', () => {
+    it('does not attach a phantom comment from a semicolon inside a string', () => {
+        expect(getBlockComment(['msg .text "a;b"'], 0)).toBeUndefined();
+    });
+
+    it('still attaches a real trailing comment', () => {
+        expect(getBlockComment(['msg .text "a;b" ; the message'], 0)).toBe('the message');
     });
 });
 

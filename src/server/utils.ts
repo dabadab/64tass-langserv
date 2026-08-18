@@ -78,7 +78,10 @@ export function getCommentStart(line: string): number {
 // Extract comment text from a line (returns the text after ;, preserving indentation)
 // Strips one leading space if present (conventional separator after ;)
 export function extractComment(line: string): string | null {
-    const idx = line.indexOf(';');
+    // parseLineStructure, not indexOf: a ';' inside a string literal is not a
+    // comment, and treating it as one turned `msg .text "a;b"` into the phantom
+    // documentation comment `b"` on hover and in completion.
+    const idx = parseLineStructure(line).commentStart;
     if (idx >= 0) {
         let comment = line.substring(idx + 1).trimEnd();
         // Remove single leading space (conventional "; comment" format)
