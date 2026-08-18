@@ -105,7 +105,10 @@ M2 - [DONE] workspaceSymbol (Ctrl+T), unblocked by L5. findWorkspaceSymbols() in
      "sprite_init"), ranked exact > prefix > substring > subsequence, capped at 500.
      Anonymous labels omitted; a local symbol reports its code label as container.
 M3 - prepareRename. DONE as part of the C8 fix (bfa4fd8).
-M4 - signatureHelp for macro/function calls; parametersAtScope is already populated.
+M4 - [DONE] signatureHelp for macro and function calls, from parametersAtScope.
+     signatureHelp.ts, unit-tested. Handles all three call forms the assembler
+     accepts (verified): "#mac a, b", ".mac a, b", "fn(a, b)" - including a call
+     after a label, nested parens, and commas inside nested calls.
 M5 - definition on .binclude / .binary paths (onDefinition handles .include only,
      while completions.ts already covers all three).
 M6 - documentHighlight (occurrences of the symbol under the cursor).

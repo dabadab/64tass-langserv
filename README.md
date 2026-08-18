@@ -32,6 +32,9 @@ VS Code language support for the [64tass](http://tass64.sourceforge.net/) cross 
 - **Workspace Symbol Search** (Ctrl+T) - Find any symbol across the project by
   fuzzy name, including files you have not opened
 
+- **Signature Help** - Parameter hints while typing a macro or function call
+  (`#mac a, b`, `.mac a, b` and `fn(a, b)`)
+
 - **Code Folding** - Fold blocks like `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif`, etc.
 
 - **Diagnostics** - Real-time error detection:

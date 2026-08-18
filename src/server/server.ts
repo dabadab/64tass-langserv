@@ -30,7 +30,9 @@ import {
     DocumentSymbolParams,
     DocumentSymbol,
     WorkspaceSymbolParams,
-    SymbolInformation
+    SymbolInformation,
+    SignatureHelpParams,
+    SignatureHelp
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -49,6 +51,7 @@ import { IncludeGraph } from './includes';
 import { collectSourceFiles } from './workspace';
 import { buildDocumentSymbols } from './documentSymbols';
 import { findWorkspaceSymbols } from './workspaceSymbols';
+import { getSignatureHelp } from './signatureHelp';
 
 // Get the current text of a document by URI: prefer the open in-memory buffer,
 // fall back to reading the file from disk (for indexed-but-unopened .include files).
@@ -251,6 +254,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             hoverProvider: true,
             documentSymbolProvider: true,
             workspaceSymbolProvider: true,
+            signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },
             completionProvider: {
                 triggerCharacters: ['.', '"', '/']
             }
@@ -446,6 +450,17 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
 
 connection.onWorkspaceSymbol((params: WorkspaceSymbolParams): SymbolInformation[] => {
     return findWorkspaceSymbols(params.query, documentIndex);
+});
+
+connection.onSignatureHelp((params: SignatureHelpParams): SignatureHelp | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return null;
+
+    const linePrefix = document.getText(Range.create(
+        Position.create(params.position.line, 0),
+        params.position
+    ));
+    return getSignatureHelp(linePrefix, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
 });
 
 connection.onCompletion((params: CompletionParams): CompletionItem[] => {
