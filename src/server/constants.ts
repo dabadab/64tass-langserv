@@ -1,17 +1,102 @@
-// 6502 opcodes for detecting code labels (scope boundaries for local symbols)
-export const OPCODES = new Set([
-    // Standard 6502 opcodes
-    'adc', 'and', 'asl', 'bcc', 'bcs', 'beq', 'bit', 'bmi', 'bne', 'bpl',
-    'brk', 'bvc', 'bvs', 'clc', 'cld', 'cli', 'clv', 'cmp', 'cpx', 'cpy',
-    'dec', 'dex', 'dey', 'eor', 'inc', 'inx', 'iny', 'jmp', 'jsr', 'lda',
-    'ldx', 'ldy', 'lsr', 'nop', 'ora', 'pha', 'php', 'pla', 'plp', 'rol',
-    'ror', 'rti', 'rts', 'sbc', 'sec', 'sed', 'sei', 'sta', 'stx', 'sty',
-    'tax', 'tay', 'tsx', 'txa', 'txs', 'tya',
-    // Undocumented 6502 opcodes (as used by 64tass)
-    'ane', 'arr', 'asr', 'dcp', 'isb', 'jam', 'lax', 'lds', 'rla', 'rra',
-    'sax', 'sbx', 'sha', 'shs', 'shx', 'shy', 'slo', 'sre', 'ahx', 'alr',
-    'axs', 'dcm', 'ins', 'isc', 'lae', 'las', 'lxa', 'tas', 'xaa'
+/**
+ * Mnemonics for every CPU 64tass can target, used to recognise "label OPCODE"
+ * lines (and to keep opcodes out of symbol completion and semantic tokens).
+ *
+ * Derived by probing 64tass V1.60.3243 itself with every three-letter
+ * combination under each of its CPU selection flags, rather than transcribed by
+ * hand - the previous list covered only the default target, so a 65816 or 4510
+ * source produced no labels at all and therefore no navigation.
+ *
+ * OPCODES is the union: recognition must not depend on knowing which CPU a file
+ * targets, since a project may set it with .cpu or a command-line flag we cannot
+ * see. The per-CPU breakdown is kept so a future setting could narrow it.
+ */
+// Mnemonics accepted by the default target (--m65xx).
+const OPCODES_BASE = [
+    'adc', 'and', 'asl', 'bcc', 'bcs', 'beq', 'bge', 'bit', 'blt', 'bmi', 'bne', 'bpl', 'brk',
+    'bvc', 'bvs', 'clc', 'cld', 'cli', 'clv', 'cmp', 'cpa', 'cpx', 'cpy', 'dec', 'dex', 'dey',
+    'eor', 'gcc', 'gcs', 'geq', 'gge', 'glt', 'gmi', 'gne', 'gpl', 'gvc', 'gvs', 'inc', 'inx',
+    'iny', 'jmp', 'jsr', 'lda', 'ldr', 'ldx', 'ldy', 'lsr', 'nop', 'ora', 'orr', 'pha', 'php',
+    'pla', 'plp', 'psh', 'pul', 'rol', 'ror', 'rti', 'rts', 'sbc', 'sec', 'sed', 'sei', 'shl',
+    'shr', 'sta', 'str', 'stx', 'sty', 'tax', 'tay', 'tsx', 'txa', 'txs', 'tya'
+];
+
+// Additions per target CPU, relative to the base set above. 64tass supports all of
+// these via its CPU selection flags and the .cpu directive.
+const OPCODES_BY_CPU: Record<string, string[]> = {
+    // CMOS 65C02
+    '65c02': [
+        'bra', 'clr', 'dea', 'gra', 'ina', 'phx', 'phy', 'plx', 'ply', 'stz', 'trb', 'tsb'
+    ],
+    // R65C02
+    'r65c02': [
+        'bbr', 'bbs', 'bra', 'clr', 'dea', 'gra', 'ina', 'phx', 'phy', 'plx', 'ply', 'rmb', 'smb',
+        'stz', 'trb', 'tsb'
+    ],
+    // W65C02
+    'w65c02': [
+        'bbr', 'bbs', 'bra', 'clr', 'dea', 'gra', 'hlt', 'ina', 'phx', 'phy', 'plx', 'ply', 'rmb',
+        'smb', 'stp', 'stz', 'trb', 'tsb', 'wai'
+    ],
+    // CSG 65CE02
+    '65ce02': [
+        'asr', 'asw', 'bbr', 'bbs', 'bra', 'bsr', 'cle', 'cpz', 'dea', 'dew', 'dez', 'gra', 'ina',
+        'inw', 'inz', 'ldz', 'neg', 'phw', 'phx', 'phy', 'phz', 'plx', 'ply', 'plz', 'rlw', 'rmb',
+        'row', 'rtn', 'see', 'smb', 'stz', 'tab', 'tad', 'taz', 'tba', 'tda', 'trb', 'tsb', 'tsy',
+        'tys', 'tza'
+    ],
+    // 65EL02
+    '65el02': [
+        'bra', 'clp', 'clr', 'dea', 'div', 'ent', 'gra', 'hlt', 'ina', 'mmu', 'mul', 'nxa', 'nxt',
+        'pea', 'pei', 'per', 'phd', 'phx', 'phy', 'pld', 'plx', 'ply', 'rea', 'rei', 'rep', 'rer',
+        'rha', 'rhi', 'rhx', 'rhy', 'rla', 'rli', 'rlx', 'rly', 'rsh', 'rul', 'sea', 'sep', 'stp',
+        'stz', 'swa', 'tad', 'tda', 'tix', 'trb', 'trx', 'tsb', 'txi', 'txr', 'txy', 'tyx', 'wai',
+        'xba', 'xce', 'zea'
+    ],
+    // W65C816
+    '65816': [
+        'bra', 'brl', 'clp', 'clr', 'cop', 'csp', 'dea', 'gra', 'hlt', 'ina', 'jml', 'jsl', 'mvn',
+        'mvp', 'pea', 'pei', 'per', 'phb', 'phd', 'phk', 'phx', 'phy', 'plb', 'pld', 'plx', 'ply',
+        'rep', 'rtl', 'sep', 'stp', 'stz', 'swa', 'tad', 'tas', 'tcd', 'tcs', 'tda', 'tdc', 'trb',
+        'tsa', 'tsb', 'tsc', 'txy', 'tyx', 'wai', 'wdm', 'xba', 'xce'
+    ],
+    // 65DTV02
+    '65dtv02': [
+        'alr', 'ane', 'arr', 'asr', 'bra', 'dcm', 'dcp', 'gra', 'ins', 'isb', 'isc', 'lax', 'lxa',
+        'rla', 'rra', 'sac', 'sax', 'sir', 'slo', 'sre', 'xaa'
+    ],
+    // CSG 4510
+    '4510': [
+        'asr', 'asw', 'bbr', 'bbs', 'bra', 'bsr', 'cle', 'cpz', 'dea', 'dew', 'dez', 'eom', 'gra',
+        'ina', 'inw', 'inz', 'ldz', 'map', 'neg', 'phw', 'phx', 'phy', 'phz', 'plx', 'ply', 'plz',
+        'rlw', 'rmb', 'row', 'rtn', 'see', 'smb', 'stz', 'tab', 'tad', 'taz', 'tba', 'tda', 'trb',
+        'tsb', 'tsy', 'tys', 'tza'
+    ],
+    // 45GS02
+    '45gs02': [
+        'adq', 'anq', 'ard', 'asd', 'asr', 'asw', 'bbr', 'bbs', 'bra', 'bsr', 'btq', 'cle', 'cpq',
+        'cpz', 'dea', 'ded', 'deq', 'dew', 'dez', 'eom', 'eoq', 'gra', 'ina', 'ind', 'inq', 'inw',
+        'inz', 'ldq', 'ldz', 'lsd', 'map', 'neg', 'orq', 'phw', 'phx', 'phy', 'phz', 'plx', 'ply',
+        'plz', 'rld', 'rlw', 'rmb', 'row', 'rrd', 'rtn', 'sbq', 'see', 'smb', 'stq', 'stz', 'tab',
+        'tad', 'taz', 'tba', 'tda', 'trb', 'tsb', 'tsy', 'tys', 'tza'
+    ],
+    // NMOS 65xx (-i), which adds the undocumented opcodes
+    '6502': [
+        'ahx', 'alr', 'anc', 'ane', 'arr', 'asr', 'axs', 'dcm', 'dcp', 'ins', 'isb', 'isc', 'jam',
+        'lae', 'las', 'lax', 'lds', 'lxa', 'rla', 'rra', 'sax', 'sbx', 'sha', 'shs', 'shx', 'shy',
+        'slo', 'sre', 'tas', 'xaa'
+    ],
+};
+
+export const OPCODES: ReadonlySet<string> = new Set<string>([
+    ...OPCODES_BASE,
+    ...Object.values(OPCODES_BY_CPU).flat()
 ]);
+
+/** Mnemonics for one CPU target, for a future per-CPU narrowing of OPCODES. */
+export function opcodesForCpu(cpu: string): ReadonlySet<string> {
+    return new Set([...OPCODES_BASE, ...(OPCODES_BY_CPU[cpu.toLowerCase()] ?? [])]);
+}
 
 // Directives that create new scopes (opener -> primary closer)
 export const SCOPE_OPENERS: Record<string, string> = {

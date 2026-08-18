@@ -11,7 +11,7 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │   └── server/
 │       ├── server.ts             # LSP handler registration and capabilities only
 │       ├── types.ts              # Shared interfaces (LabelDefinition, DocumentIndex)
-│       ├── constants.ts          # Opcodes, directives, builtins
+│       ├── constants.ts          # Opcode tables (all 11 CPU targets), directives, builtins
 │       ├── utils.ts              # String/comment/numeric helpers, pragma detection
 │       ├── parser.ts             # parseDocument — label/scope/macro extraction
 │       ├── indexing.ts           # indexDocument — include tree + case-sensitivity cascade
@@ -54,6 +54,12 @@ cannot be imported from a test.
 
 ### Key Concepts
 
+- **CPU targets**: `OPCODES` in `constants.ts` is the UNION of mnemonics across all 11
+  CPUs 64tass can target, derived by probing the assembler itself rather than written
+  by hand. Recognition must not depend on knowing the target, since it can be set by
+  `.cpu` or a command-line flag the server cannot see. `opcodesForCpu()` exposes the
+  per-CPU breakdown for a future narrowing. Label detection gates on `OPCODES.has()`,
+  so a missing mnemonic means a file indexes to *no labels at all*.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`
 - **Local symbols**: Start with `_`, scoped to the nearest code label above them
 - **Scope resolution**: Searches from current scope up to global
@@ -101,7 +107,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 639 tests)
+yarn test          # Run all tests (currently 660 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```

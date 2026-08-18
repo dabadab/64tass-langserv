@@ -672,3 +672,36 @@ describe('parseDocument - define pragma', () => {
         expect(parse('; define linking = 0\nstart').labels.find(l => l.name === 'linking')).toBeUndefined();
     });
 });
+
+describe('parseDocument - non-6502 CPU targets', () => {
+    // The whole extension gates label detection on OPCODES, so an unrecognised
+    // mnemonic meant no labels at all: no navigation, no outline, no references.
+    it('indexes labels in a 65816 source', () => {
+        // Verified against the assembler: this assembles cleanly
+        const index = parse([
+            '        .cpu "65816"',
+            'start   sep #$30',
+            'loop    bra loop',
+            'faraway rtl'
+        ].join('\n'));
+
+        expect(index.labels.map(l => l.name).sort()).toEqual(['faraway', 'loop', 'start']);
+        expect(index.labels.every(l => l.kind === 'code')).toBe(true);
+    });
+
+    it('indexes labels in a 65C02 source', () => {
+        const index = parse('start   stz $0400\nloop    bra loop\ndone    trb $02');
+        expect(index.labels.map(l => l.name).sort()).toEqual(['done', 'loop', 'start']);
+    });
+
+    it('indexes labels in a 4510 / 45GS02 source', () => {
+        const index = parse('start   map\nnext    ldq $1234\nlast    eom');
+        expect(index.labels.map(l => l.name).sort()).toEqual(['last', 'next', 'start']);
+    });
+
+    it('sets the local scope from a non-6502 opcode line', () => {
+        // A code label must still open a local-symbol scope
+        const index = parse('outer   xba\n_local = 1');
+        expect(index.labels.find(l => l.name === '_local')!.localScope).toBe('outer');
+    });
+});

@@ -7,7 +7,8 @@ import {
     FOLDING_PAIRS,
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN,
-    ALL_DIRECTIVES
+    ALL_DIRECTIVES,
+    opcodesForCpu
 } from '../../src/server/constants';
 
 describe('OPCODES', () => {
@@ -128,6 +129,63 @@ describe('ALL_DIRECTIVES', () => {
     it('stores names without a leading dot', () => {
         for (const d of ALL_DIRECTIVES) {
             expect(d.startsWith('.')).toBe(false);
+        }
+    });
+});
+
+describe('OPCODES - CPUs beyond the default target', () => {
+    // 64tass targets 11 CPUs; the table previously held only the default one, so a
+    // 65816 or 4510 source produced no labels and therefore no navigation at all.
+    it.each([
+        ['65C02', ['bra', 'stz', 'trb', 'tsb', 'phx', 'phy', 'plx', 'ply']],
+        ['65816', ['rep', 'sep', 'jsl', 'rtl', 'jml', 'pea', 'pei', 'per', 'brl', 'cop',
+                   'mvn', 'mvp', 'tcd', 'tdc', 'tcs', 'tsc', 'txy', 'tyx', 'xba', 'wdm',
+                   'phb', 'phd', 'phk', 'plb', 'pld', 'xce']],
+        ['65CE02', ['asw', 'bsr', 'cle', 'cpz', 'dew', 'inw', 'ldz', 'neg', 'phz', 'plz', 'tab', 'taz']],
+        ['4510', ['map', 'eom', 'rtn', 'row', 'tys', 'tza']],
+        ['45GS02', ['adq', 'ldq', 'stq', 'deq', 'inq', 'orq', 'sbq', 'cpq']],
+        ['W65C02', ['bbr', 'bbs', 'rmb', 'smb', 'wai', 'stp']],
+        ['65EL02', ['mul', 'div', 'mmu', 'nxt', 'rha', 'swa', 'zea']],
+    ])('includes %s mnemonics', (_cpu, mnemonics) => {
+        for (const m of mnemonics) {
+            expect(OPCODES.has(m), `missing mnemonic: ${m}`).toBe(true);
+        }
+    });
+
+    it('stores every mnemonic lowercase', () => {
+        for (const op of OPCODES) expect(op).toBe(op.toLowerCase());
+    });
+
+    it('still contains the original 6502 and undocumented sets', () => {
+        for (const op of ['lda', 'sta', 'jmp', 'rts', 'nop', 'lax', 'sax', 'dcp', 'slo']) {
+            expect(OPCODES.has(op), op).toBe(true);
+        }
+    });
+});
+
+describe('opcodesForCpu', () => {
+    it('returns the base set plus that CPU\'s additions', () => {
+        const base = opcodesForCpu('unknown-cpu');
+        const c816 = opcodesForCpu('65816');
+        expect(c816.size).toBeGreaterThan(base.size);
+        // base mnemonics are present everywhere
+        expect(base.has('lda')).toBe(true);
+        expect(c816.has('lda')).toBe(true);
+    });
+
+    it('narrows: a 65816 mnemonic is absent from the base target', () => {
+        expect(opcodesForCpu('65816').has('rtl')).toBe(true);
+        expect(opcodesForCpu('unknown-cpu').has('rtl')).toBe(false);
+        expect(opcodesForCpu('65c02').has('rtl')).toBe(false);
+    });
+
+    it('is case-insensitive about the CPU name', () => {
+        expect(opcodesForCpu('65C02').has('stz')).toBe(true);
+    });
+
+    it('never returns more than the union', () => {
+        for (const cpu of ['65c02', '65816', '4510', '45gs02', '65ce02', '65el02', '65dtv02']) {
+            for (const op of opcodesForCpu(cpu)) expect(OPCODES.has(op), `${cpu}: ${op}`).toBe(true);
         }
     });
 });
