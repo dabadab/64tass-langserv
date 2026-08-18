@@ -92,3 +92,5 @@
 {"timestamp":"2026-08-18T06:06:33.669Z","commit":"7378e6d-dirty","iterations":4000,"totalMs":36.49204200000008,"avgMs":0.009123010500000021}
 {"timestamp":"2026-08-18T06:06:53.116Z","commit":"7378e6d-dirty","iterations":4000,"totalMs":27.61695999999995,"avgMs":0.006904239999999987}
 {"timestamp":"2026-08-18T06:08:10.871Z","commit":"1d008e7-dirty","iterations":4000,"totalMs":28.65751499999999,"avgMs":0.007164378749999998}
+{"timestamp":"2026-08-18T06:08:46.533Z","commit":"951ad20-dirty","iterations":4000,"totalMs":23.863947000000053,"avgMs":0.005965986750000013}
+{"timestamp":"2026-08-18T06:09:07.981Z","commit":"951ad20-dirty","iterations":4000,"totalMs":26.277071999999976,"avgMs":0.0065692679999999936}

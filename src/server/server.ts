@@ -23,7 +23,10 @@ import {
     PrepareRenameParams,
     ResponseError,
     ErrorCodes,
-    DidChangeConfigurationNotification
+    DidChangeConfigurationNotification,
+    DidChangeWatchedFilesNotification,
+    FileChangeType,
+    DidChangeWatchedFilesParams
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -78,6 +81,9 @@ let hasConfigurationCapability = false;
 // Distinct from hasConfigurationCapability (workspace/configuration *requests*):
 // without registering for the notification the server is never told about changes.
 let hasDidChangeConfigurationCapability = false;
+// Whether the client can watch files for us (edits made outside the editor:
+// a generated table, a git checkout) and notify the server about them.
+let hasFileWatchCapability = false;
 
 // Tracks which root documents reference each included file (for cleanup)
 const includeGraph = new IncludeGraph();
@@ -186,6 +192,22 @@ function computeFoldingRanges(document: TextDocument): FoldingRange[] {
     return ranges;
 }
 
+/**
+ * Re-publish diagnostics for `uri` and for every open root whose include tree it
+ * participates in. Editing an include changes what its parents can resolve, so
+ * publishing only for the edited document leaves the parents showing stale results.
+ */
+function publishDiagnosticsFor(uri: string): void {
+    for (const affected of includeGraph.affectedRoots(uri)) {
+        const doc = documents.get(affected);
+        if (!doc) continue; // only open documents have diagnostics on screen
+        connection.sendDiagnostics({
+            uri: affected,
+            diagnostics: validateDocument(doc, documentIndex, effectiveCaseSensitive(affected))
+        });
+    }
+}
+
 connection.onInitialize((params: InitializeParams): InitializeResult => {
     const capabilities = params.capabilities;
     hasConfigurationCapability = !!(
@@ -193,6 +215,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     );
     hasDidChangeConfigurationCapability = !!(
         capabilities.workspace && !!capabilities.workspace.didChangeConfiguration?.dynamicRegistration
+    );
+    hasFileWatchCapability = !!(
+        capabilities.workspace && !!capabilities.workspace.didChangeWatchedFiles?.dynamicRegistration
     );
 
     return {
@@ -230,6 +255,14 @@ connection.onInitialized(() => {
     // here. Missing it meant 64tass.caseSensitive changes did nothing until reload.
     if (hasDidChangeConfigurationCapability) {
         connection.client.register(DidChangeConfigurationNotification.type, undefined);
+    }
+
+    // Watch the handled extensions so edits made outside the editor still refresh
+    // the index - without this a regenerated include is invisible until reopened.
+    if (hasFileWatchCapability) {
+        connection.client.register(DidChangeWatchedFilesNotification.type, {
+            watchers: [{ globPattern: '**/*.{asm,s,inc,src}' }]
+        });
     }
 
     if (hasConfigurationCapability) {
@@ -273,10 +306,7 @@ connection.onDidChangeConfiguration(() => {
             indexDocument(doc);
         }
         for (const doc of documents.all()) {
-            connection.sendDiagnostics({
-                uri: doc.uri,
-                diagnostics: validateDocument(doc, documentIndex, effectiveCaseSensitive(doc.uri))
-            });
+            publishDiagnosticsFor(doc.uri);
         }
     });
 });
@@ -534,6 +564,36 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
 
 
 
+connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
+    configReady.then(() => {
+        const touched: string[] = [];
+
+        for (const change of params.changes) {
+            const uri = change.uri;
+            // An open document is the editor's to report; its buffer is authoritative
+            // and onDidChangeContent already handles it.
+            if (documents.get(uri)) continue;
+            if (!documentIndex.has(uri)) continue;
+
+            if (change.type === FileChangeType.Deleted) {
+                clearIncludeRefs(uri);
+                if (!includeGraph.isReferenced(uri)) documentIndex.delete(uri);
+                touched.push(uri);
+                continue;
+            }
+
+            const content = getDocumentText(uri);
+            if (content === null) continue;
+            clearIncludeRefs(uri);
+            indexDocument(TextDocument.create(uri, '64tass', 1, content));
+            touched.push(uri);
+        }
+
+        // Refresh whatever open documents those files feed into
+        for (const uri of new Set(touched)) publishDiagnosticsFor(uri);
+    });
+});
+
 documents.onDidChangeContent(change => {
     // didOpen/didChange can arrive before the initial workspace/configuration
     // round-trip finishes (see configReady above) - wait for it so the very
@@ -545,8 +605,7 @@ documents.onDidChangeContent(change => {
 
         // indexDocument (above) just resolved this document's effective case
         // sensitivity (workspace default, or overridden by a pragma) - use that.
-        const diagnostics = validateDocument(change.document, documentIndex, effectiveCaseSensitive(change.document.uri));
-        connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
+        publishDiagnosticsFor(change.document.uri);
     });
 });
 

@@ -47,12 +47,15 @@ L3 (Medium) - re-indexing reads includes from disk, discarding unsaved buffers  
 	into getDocumentText too. NOT unit-tested - indexDocument still lives in
 	server.ts and would need its dependencies injected to be testable (see T1).
 
-L4 (Medium) - diagnostics published only for the document that changed
+L4 (Medium) - diagnostics published only for the document that changed  [DONE]
 	Editing an include never refreshes the parent's diagnostics. No
 	didChangeWatchedFiles registration either, so edits made outside the editor are
 	invisible.
-	fix: revalidate the include graph the changed document participates in; register
-	a file watcher for the handled extensions.
+	fixed: publishDiagnosticsFor(uri) refreshes every OPEN root whose include tree the
+	document participates in (via IncludeGraph.affectedRoots, which is unit-tested);
+	used by both the edit path and the config-change path. Also registers a
+	didChangeWatchedFiles watcher for **/*.{asm,s,inc,src} so external edits re-index
+	- open documents are skipped there, since their buffer is authoritative.
 
 L5 (Low) - no workspace scan on startup
 	Only open documents and their include trees are indexed, so go-to-definition and
