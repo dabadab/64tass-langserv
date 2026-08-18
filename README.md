@@ -8,10 +8,8 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Syntax highlighting** for opcodes (documented and undocumented), directives,
   numbers, strings and labels.
 - **Semantic highlighting** on top of it, for what the grammar alone cannot tell
-  apart: a builtin directive from a call to your own macro, and a constant from a
-  label, a scope or a macro parameter.
-- **Go to definition** (F12) — labels and symbols, scope-aware (`.proc`, `.block`,
-  `.macro`, `.function`, `.struct`, `.union`, `.namespace`) and across `.include`
+  apart, like a constant from a label
+- **Go to definition** (F12) — labels and symbols, scope-aware and across `.include`
   files. Also opens the file under the cursor in an `.include`, `.binclude` or
   `.binary` path.
 - **Find all references** (Shift+F12), **highlight occurrences** of the symbol
@@ -22,7 +20,7 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Workspace symbol search** (Ctrl+T) by fuzzy name, including files you have
   not opened.
 - **Completion** for directives, opcodes, in-scope symbols, macro and function
-  parameters, and filenames inside `.include` / `.binclude` / `.binary`.
+  parameters, and filenames for `.include` / `.binclude` / `.binary`.
 - **Signature help** while typing a macro or function call — `#mac a, b`,
   `.mac a, b` and `fn(a, b)`.
 - **Hover** showing a symbol's scope, its documentation comment, and its value in
@@ -36,15 +34,12 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 
 ### `64tass.caseSensitive`
 
-Default `false`. Mirrors 64tass's `-C` flag: when off, symbol names match
-case-insensitively; when on, `MyLabel` and `mylabel` are distinct symbols.
+Default `false`. Mirrors 64tass's `-C` flag: when `true`, `MyLabel` and `mylabel` are distinct symbols.
 
 ## Pragmas
 
-Two comment pragmas let a file describe how it is built, for cases the settings
-cannot express. **Both are ordinary comments to 64tass** — they change only how
-this extension reads your code, never what the assembler does, so keep them in
-sync with the flags your build actually passes.
+**They are ordinary comments to 64tass** — they change only how
+this extension reads your code.
 
 ### Case sensitivity
 
@@ -61,38 +56,31 @@ own subtree.
 ### Build-time defines
 
 ```asm
-; 64tass-langserv: define linking = 0
+; 64tass-langserv: define standalone = 0
 ; 64tass-langserv: define below_io = $01
 ```
 
-Mirrors `-D label=value`, for symbols your build supplies on the command line and
-which therefore appear nowhere in the source. Defining them stops false
-"undefined symbol" reports, and — more usefully — lets the extension decide which
-`.if` branches are dead.
+Acts as `-D label=value` for 64tass, for symbols your build supplies on the command line.
+
+Defining them stops false "undefined symbol" / "duplicate symbol" reports, and lets the extension decide which
+`.if` branches are inactive.
 
 ## Conditional blocks
 
-Symbols used in a `.if` branch that provably cannot be taken are not reported as
-undefined, matching the assembler, which never evaluates those branches:
+Symbols used in a `.if` branch that provably cannot be taken are not reported as undefined:
 
 ```asm
-; 64tass-langserv: define linking = 0
+; 64tass-langserv: define include_music = 0
 
-        .if linking = 1
-        jsr link_load_next    ; not reported: this branch is dead
+        .if include_music = 1
+        jsr play_music    ; not reported: this branch is inactive
         .endif
 ```
 
-A branch counts as dead only when its condition can be decided statically —
-numeric literals, symbols with known constant values, `!`, `&&`, `||`, the
-comparisons `=` `==` `!=` `<` `>` `<=` `>=`, arithmetic and parentheses. Anything
-undecidable, such as an unresolvable flag or the program counter `*`, leaves every
-branch reported as usual, so nothing is hidden by guesswork.
-
 ## Known issues
 
-**A colour swatch appears on values like `cpx #250`.** VS Code's own colour
-decorator mistakes a hex-looking immediate operand for a CSS colour. This is
+**A color picker box may appear on values like `cpx #250`.** VS Code's own color
+decorator mistakes a hex-looking immediate operand for a CSS color. This is
 built into VS Code and cannot be suppressed by an extension; turn it off for this
 language in `settings.json`:
 
