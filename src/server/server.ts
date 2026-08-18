@@ -32,7 +32,9 @@ import {
     WorkspaceSymbolParams,
     SymbolInformation,
     SignatureHelpParams,
-    SignatureHelp
+    SignatureHelp,
+    DocumentHighlightParams,
+    DocumentHighlight
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -41,9 +43,12 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
 import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
-import { parseLineStructure, stripStrings, parseNumericValue, formatNumericValue, escapeRegex, detectCaseSensitivityPragma } from './utils';
+import { parseLineStructure, stripStrings, parseNumericValue, formatNumericValue, detectCaseSensitivityPragma } from './utils';
 import { parseDocument } from './parser';
-import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits, isRenameable, isValidSymbolName } from './symbols';
+import {
+    getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits,
+    isRenameable, isValidSymbolName, findReferences, findDocumentHighlights
+} from './symbols';
 import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
@@ -252,6 +257,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             foldingRangeProvider: true,
             hoverProvider: true,
             documentSymbolProvider: true,
+            documentHighlightProvider: true,
             workspaceSymbolProvider: true,
             signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },
             completionProvider: {
@@ -496,106 +502,28 @@ connection.onReferences((params: ReferenceParams): Location[] => {
     const word = getWordAtPosition(document, params.position);
     if (!word) return [];
 
-    // Find the symbol definition to understand its scope
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
+    const uri = params.textDocument.uri;
+    const symbol = findSymbolInfo(word, uri, params.position.line, documentIndex, effectiveCaseSensitive(uri));
     if (!symbol) return [];
 
-    const references: Location[] = [];
+    return findReferences(
+        symbol, documentIndex, getDocumentText,
+        params.context.includeDeclaration, effectiveCaseSensitive(symbol.uri)
+    );
+});
 
-    // Include the definition itself if requested
-    if (params.context.includeDeclaration) {
-        references.push(Location.create(symbol.uri, symbol.range));
-    }
+connection.onDocumentHighlight((params: DocumentHighlightParams): DocumentHighlight[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
 
-    // Search all indexed documents for references
-    for (const [uri, index] of documentIndex) {
-        // Open buffer first, disk otherwise (see getDocumentText)
-        const docContent = getDocumentText(uri);
-        if (docContent === null) continue;
+    const word = getWordAtPosition(document, params.position);
+    if (!word) return [];
 
-        const lines = docContent.split('\n');
+    const uri = params.textDocument.uri;
+    const symbol = findSymbolInfo(word, uri, params.position.line, documentIndex, effectiveCaseSensitive(uri));
+    if (!symbol) return [];
 
-        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-            const line = lines[lineNum];
-            const { code } = parseLineStructure(line);
-
-            // Skip empty lines
-            if (code.trim() === '') continue;
-
-            // Find all occurrences of the symbol name in this line
-            const symbolName = symbol.name;
-            const escapedName = escapeRegex(symbolName);
-
-            // Pattern to match the symbol as a whole word
-            // For local symbols (_name), match with underscore
-            // For regular symbols, match word boundaries
-            // Also match macro calls (.name)
-            const patterns: RegExp[] = [];
-
-            if (symbol.isLocal) {
-                // Safe: symbol name from user file, sanitized via escapeRegex()
-                patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
-            } else {
-                // Safe: symbol name from user file, sanitized via escapeRegex()
-                patterns.push(new RegExp(`\\b${escapedName}\\b`, 'g'));
-                patterns.push(new RegExp(`\\.${escapedName}\\b`, 'g'));
-            }
-
-            for (const pattern of patterns) {
-                let match;
-                while ((match = pattern.exec(code)) !== null) {
-                    const startCol = match.index;
-                    const matchText = match[0];
-
-                    // Skip if this is the definition itself
-                    if (uri === symbol.uri && lineNum === symbol.range.start.line &&
-                        startCol === symbol.range.start.character) {
-                        continue;
-                    }
-
-                    // Get scope context for this line
-                    const lineScope = index.scopeAtLine.get(lineNum);
-                    const lineScopePath = lineScope?.scopePath ?? null;
-                    const lineLocalScope = lineScope?.localScope ?? null;
-
-                    // For local symbols, must be in same scope and local scope
-                    if (symbol.isLocal) {
-                        if (lineScopePath !== symbol.scopePath ||
-                            lineLocalScope !== symbol.localScope) {
-                            continue;
-                        }
-                    } else {
-                        // For regular symbols, check if this reference could resolve to our symbol
-                        // The symbol should be visible from the current scope
-                        const refSymbol = findSymbolInfo(
-                            matchText.startsWith('.') ? matchText : symbolName,
-                            uri,
-                            lineNum,
-                            documentIndex,
-                            effectiveCaseSensitive(uri)
-                        );
-                        if (!refSymbol || refSymbol.uri !== symbol.uri ||
-                            refSymbol.range.start.line !== symbol.range.start.line) {
-                            continue;
-                        }
-                    }
-
-                    // Adjust start column for macro call prefix
-                    const actualStartCol = matchText.startsWith('.') ? startCol + 1 : startCol;
-
-                    references.push(Location.create(
-                        uri,
-                        Range.create(
-                            Position.create(lineNum, actualStartCol),
-                            Position.create(lineNum, actualStartCol + symbolName.length)
-                        )
-                    ));
-                }
-            }
-        }
-    }
-
-    return references;
+    return findDocumentHighlights(symbol, uri, documentIndex, getDocumentText, effectiveCaseSensitive(symbol.uri));
 });
 
 // Resolve the symbol under the cursor for a rename request, or null if there

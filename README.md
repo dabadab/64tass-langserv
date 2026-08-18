@@ -19,6 +19,8 @@ VS Code language support for the [64tass](http://tass64.sourceforge.net/) cross 
 
 - **Find All References** (Shift+F12) - Find all usages of a symbol across files
 
+- **Highlight Occurrences** - Other uses of the symbol under the cursor are highlighted
+
 - **Rename Symbol** (F2) - Rename a symbol and all its references
   - Optionally includes occurrences in comments (shown in preview, unchecked by default)
 

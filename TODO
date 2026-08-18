@@ -114,7 +114,14 @@ M5 - [DONE] go-to-definition now works on .include, .binclude AND .binary paths
      Extracted from server.ts into findFilePathAt() in workspace.ts and unit-tested:
      subdirectories, single quotes, a label before the directive, unresolved paths,
      and cursor-outside-the-path cases.
-M6 - documentHighlight (occurrences of the symbol under the cursor).
+M6 - [DONE] documentHighlight - occurrences of the symbol under the cursor, with
+     the definition marked Write and uses Read.
+     Rather than add a third scanner, the reference-finding was unified:
+     findSymbolOccurrences() in symbols.ts is now the single implementation behind
+     rename, find-references AND highlight. That removed ~110 lines of duplicated
+     scanning from server.ts, and find-references inherits rename's precise
+     dotted-segment handling - the old inline scanner verified a bare name rather
+     than the dotted prefix, so it treated "scope.member" differently from rename.
 M7 - semantic tokens, to disambiguate what the TextMate grammar cannot.
 M8 - no debounce on validation: every keystroke re-indexes the whole include tree
      and runs a full validation pass.

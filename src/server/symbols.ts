@@ -7,7 +7,9 @@ import {
     AnnotatedTextEdit,
     ChangeAnnotation,
     TextDocumentEdit,
-    OptionalVersionedTextDocumentIdentifier
+    OptionalVersionedTextDocumentIdentifier,
+    DocumentHighlight,
+    DocumentHighlightKind
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
@@ -366,45 +368,45 @@ export function isValidSymbolName(name: string): boolean {
  * @param getDocumentText - Returns the current text of a document by URI (open buffer or disk), or null if unavailable
  * @param caseSensitive - Whether symbol matching is case-sensitive
  */
-export function computeRenameEdits(
+export interface SymbolOccurrence {
+    uri: string;
+    range: Range;
+    /** Inside a comment rather than code */
+    inComment: boolean;
+    /** This occurrence is the symbol's own definition */
+    isDefinition: boolean;
+}
+
+/**
+ * Every place a symbol appears across the indexed documents.
+ *
+ * The single scanner behind rename, find-references and document highlight, so
+ * all three agree on what counts as an occurrence. Handles, for non-local symbols:
+ *  - macro-call style ".name" (leading dot, single segment)
+ *  - dotted chains, where the name is one segment of a longer path: each segment
+ *    is verified independently via findSymbolInfo, so "scope" in "scope.member"
+ *    is distinguished from "member".
+ * Comment occurrences are reported too, flagged via `inComment`, since rename
+ * offers them separately and the others ignore them.
+ *
+ * @param restrictToUri limit the scan to one document (used by document highlight)
+ */
+export function findSymbolOccurrences(
     symbol: LabelDefinition,
-    newName: string,
     documentIndex: Map<string, DocumentIndex>,
     getDocumentText: (uri: string) => string | null,
-    caseSensitive = false
-): WorkspaceEdit | null {
-    // Refused here rather than only in the LSP handler, so no caller can produce
-    // an edit that silently corrupts the source: an anonymous label has no name to
-    // replace, and an invalid new name would write un-assemblable text everywhere.
-    if (!isRenameable(symbol)) return null;
-    if (!isValidSymbolName(newName)) return null;
+    caseSensitive = false,
+    restrictToUri?: string
+): SymbolOccurrence[] {
+    const occurrences: SymbolOccurrence[] = [];
+    const seen = new Set<string>();
 
-    const codeEdits: Map<string, TextEdit[]> = new Map();
-    const commentEdits: Map<string, AnnotatedTextEdit[]> = new Map();
-    const addedEdits = new Set<string>();
-
-    function addCodeEdit(uri: string, range: Range) {
+    const add = (uri: string, range: Range, inComment: boolean) => {
         const key = `${uri}:${range.start.line}:${range.start.character}`;
-        if (addedEdits.has(key)) return;
-        addedEdits.add(key);
-        if (!codeEdits.has(uri)) codeEdits.set(uri, []);
-        codeEdits.get(uri)!.push(TextEdit.replace(range, newName));
-    }
-
-    function addCommentEdit(uri: string, range: Range) {
-        const key = `${uri}:${range.start.line}:${range.start.character}`;
-        if (addedEdits.has(key)) return;
-        addedEdits.add(key);
-        if (!commentEdits.has(uri)) commentEdits.set(uri, []);
-        commentEdits.get(uri)!.push(AnnotatedTextEdit.replace(range, newName, 'commentRename'));
-    }
-
-    // Add the definition itself
-    addCodeEdit(symbol.uri, symbol.range);
-
-    const symbolName = symbol.name;
-    // Safe: symbol name from user file, sanitized via escapeRegex()
-    const escapedName = escapeRegex(symbolName);
+        if (seen.has(key)) return;
+        seen.add(key);
+        occurrences.push({ uri, range, inComment, isDefinition: isSelfDefinition(uri, range.start.line, range.start.character) });
+    };
 
     function isSelfDefinition(uri: string, lineNum: number, col: number): boolean {
         return uri === symbol.uri && lineNum === symbol.range.start.line && col === symbol.range.start.character;
@@ -420,7 +422,18 @@ export function computeRenameEdits(
             refSymbol.range.start.character === symbol.range.start.character;
     }
 
+    // The definition itself, when it is in scope for this scan
+    if (!restrictToUri || restrictToUri === symbol.uri) {
+        add(symbol.uri, symbol.range, false);
+    }
+
+    const symbolName = symbol.name;
+    // Safe: symbol name from user file, sanitized via escapeRegex()
+    const escapedName = escapeRegex(symbolName);
+
     for (const [uri, index] of documentIndex) {
+        if (restrictToUri && uri !== restrictToUri) continue;
+
         const docContent = getDocumentText(uri);
         if (docContent === null) continue;
 
@@ -446,10 +459,10 @@ export function computeRenameEdits(
                             continue;
                         }
 
-                        addCodeEdit(uri, Range.create(
+                        add(uri, Range.create(
                             Position.create(lineNum, startCol),
                             Position.create(lineNum, startCol + symbolName.length)
-                        ));
+                        ), false);
                     }
                 } else {
                     // Macro-call style reference: ".name" (leading dot, single segment)
@@ -460,10 +473,10 @@ export function computeRenameEdits(
                         const startCol = macroMatch.index + 1; // skip the leading dot
                         if (!resolvesToSymbol(macroMatch[0], uri, lineNum)) continue;
 
-                        addCodeEdit(uri, Range.create(
+                        add(uri, Range.create(
                             Position.create(lineNum, startCol),
                             Position.create(lineNum, startCol + symbolName.length)
-                        ));
+                        ), false);
                     }
 
                     // Bare / dotted-chain references: "name", "name.member", "scope.name", "scope.name.member"
@@ -490,16 +503,16 @@ export function computeRenameEdits(
                             const prefix = segments.slice(0, i + 1).join('.');
                             if (!resolvesToSymbol(prefix, uri, lineNum)) continue;
 
-                            addCodeEdit(uri, Range.create(
+                            add(uri, Range.create(
                                 Position.create(lineNum, segStartCol),
                                 Position.create(lineNum, segStartCol + seg.length)
-                            ));
+                            ), false);
                         }
                     }
                 }
             }
 
-            // Search in comment portion (for all symbols, not just scoped ones)
+            // Comment occurrences (reported for every symbol, flagged as such)
             if (commentStart >= 0) {
                 const comment = line.substring(commentStart);
                 // Safe: symbol name from user file, sanitized via escapeRegex()
@@ -507,12 +520,82 @@ export function computeRenameEdits(
                 let match;
                 while ((match = commentPattern.exec(comment)) !== null) {
                     const startCol = commentStart + match.index;
-                    addCommentEdit(uri, Range.create(
+                    add(uri, Range.create(
                         Position.create(lineNum, startCol),
                         Position.create(lineNum, startCol + symbolName.length)
-                    ));
+                    ), true);
                 }
             }
+        }
+    }
+
+    return occurrences;
+}
+
+/**
+ * Locations referencing a symbol (LSP textDocument/references).
+ * Comment occurrences are excluded: they are text, not references.
+ */
+export function findReferences(
+    symbol: LabelDefinition,
+    documentIndex: Map<string, DocumentIndex>,
+    getDocumentText: (uri: string) => string | null,
+    includeDeclaration: boolean,
+    caseSensitive = false
+): Location[] {
+    return findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive)
+        .filter(o => !o.inComment && (includeDeclaration || !o.isDefinition))
+        .map(o => Location.create(o.uri, o.range));
+}
+
+/**
+ * Occurrences of a symbol within one document (LSP textDocument/documentHighlight),
+ * with the definition distinguished from its uses.
+ */
+export function findDocumentHighlights(
+    symbol: LabelDefinition,
+    uri: string,
+    documentIndex: Map<string, DocumentIndex>,
+    getDocumentText: (uri: string) => string | null,
+    caseSensitive = false
+): DocumentHighlight[] {
+    return findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive, uri)
+        .filter(o => !o.inComment)
+        .map(o => DocumentHighlight.create(
+            o.range,
+            o.isDefinition ? DocumentHighlightKind.Write : DocumentHighlightKind.Read
+        ));
+}
+
+/**
+ * Compute the workspace edit for renaming a symbol across all indexed documents.
+ * Returns null if the symbol cannot be renamed (see isRenameable) or the new name
+ * is not a valid symbol name.
+ */
+export function computeRenameEdits(
+    symbol: LabelDefinition,
+    newName: string,
+    documentIndex: Map<string, DocumentIndex>,
+    getDocumentText: (uri: string) => string | null,
+    caseSensitive = false
+): WorkspaceEdit | null {
+    // Refused here rather than only in the LSP handler, so no caller can produce
+    // an edit that silently corrupts the source: an anonymous label has no name to
+    // replace, and an invalid new name would write un-assemblable text everywhere.
+    if (!isRenameable(symbol)) return null;
+    if (!isValidSymbolName(newName)) return null;
+
+    const codeEdits: Map<string, TextEdit[]> = new Map();
+    const commentEdits: Map<string, AnnotatedTextEdit[]> = new Map();
+
+    for (const occurrence of findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive)) {
+        const bucket = occurrence.inComment ? commentEdits : codeEdits;
+        if (!bucket.has(occurrence.uri)) bucket.set(occurrence.uri, []);
+        if (occurrence.inComment) {
+            commentEdits.get(occurrence.uri)!.push(
+                AnnotatedTextEdit.replace(occurrence.range, newName, 'commentRename'));
+        } else {
+            codeEdits.get(occurrence.uri)!.push(TextEdit.replace(occurrence.range, newName));
         }
     }
 
