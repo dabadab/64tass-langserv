@@ -171,8 +171,14 @@ T9  - [DONE] added range assertions: a generic check that every diagnostic's ran
       ".name" while quoting "name". Now points at the name, matching where 64tass
       itself points (verified).
 T10 - performance.test.ts is a benchmark in the unit directory, running and appending
-      to performance-results.jsonl on every yarn test. (Left as-is deliberately.)
-T11 - no coverage tooling (@vitest/coverage-v8 not installed).
+      to performance-results.jsonl on every yarn test.
+      WON'T DO - explicitly left as-is by request.
+T11 - [DONE] @vitest/coverage-v8 installed, `yarn test:coverage` added, config in
+      vitest.config.ts (src only; extension.ts and performance.ts excluded as pure
+      wiring / benchmark instrumentation). coverage/ is gitignored.
+      Baseline: 75.7% lines overall - and that number is almost entirely server.ts,
+      which is 0% of 267 lines. Every other module is 94-100%. That is T1 in one
+      number: the untested code is exactly the code that is hard to test.
 T12 - yarn lint is broken: the script is declared but ESLint is not a dependency and
       no config file exists, so it exits 2.
 
