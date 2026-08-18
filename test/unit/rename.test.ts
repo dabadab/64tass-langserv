@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { WorkspaceEdit } from 'vscode-languageserver/node';
-import { computeRenameEdits, findSymbolInfo, isRenameable } from '../../src/server/symbols';
+import { computeRenameEdits, findSymbolInfo, isRenameable, isValidSymbolName } from '../../src/server/symbols';
 import { buildIndex } from '../helpers/doc';
 
 // Helper: build a getDocumentText function backed by the (immutable) source docs.
@@ -188,5 +188,117 @@ describe('computeRenameEdits - anonymous labels', () => {
         const edit = computeRenameEdits(symbol!, 'entry', documentIndex, getText, false);
         expect(edit).not.toBeNull();
         expect(codeChanges(edit, docs[0].uri)).toHaveLength(1);
+    });
+});
+
+describe('computeRenameEdits - across files', () => {
+    // A symbol defined in one file and used in another: both must be edited.
+    const MAIN = 'main\n        jsr shared\n        lda #shared';
+    const DEP = 'shared\n        rts';
+
+    function twoFiles() {
+        const built = buildIndex(
+            { source: MAIN, uri: 'file:///main.asm' },
+            { source: DEP, uri: 'file:///dep.asm' }
+        );
+        const texts = new Map([['file:///main.asm', MAIN], ['file:///dep.asm', DEP]]);
+        return { ...built, getText: (uri: string) => texts.get(uri) ?? null };
+    }
+
+    it('edits the definition in its own file and the references in another', () => {
+        const { documentIndex, getText } = twoFiles();
+        const symbol = findSymbolInfo('shared', 'file:///main.asm', 1, documentIndex);
+        expect(symbol!.uri).toBe('file:///dep.asm');
+
+        const edit = computeRenameEdits(symbol!, 'renamed', documentIndex, getText, false);
+        expect(codeChanges(edit, 'file:///dep.asm')).toHaveLength(1);   // the definition
+        expect(codeChanges(edit, 'file:///main.asm')).toHaveLength(2);  // both references
+    });
+
+    it('skips a document whose text cannot be read', () => {
+        const { documentIndex } = twoFiles();
+        const symbol = findSymbolInfo('shared', 'file:///main.asm', 1, documentIndex);
+        // Only dep.asm is readable; main.asm's references must simply be absent
+        const onlyDep = (uri: string) => uri === 'file:///dep.asm' ? DEP : null;
+
+        const edit = computeRenameEdits(symbol!, 'renamed', documentIndex, onlyDep, false);
+        expect(codeChanges(edit, 'file:///dep.asm')).toHaveLength(1);
+        expect(codeChanges(edit, 'file:///main.asm')).toHaveLength(0);
+    });
+});
+
+describe('computeRenameEdits - comment occurrences', () => {
+    // Comment edits go through documentChanges with a needsConfirmation
+    // annotation, so the editor shows them in a preview unchecked by default.
+    const source = 'start\t; start of the program\n        jsr start';
+
+    it('returns documentChanges with an annotation when comments match', () => {
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///c.asm' });
+        const getText = textLookup(docs);
+        const symbol = findSymbolInfo('start', docs[0].uri, 1, documentIndex);
+
+        const edit = computeRenameEdits(symbol!, 'begin', documentIndex, getText, false)!;
+        expect(edit.changes).toBeUndefined();
+        expect(edit.documentChanges).toBeDefined();
+        expect(edit.changeAnnotations?.['commentRename']?.needsConfirmation).toBe(true);
+    });
+
+    it('annotates only the comment occurrence, not the code ones', () => {
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///c2.asm' });
+        const getText = textLookup(docs);
+        const symbol = findSymbolInfo('start', docs[0].uri, 1, documentIndex);
+
+        const edit = computeRenameEdits(symbol!, 'begin', documentIndex, getText, false)!;
+        const edits = (edit.documentChanges![0] as { edits: { annotationId?: string }[] }).edits;
+        const annotated = edits.filter(e => e.annotationId === 'commentRename');
+        const plain = edits.filter(e => e.annotationId === undefined);
+
+        expect(annotated).toHaveLength(1);   // the word inside the comment
+        expect(plain).toHaveLength(2);       // definition + the jsr reference
+    });
+
+    it('uses the plain changes format when no comment matches', () => {
+        const noComment = 'start\n        jsr start';
+        const { documentIndex, docs } = buildIndex({ source: noComment, uri: 'file:///c3.asm' });
+        const getText = textLookup(docs);
+        const symbol = findSymbolInfo('start', docs[0].uri, 1, documentIndex);
+
+        const edit = computeRenameEdits(symbol!, 'begin', documentIndex, getText, false)!;
+        expect(edit.changes).toBeDefined();
+        expect(edit.documentChanges).toBeUndefined();
+    });
+});
+
+describe('isValidSymbolName', () => {
+    // Verified against the assembler: it accepts the first group, rejects the second
+    it.each(['foo', '_foo', 'foo123', 'FooBar', '_', 'a1_b2'])('accepts %s', (name) => {
+        expect(isValidSymbolName(name)).toBe(true);
+    });
+
+    it.each(['1abc', 'foo-bar', 'foo bar', '', '.foo', 'foo.bar', '+', 'foo!'])('rejects %s', (name) => {
+        expect(isValidSymbolName(name)).toBe(false);
+    });
+});
+
+describe('computeRenameEdits - invalid new names', () => {
+    // Renaming to an unusable name would write un-assemblable text at every
+    // reference, so it is refused outright rather than half-applied.
+    const source = 'start\n        jsr start';
+
+    it.each(['1abc', 'foo-bar', 'foo bar', '', 'foo.bar'])('refuses to rename to %s', (newName) => {
+        const { documentIndex, docs } = buildIndex({ source, uri: `file:///inv-${newName || 'empty'}.asm` });
+        const getText = textLookup(docs);
+        const symbol = findSymbolInfo('start', docs[0].uri, 1, documentIndex);
+
+        expect(computeRenameEdits(symbol!, newName, documentIndex, getText, false)).toBeNull();
+    });
+
+    it('still allows a valid new name', () => {
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///valid.asm' });
+        const getText = textLookup(docs);
+        const symbol = findSymbolInfo('start', docs[0].uri, 1, documentIndex);
+
+        const edit = computeRenameEdits(symbol!, 'begin', documentIndex, getText, false);
+        expect(codeChanges(edit, docs[0].uri)).toHaveLength(2);
     });
 });

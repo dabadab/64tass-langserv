@@ -38,7 +38,7 @@ import { DocumentIndex } from './types';
 import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
 import { parseLineStructure, stripStrings, parseNumericValue, formatNumericValue, escapeRegex, detectCaseSensitivityPragma } from './utils';
 import { parseDocument } from './parser';
-import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits, isRenameable } from './symbols';
+import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits, isRenameable, isValidSymbolName } from './symbols';
 import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
@@ -622,6 +622,14 @@ connection.onPrepareRename((params: PrepareRenameParams): Range | ResponseError<
 connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
     const target = resolveRenameTarget(params.textDocument.uri, params.position);
     if (!target) return null;
+
+    if (!isValidSymbolName(params.newName)) {
+        throw new ResponseError(
+            ErrorCodes.InvalidRequest,
+            `'${params.newName}' is not a valid symbol name: use a letter or underscore ` +
+            `followed by letters, digits or underscores.`
+        );
+    }
 
     return computeRenameEdits(
         target.symbol,

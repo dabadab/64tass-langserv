@@ -337,6 +337,18 @@ export function isRenameable(symbol: LabelDefinition): boolean {
 }
 
 /**
+ * A syntactically valid 64tass symbol name: a letter or underscore followed by
+ * letters, digits or underscores (verified against the assembler - it rejects a
+ * leading digit, a hyphen, whitespace and the empty string).
+ */
+const VALID_SYMBOL_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/** Whether `name` can be used as a symbol name, i.e. is a legal rename target. */
+export function isValidSymbolName(name: string): boolean {
+    return VALID_SYMBOL_NAME.test(name);
+}
+
+/**
  * Compute the workspace edit for renaming a symbol across all indexed documents.
  * Returns null if the symbol cannot be renamed (see isRenameable).
  *
@@ -362,8 +374,10 @@ export function computeRenameEdits(
     caseSensitive = false
 ): WorkspaceEdit | null {
     // Refused here rather than only in the LSP handler, so no caller can produce
-    // an edit that silently corrupts the source.
+    // an edit that silently corrupts the source: an anonymous label has no name to
+    // replace, and an invalid new name would write un-assemblable text everywhere.
     if (!isRenameable(symbol)) return null;
+    if (!isValidSymbolName(newName)) return null;
 
     const codeEdits: Map<string, TextEdit[]> = new Map();
     const commentEdits: Map<string, AnnotatedTextEdit[]> = new Map();

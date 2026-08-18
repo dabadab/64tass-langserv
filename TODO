@@ -149,8 +149,16 @@ T7  - [DONE] buildIndex() now takes caseSensitive PER ENTRY, falling back to the
       Added tests building one case-sensitive and one case-insensitive document in
       a single index and checking each resolves under its own rules - the case the
       per-document pragma cascade exists to handle.
-T8  - rename tests do not cover renaming across files, the comment-edit annotation
-      path (needsConfirmation), or rejection of invalid identifiers.
+T8  - [DONE] added rename tests for: renaming across files (definition in one, uses
+      in another, plus an unreadable document being skipped), the comment-edit path
+      (documentChanges + needsConfirmation annotation, and that ONLY the comment
+      occurrence is annotated), and invalid new names.
+      NOTE: "rejection of invalid identifiers" was not just an untested path - there
+      was no rejection at all. Renaming to "1abc" or "foo bar" would have written
+      un-assemblable text at every reference, the same class of bug as C8. Added
+      isValidSymbolName() (pattern verified against the assembler), refused in
+      computeRenameEdits so no caller can bypass it, with a clear message from the
+      rename handler.
 T9  - no assertions on diagnostic ranges in most tests. operandStart is computed with
       code.indexOf(operand), which finds the first occurrence, not the operand's
       actual position - an off-by-column risk.
