@@ -29,6 +29,9 @@ VS Code language support for the [64tass](http://tass64.sourceforge.net/) cross 
 - **Document Outline** (Ctrl+Shift+O) - Outline view and breadcrumbs, with symbols
   nested by scope and local `_name` symbols grouped under their code label
 
+- **Workspace Symbol Search** (Ctrl+T) - Find any symbol across the project by
+  fuzzy name, including files you have not opened
+
 - **Code Folding** - Fold blocks like `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif`, etc.
 
 - **Diagnostics** - Real-time error detection:

@@ -100,7 +100,10 @@ M1 - [DONE] documentSymbol: outline, breadcrumbs and Ctrl+Shift+O.
      its name; without that, breadcrumbs only light up when the cursor is on the
      name itself. Note Range.create rejects MAX_SAFE_INTEGER (LSP caps a character
      at uinteger max), hence the END_OF_LINE constant.
-M2 - workspaceSymbol (Ctrl+T). Blocked on L5 being useful.
+M2 - [DONE] workspaceSymbol (Ctrl+T), unblocked by L5. findWorkspaceSymbols() in
+     workspaceSymbols.ts, unit-tested. Subsequence matching ("sinit" finds
+     "sprite_init"), ranked exact > prefix > substring > subsequence, capped at 500.
+     Anonymous labels omitted; a local symbol reports its code label as container.
 M3 - prepareRename. DONE as part of the C8 fix (bfa4fd8).
 M4 - signatureHelp for macro/function calls; parametersAtScope is already populated.
 M5 - definition on .binclude / .binary paths (onDefinition handles .include only,
