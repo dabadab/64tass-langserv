@@ -121,9 +121,13 @@ T3  - [DONE] release.yml now uses yarn install --frozen-lockfile and yarn
       release on yarn typecheck + yarn test, closing T2 for the release path too.
       vsce's --no-yarn flags were left alone: node_modules/** is vsceignored and
       esbuild bundles everything, so the package manager cannot affect the .vsix.
-T4  - integration tests vanish silently off this machine: TASS_PATH is hardcoded to
-      /home/db/bin/64tass and describe.skipIf turns its absence into a green run.
-      Make it env-overridable and hard-fail under a REQUIRE_TASS flag.
+T4  - [DONE] TASS_PATH is now env-overridable, a missing binary prints a visible
+      [integration] warning instead of skipping silently, and REQUIRE_TASS=1 makes
+      it a hard failure. All three modes verified.
+      NOTE: CI does NOT set REQUIRE_TASS, so the compiler-reference suite still
+      skips there (20 tests). Installing 64tass in CI + setting REQUIRE_TASS=1 would
+      close that properly - left open deliberately, since it needs a build of the
+      assembler in the workflow.
 T5  - no false-positive corpus test (see the NOTE at the top about why the obvious
       version of this is misleading).
 T6  - case sensitivity is never verified against the compiler; compile() takes

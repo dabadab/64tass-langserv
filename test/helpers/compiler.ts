@@ -1,9 +1,35 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 
-const TASS_PATH = '/home/db/bin/64tass';
+/**
+ * Path to the real assembler. Override with TASS_PATH to run the integration
+ * tests on a machine where 64tass lives somewhere else.
+ */
+const TASS_PATH = process.env.TASS_PATH ?? '/home/db/bin/64tass';
 
 export const TASS_EXISTS = fs.existsSync(TASS_PATH);
+
+/**
+ * Set REQUIRE_TASS=1 to make a missing assembler a hard failure instead of a
+ * silent skip. Without it these suites disappear from a green run - which is
+ * what CI would do, hiding the fact that nothing was verified against 64tass.
+ */
+export const REQUIRE_TASS = process.env.REQUIRE_TASS === '1' || process.env.REQUIRE_TASS === 'true';
+
+if (REQUIRE_TASS && !TASS_EXISTS) {
+    throw new Error(
+        `REQUIRE_TASS is set but no 64tass binary was found at '${TASS_PATH}'. ` +
+        `Install it or point TASS_PATH at it.`
+    );
+}
+
+if (!TASS_EXISTS) {
+    // Make the skip visible; a silently green run is the thing T4 is about.
+    console.warn(
+        `[integration] 64tass not found at '${TASS_PATH}' - compiler reference tests ` +
+        `will be SKIPPED. Set TASS_PATH to its location, or REQUIRE_TASS=1 to fail instead.`
+    );
+}
 
 export interface CompilerResult {
     exitCode: number;
