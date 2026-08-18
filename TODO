@@ -2,8 +2,8 @@ Remaining items from the code & test review (2026-08-17)
 https://claude.ai/code/artifact/c24a279f-b66e-4b6f-ab0a-a7c8ba2df0d8
 
 DONE so far: C1-C8 (all correctness defects) - see git log e123fd0..b2e1d57
-STILL OPEN: missing capabilities (M) below, and T1 (server.ts testability).
-DONE: C1-C8, the .if design call, the whole L series, and T2-T12.
+STILL OPEN: T1 (server.ts testability) only.
+DONE: C1-C8, the .if design call, the L series, T2-T12, and the M series.
 DONE: C1-C8, the .if design call, and the whole L series (L1-L5).
 
 Suggested order from the review: T2 + T5 first (CI + corpus test, makes everything
@@ -132,8 +132,13 @@ M7 - [DONE] semantic tokens (semanticTokens.ts, unit-tested; server.ts only does
      Deliberately emits NOTHING for opcodes, registers/builtins, strings, comments
      and unresolvable identifiers - leaving the TextMate colouring rather than
      overriding it with a guess.
-M8 - no debounce on validation: every keystroke re-indexes the whole include tree
-     and runs a full validation pass.
+M8 - [DONE] diagnostics are debounced (250ms) via Debouncer (debounce.ts,
+     unit-tested with an injectable clock).
+     Measured first: on the 691-line benchmark fixture a keystroke costs 35.7ms,
+     split parse 11.1ms / validate 26.3ms. So ONLY validation is debounced -
+     indexing stays immediate, meaning go-to-definition, hover and completion
+     never see a stale index, while the expensive ~74% is collapsed across a burst
+     of typing. Pending validation is cancelled when a document closes.
 
 -----------------------
 

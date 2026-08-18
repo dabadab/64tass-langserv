@@ -60,6 +60,7 @@ import { buildDocumentSymbols } from './documentSymbols';
 import { findWorkspaceSymbols } from './workspaceSymbols';
 import { getSignatureHelp } from './signatureHelp';
 import { buildSemanticTokens, encodeModifiers, TOKEN_TYPES, TOKEN_MODIFIERS } from './semanticTokens';
+import { Debouncer } from './debounce';
 
 // Get the current text of a document by URI: prefer the open in-memory buffer,
 // fall back to reading the file from disk (for indexed-but-unopened .include files).
@@ -110,6 +111,11 @@ const WORKSPACE_SCAN_LIMIT = 5000;
 
 // Tracks which root documents reference each included file (for cleanup)
 const includeGraph = new IncludeGraph();
+
+// Validation is ~3/4 of the per-keystroke cost, so it is debounced; indexing is
+// NOT, so on-demand requests (definition, completion, hover) always see fresh data.
+const DIAGNOSTIC_DEBOUNCE_MS = 250;
+const diagnosticDebouncer = new Debouncer(DIAGNOSTIC_DEBOUNCE_MS);
 
 // Remove all include references from a root document and clean up orphaned includes
 function clearIncludeRefs(rootUri: string): void {
@@ -650,18 +656,20 @@ documents.onDidChangeContent(change => {
     // round-trip finishes (see configReady above) - wait for it so the very
     // first index/validation of a document uses the real caseSensitive setting.
     configReady.then(() => {
-        // Clear old include references before re-indexing (includes may have changed)
+        // Index immediately so requests answered between keystrokes are accurate
         clearIncludeRefs(change.document.uri);
         indexDocument(change.document);
 
-        // indexDocument (above) just resolved this document's effective case
-        // sensitivity (workspace default, or overridden by a pragma) - use that.
-        publishDiagnosticsFor(change.document.uri);
+        // ...but collapse bursts of typing into a single validation pass
+        diagnosticDebouncer.run(change.document.uri, () => publishDiagnosticsFor(change.document.uri));
     });
 });
 
 documents.onDidClose(event => {
     const uri = event.document.uri;
+
+    // Nothing to publish for a document that is gone
+    diagnosticDebouncer.cancel(uri);
 
     // Clean up the include tree this document was the root of
     clearIncludeRefs(uri);
