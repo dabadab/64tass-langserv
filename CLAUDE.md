@@ -9,13 +9,25 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 ├── src/
 │   ├── extension.ts              # VS Code extension client entry point
 │   └── server/
-│       ├── server.ts             # LSP handlers, document indexing
+│       ├── server.ts             # LSP handler registration and capabilities only
 │       ├── types.ts              # Shared interfaces (LabelDefinition, DocumentIndex)
 │       ├── constants.ts          # Opcodes, directives, builtins
-│       ├── utils.ts              # String/comment/numeric helpers
+│       ├── utils.ts              # String/comment/numeric helpers, pragma detection
 │       ├── parser.ts             # parseDocument — label/scope/macro extraction
-│       ├── symbols.ts            # Symbol lookup, definition, references
-│       └── diagnostics.ts        # validateDocument — errors and warnings
+│       ├── indexing.ts           # indexDocument — include tree + case-sensitivity cascade
+│       ├── includes.ts           # IncludeGraph — which roots pull in which .include files
+│       ├── workspace.ts          # collectSourceFiles, findFilePathAt — workspace scan, file paths
+│       ├── symbols.ts            # Symbol lookup, occurrences, references, rename
+│       ├── diagnostics.ts        # validateDocument — errors and warnings
+│       ├── conditions.ts         # evaluateCondition — static .if branch evaluation
+│       ├── completions.ts        # getCompletions — directives, opcodes, symbols, paths
+│       ├── documentSymbols.ts    # buildDocumentSymbols — outline and breadcrumbs
+│       ├── workspaceSymbols.ts   # findWorkspaceSymbols — Ctrl+T symbol search
+│       ├── signatureHelp.ts      # getSignatureHelp — macro/function call hints
+│       ├── semanticTokens.ts     # buildSemanticTokens — semantic highlighting
+│       ├── folding.ts            # computeFoldingRanges — foldable block regions
+│       ├── debounce.ts           # Debouncer — collapses rapid diagnostic runs
+│       └── performance.ts        # Benchmark instrumentation (not product behaviour)
 ├── syntaxes/
 │   └── 64tass.tmLanguage.json    # TextMate grammar for syntax highlighting
 ├── language-configuration.json   # Bracket matching, comments, etc.
@@ -53,7 +65,7 @@ cannot be imported from a test.
   - Overridable per compilation unit via a `; 64tass-langserv: case-sensitive` /
     `case-insensitive` pragma comment (`detectCaseSensitivityPragma` in `utils.ts`).
     Recognized in a document's own text during indexing; the resolved value cascades
-    from a root document into its `.include` tree (see `indexDocument` in `server.ts`)
+    from a root document into its `.include` tree (see `indexDocument` in `indexing.ts`)
     and is stored per-document as `DocumentIndex.caseSensitive`, since different
     compilation units in the same workspace can now have different effective settings.
     Query-time handlers must look up `documentIndex.get(uri)?.caseSensitive` (via the
@@ -103,10 +115,18 @@ yarn test:coverage # Run with coverage (report in coverage/)
 
 ## Release Process
 
-1. Update version in CHANGELOG.md
+1. Update version in CHANGELOG.md and `package.json`
 2. Commit changes
-3. Create and push tag: `git tag v0.x.0 && git push --tags`
-4. GitHub Actions builds and creates release with .vsix
+3. Create and push an **annotated** tag:
+   `git tag -a v0.x.y -m "Release v0.x.y" && git push origin v0.x.y`
+   Annotated (`-a`), not plain `git tag`: a lightweight tag is only a pointer at a
+   commit, so it has no object to carry a tagger, a message or a signature -
+   `tag.gpgsign` has no effect on one. Use `-s` to force signing regardless of config.
+4. GitHub Actions builds and creates the release with the .vsix
+
+Note `vscode:prepublish` runs `version-from-tag`, which rewrites `package.json`'s
+version from `git describe`, so the pushed tag is what ultimately decides the
+published version.
 
 ## File Extensions
 
