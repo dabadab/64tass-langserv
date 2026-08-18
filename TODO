@@ -242,8 +242,14 @@ T12 - [DONE] eslint 9 + typescript-eslint installed with a flat config
 
 DOCS & HYGIENE
 
-D1 - completions are undocumented: directive, opcode, symbol, parameter and file-path
-     completion ship in completions.ts but appear in neither README nor CHANGELOG.
+D1 - [PARTLY DONE] completions are now in the README (still not in the CHANGELOG,
+     see D2). The README was also rewritten: features brought up to date, the
+     pragmas documented properly, trivia trimmed.
+     It contained an outright wrong claim, now fixed: it said the case-sensitivity
+     pragma is "recognized in a file that is itself the entry point of a build".
+     It is not - indexDocument applies it in ANY file and cascades it to that
+     file's includes (pinned by indexing.test.ts).
+     Also corrected: the build-from-source steps said npm, but this repo uses yarn.
 D2 - CHANGELOG stops at 0.8.0 while package.json reads 0.8.2. Nothing since is
      documented anywhere a user would look (case-sensitivity pragma, completions,
      and the whole C1-C8 series).
