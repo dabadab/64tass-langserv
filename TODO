@@ -2,7 +2,8 @@ Remaining items from the code & test review (2026-08-17)
 https://claude.ai/code/artifact/c24a279f-b66e-4b6f-ab0a-a7c8ba2df0d8
 
 DONE so far: C1-C8 (all correctness defects) - see git log e123fd0..b2e1d57
-STILL OPEN: the server lifecycle (L), missing capabilities (M) and test (T) items below.
+STILL OPEN: missing capabilities (M) and test (T) items below.
+DONE: C1-C8, the .if design call, and the whole L series (L1-L5).
 
 Suggested order from the review: T2 + T5 first (CI + corpus test, makes everything
 after it verifiable), then L1, then T1 + L2-L4, then M1.
@@ -57,12 +58,23 @@ L4 (Medium) - diagnostics published only for the document that changed  [DONE]
 	didChangeWatchedFiles watcher for **/*.{asm,s,inc,src} so external edits re-index
 	- open documents are skipped there, since their buffer is authoritative.
 
-L5 (Low) - no workspace scan on startup
+L5 (Low) - no workspace scan on startup  [DONE]
 	Only open documents and their include trees are indexed, so go-to-definition and
 	find-references silently return nothing for symbols in unopened files, with no
 	signal distinguishing "not found" from "not looked at".
 	This is the main remaining source of "Undefined symbol" noise in the corpus.
-	fix: scan workspace folders for the handled extensions on initialize.
+	fixed: scanWorkspace() runs in the BACKGROUND after startup (not awaited, yields
+	to the event loop every 20 files) so a big tree does not delay initialize -
+	the example corpus is 91 files / 83k lines and takes ~780ms to parse.
+	The directory walk is collectSourceFiles() in workspace.ts, unit-tested:
+	skips node_modules/.git/out/dist/build, does not follow symlinked dirs, capped
+	at WORKSPACE_SCAN_LIMIT (5000) with a warning when it truncates.
+	CAVEAT: scanned files are indexed standalone, so a file that is part of a
+	compilation unit gets the global caseSensitive setting rather than its root's
+	cascaded value until that root is actually opened.
+	NOTE: this should shrink the "Undefined symbol" noise a lot in a real workspace,
+	and is what unlocks M2 (workspaceSymbol) and most of the remaining conditional
+	warnings noted in the design call above.
 
 -----------------------
 

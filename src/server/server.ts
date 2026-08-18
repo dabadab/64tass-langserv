@@ -42,6 +42,7 @@ import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits, 
 import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
+import { collectSourceFiles } from './workspace';
 
 // Get the current text of a document by URI: prefer the open in-memory buffer,
 // fall back to reading the file from disk (for indexed-but-unopened .include files).
@@ -84,6 +85,11 @@ let hasDidChangeConfigurationCapability = false;
 // Whether the client can watch files for us (edits made outside the editor:
 // a generated table, a git checkout) and notify the server about them.
 let hasFileWatchCapability = false;
+// Workspace roots reported at initialize, scanned in the background so that
+// go-to-definition and find-references work for files the user has not opened.
+let workspaceRoots: string[] = [];
+// Upper bound on a background scan, so an enormous tree cannot stall it
+const WORKSPACE_SCAN_LIMIT = 5000;
 
 // Tracks which root documents reference each included file (for cleanup)
 const includeGraph = new IncludeGraph();
@@ -210,6 +216,13 @@ function publishDiagnosticsFor(uri: string): void {
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
     const capabilities = params.capabilities;
+
+    workspaceRoots = (params.workspaceFolders ?? [])
+        .map(folder => { try { return fileURLToPath(folder.uri); } catch { return null; } })
+        .filter((p): p is string => p !== null);
+    if (workspaceRoots.length === 0 && params.rootUri) {
+        try { workspaceRoots = [fileURLToPath(params.rootUri)]; } catch { /* ignore */ }
+    }
     hasConfigurationCapability = !!(
         capabilities.workspace && !!capabilities.workspace.configuration
     );
@@ -246,6 +259,61 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 // no matter what the workspace actually has set.
 let configReady: Promise<void> = Promise.resolve();
 
+/**
+ * Index every source file in the workspace that is not already indexed.
+ *
+ * Runs in the background after startup: without it, go-to-definition and
+ * find-references silently return nothing for symbols in unopened files. Yields
+ * to the event loop periodically so an in-progress scan does not delay requests.
+ *
+ * Files are indexed standalone here (their own pragma, else the workspace
+ * setting). Opening a root later re-indexes its include tree properly, which
+ * also re-applies the case-sensitivity cascade to the files it pulls in.
+ */
+async function scanWorkspace(): Promise<void> {
+    if (workspaceRoots.length === 0) return;
+
+    const files: string[] = [];
+    for (const root of workspaceRoots) {
+        files.push(...collectSourceFiles(root, {
+            limit: WORKSPACE_SCAN_LIMIT - files.length,
+            onLimit: limit => connection.console.warn(
+                `Workspace scan stopped at ${limit} files; symbols in the rest will only ` +
+                `resolve once their file is opened.`
+            )
+        }));
+        if (files.length >= WORKSPACE_SCAN_LIMIT) break;
+    }
+
+    const started = Date.now();
+    let indexed = 0;
+
+    for (const file of files) {
+        const uri = pathToFileURL(file).toString();
+        if (documentIndex.has(uri)) continue; // already indexed as open doc or include
+
+        const content = getDocumentText(uri);
+        if (content === null) continue;
+
+        const caseSensitive = detectCaseSensitivityPragma(content) ?? globalSettings.caseSensitive;
+        documentIndex.set(
+            uri,
+            parseDocument(TextDocument.create(uri, '64tass', 1, content), caseSensitive,
+                msg => connection.console.warn(msg))
+        );
+        indexed++;
+
+        // Hand the event loop back regularly so requests are not blocked
+        if (indexed % 20 === 0) await new Promise(resolve => setImmediate(resolve));
+    }
+
+    if (indexed > 0) {
+        connection.console.log(`Indexed ${indexed} workspace file(s) in ${Date.now() - started}ms`);
+        // Files that were already open may now resolve symbols they could not before
+        for (const doc of documents.all()) publishDiagnosticsFor(doc.uri);
+    }
+}
+
 connection.onInitialized(() => {
     connection.console.log('64tass language server initialized');
 
@@ -280,6 +348,8 @@ connection.onInitialized(() => {
 
     configReady.then(() => {
         documents.all().forEach(doc => indexDocument(doc));
+        // Background: not awaited, so startup is not delayed by a large workspace
+        scanWorkspace().catch(e => connection.console.warn(`Workspace scan failed: ${e}`));
     });
 });
 
