@@ -144,9 +144,11 @@ T6  - [DONE] test/integration/case-sensitivity.test.ts assembles the same source
       against our own model. Covers: differently-cased reference resolving without
       -C but not with it, exact-case resolving under -C, and two symbols differing
       only by case being distinct under -C / a duplicate without it.
-T7  - buildIndex() cannot build a mixed-sensitivity index: it reads caseSensitive from
-      args[0] and applies it to every document (test/helpers/doc.ts), so the
-      per-document pragma cascade cannot be tested across documents.
+T7  - [DONE] buildIndex() now takes caseSensitive PER ENTRY, falling back to the
+      first entry's value so every existing call site behaves exactly as before.
+      Added tests building one case-sensitive and one case-insensitive document in
+      a single index and checking each resolves under its own rules - the case the
+      per-document pragma cascade exists to handle.
 T8  - rename tests do not cover renaming across files, the comment-edit annotation
       path (needsConfirmation), or rejection of invalid identifiers.
 T9  - no assertions on diagnostic ranges in most tests. operandStart is computed with

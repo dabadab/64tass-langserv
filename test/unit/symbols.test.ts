@@ -498,3 +498,44 @@ describe('case sensitivity', () => {
         expect(findSymbolInfo('outer.Inner.Value', docs[0].uri, 6, documentIndex, true)).toBeNull();
     });
 });
+
+describe('mixed case sensitivity across documents', () => {
+    // Two compilation units in one workspace can now have different effective
+    // settings (via the pragma cascade), so the index can hold both at once.
+    const SOURCES = [
+        { source: 'Sensitive = 1\n        lda #Sensitive', uri: 'file:///cs.asm', caseSensitive: true },
+        { source: 'Insensitive = 2\n        lda #Insensitive', uri: 'file:///ci.asm', caseSensitive: false },
+    ];
+
+    it('records each document with its own case sensitivity', () => {
+        const { documentIndex } = buildIndex(...SOURCES);
+        expect(documentIndex.get('file:///cs.asm')!.caseSensitive).toBe(true);
+        expect(documentIndex.get('file:///ci.asm')!.caseSensitive).toBe(false);
+    });
+
+    it('stores names per that document\'s own setting', () => {
+        const { documentIndex } = buildIndex(...SOURCES);
+        // case-sensitive document keeps the original case
+        expect(documentIndex.get('file:///cs.asm')!.labels[0].name).toBe('Sensitive');
+        // case-insensitive document lowercases
+        expect(documentIndex.get('file:///ci.asm')!.labels[0].name).toBe('insensitive');
+    });
+
+    it('resolves each document under its own rules', () => {
+        const { documentIndex } = buildIndex(...SOURCES);
+        // exact case required in the sensitive document
+        expect(findSymbolInfo('Sensitive', 'file:///cs.asm', 1, documentIndex, true)).not.toBeNull();
+        expect(findSymbolInfo('sensitive', 'file:///cs.asm', 1, documentIndex, true)).toBeNull();
+        // any case accepted in the insensitive one
+        expect(findSymbolInfo('INSENSITIVE', 'file:///ci.asm', 1, documentIndex, false)).not.toBeNull();
+    });
+
+    it('still applies the first entry to documents that do not override', () => {
+        const { documentIndex } = buildIndex(
+            { source: 'Alpha = 1', uri: 'file:///a.asm', caseSensitive: true },
+            { source: 'Beta = 2', uri: 'file:///b.asm' }
+        );
+        expect(documentIndex.get('file:///b.asm')!.caseSensitive).toBe(true);
+        expect(documentIndex.get('file:///b.asm')!.labels[0].name).toBe('Beta');
+    });
+});

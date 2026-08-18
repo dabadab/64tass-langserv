@@ -17,17 +17,29 @@ export function createAndParse(source: string, uri?: string, caseSensitive = fal
     return { doc, index };
 }
 
+export interface BuildIndexSource {
+    source: string;
+    uri?: string;
+    /**
+     * Case sensitivity for THIS document. Omitted documents fall back to the
+     * first entry's value, so `buildIndex({ source, caseSensitive: true })` still
+     * applies to every document - but each entry may override it, which is what
+     * the per-document pragma cascade produces in practice.
+     */
+    caseSensitive?: boolean;
+}
+
 /** Build a documentIndex Map from source strings. */
-export function buildIndex(...args: Array<{ source: string; uri?: string; caseSensitive?: boolean }>): {
+export function buildIndex(...args: BuildIndexSource[]): {
     documentIndex: Map<string, DocumentIndex>;
     docs: TextDocument[];
 } {
-    // Extract caseSensitive from first argument if provided
-    const caseSensitive = args[0]?.caseSensitive ?? false;
+    // Default for entries that don't specify their own
+    const fallback = args[0]?.caseSensitive ?? false;
     const documentIndex = new Map<string, DocumentIndex>();
     const docs: TextDocument[] = [];
-    for (const { source, uri } of args) {
-        const { doc, index } = createAndParse(source, uri, caseSensitive);
+    for (const { source, uri, caseSensitive } of args) {
+        const { doc, index } = createAndParse(source, uri, caseSensitive ?? fallback);
         documentIndex.set(doc.uri, index);
         docs.push(doc);
     }

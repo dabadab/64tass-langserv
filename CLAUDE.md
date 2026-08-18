@@ -84,7 +84,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test        # Run all tests (currently 469 tests)
+yarn test        # Run all tests (currently 477 tests)
 yarn test:watch  # Watch mode
 ```
 
@@ -93,7 +93,7 @@ yarn test:watch  # Watch mode
 - **Integration tests:** `test/integration/` — compiler reference tests (require `/home/db/bin/64tass`)
 - **Fixtures:** `test/fixtures/` — `.asm` files used by integration tests
 - **Helpers:** `test/helpers/` — `createDoc`, `buildIndex`, `compile`
-  - `buildIndex()` accepts `caseSensitive` option in source objects for testing case-sensitive mode
+  - `buildIndex()` accepts `caseSensitive` per source object (falling back to the first entry), so a single index can mix case-sensitive and case-insensitive documents
 
 ## Release Process
 
