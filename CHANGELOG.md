@@ -2,6 +2,40 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [0.9.2] - 2026-08-18
+
+### Added
+- **Document Outline** - Outline view and breadcrumbs (Ctrl+Shift+O), nested by scope,
+  with `_local` symbols grouped under the code label they belong to
+- **Workspace Symbol Search** - Find any symbol across the project by fuzzy name (Ctrl+T)
+- **Signature Help** - Parameter hints while typing a macro or function call
+- **Semantic Highlighting** - Distinguishes what the grammar alone cannot
+- **Highlight Occurrences** - Other uses of the symbol under the cursor are highlighted
+- **Workspace Indexing** - Files are indexed in the background at startup
+- **Build-time Define Pragma** - `; 64tass-langserv: define NAME = VALUE` mirrors the `-D`
+  flag, for symbols your build supplies on the command line
+- **Inactive Branch Detection** - Symbols used in a `.if` branch that provably cannot be taken
+  are ignored
+
+### Improved
+- **Go to Definition** - Now opens `.binclude` and `.binary` paths, not just `.include`
+- **Performance** - Diagnostics are debounced, so a burst of typing no longer triggers a
+  validation pass per keystroke. Indexing stays immediate, so completion and go-to-definition
+  never see stale data
+- **External Changes** - Files edited outside the editor are re-indexed, and editing an
+  included file now refreshes the diagnostics of the files that include it
+
+### Fixed
+- **Configuration** - Changing `64tass.caseSensitive` now takes effect immediately; it
+  previously did nothing until the window was reloaded
+- **Included Files** - Closing an included file no longer strips its symbols from files that
+  still include it, and includes open with unsaved edits are no longer reverted to their
+  saved state when the parent is edited
+- **Rename** - Refuses invalid symbol names instead of writing them at every reference
+- **`.for` Loop Variables** - Now indexed when the loop itself is labelled (`squarelo .for i = ...`)
+- **Undefined Macro** - The reported range now covers the macro name rather than including
+  the leading dot
+
 ## [0.9.0] - 2026-08-17
 
 ### Added
