@@ -11,6 +11,7 @@ import {
     escapeRegex,
     detectCaseSensitivityPragma,
     detectDefinePragmas,
+    detectCpu,
     tokenizeExpression
 } from '../../src/server/utils';
 
@@ -550,5 +551,35 @@ describe('detectDefinePragmas', () => {
 
     it('does not confuse the case-sensitivity pragma for a define', () => {
         expect(detectDefinePragmas('; 64tass-langserv: case-sensitive')).toEqual([]);
+    });
+});
+
+describe('detectCpu', () => {
+    it('reads the .cpu directive', () => {
+        expect(detectCpu('        .cpu "65816"\nstart')).toBe('65816');
+        expect(detectCpu("        .cpu '65c02'\nstart")).toBe('65c02');
+    });
+
+    it('reads the cpu pragma', () => {
+        expect(detectCpu('; 64tass-langserv: cpu 4510\nstart')).toBe('4510');
+        expect(detectCpu(';64tass-langserv:CPU   45gs02  \nstart')).toBe('45gs02');
+    });
+
+    it('lowercases the name', () => {
+        expect(detectCpu('        .cpu "65816"')).toBe('65816');
+        expect(detectCpu('        .cpu "65C02"')).toBe('65c02');
+    });
+
+    it('returns null when the file says nothing', () => {
+        expect(detectCpu('start\n        lda #1')).toBeNull();
+    });
+
+    it('takes whichever comes first', () => {
+        expect(detectCpu('; 64tass-langserv: cpu 4510\n        .cpu "65816"')).toBe('4510');
+        expect(detectCpu('        .cpu "65816"\n; 64tass-langserv: cpu 4510')).toBe('65816');
+    });
+
+    it('ignores prose that merely mentions cpu', () => {
+        expect(detectCpu('; we use cpu 65816 here\nstart')).toBeNull();
     });
 });

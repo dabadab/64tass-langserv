@@ -8,8 +8,8 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex } from './types';
 import {
-    OPCODES,
-    REGISTER_MODES,
+    opcodesForCpu,
+    registerModesForCpu,
     INDEX_REGISTERS,
     FOLDING_PAIRS,
     CLOSING_DIRECTIVES,
@@ -101,6 +101,10 @@ export function validateDocument(
     const index = documentIndex.get(document.uri);
 
     if (!index) return diagnostics;
+
+    // Opcodes and register modes depend on the CPU this document targets
+    const opcodes = opcodesForCpu(index.cpu);
+    const registerModes = registerModesForCpu(index.cpu);
 
     // Lines in .if branches the assembler provably never evaluates. Undefined-symbol
     // reporting is skipped for these, since the assembler does not resolve them either.
@@ -271,7 +275,7 @@ export function validateDocument(
         // Both patterns are anchored and end with (.+)$, so the operand is the tail
         // of the match - deriving its offset that way is exact, where indexOf(operand)
         // could in principle find an earlier occurrence of the same text.
-        if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
+        if (opcodeMatch && opcodes.has(opcodeMatch[1].toLowerCase())) {
             operand = opcodeMatch[2];
             operandStart = opcodeMatch[0].length - operand.length;
         } else if (dataDirectiveMatch) {
@@ -375,7 +379,7 @@ export function validateDocument(
                 const symLower = symName.toLowerCase();
 
                 // Skip if it's a register, opcode, or builtin
-                if (BUILTINS.has(symLower) || OPCODES.has(symLower)) continue;
+                if (BUILTINS.has(symLower) || opcodes.has(symLower)) continue;
                 // Skip numbers (might be caught as identifiers if they have letters like in hex)
                 if (/^[0-9]/.test(symName)) continue;
                 // Skip hex numbers like $FE - if preceded by $ and only contains hex digits
@@ -389,7 +393,7 @@ export function validateDocument(
                     const mnemonic = opcodeMatch[1].toLowerCase();
                     const register = symName.toLowerCase();
                     const isWholeOperand = operand.trim().toLowerCase() === register;
-                    if (isWholeOperand && REGISTER_MODES[mnemonic]?.includes(register)) continue;
+                    if (isWholeOperand && registerModes[mnemonic]?.includes(register)) continue;
 
                     const before = operandNoStrings.slice(0, match.index).trimEnd();
                     if (before.endsWith(',') && INDEX_REGISTERS.has(register)) continue;

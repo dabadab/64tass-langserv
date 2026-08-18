@@ -5,12 +5,26 @@ import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
-import { OPCODES, SCOPE_OPENERS } from './constants';
-import { stripComment, getBlockComment, detectDefinePragmas } from './utils';
+import { SCOPE_OPENERS, opcodesForCpu, DEFAULT_CPU } from './constants';
+import { stripComment, getBlockComment, detectDefinePragmas, detectCpu } from './utils';
 
 export type LogFunction = (message: string) => void;
 
-export function parseDocument(document: TextDocument, caseSensitive = false, log?: LogFunction): DocumentIndex {
+export function parseDocument(
+    document: TextDocument,
+    caseSensitive = false,
+    log?: LogFunction,
+    cpu: string = DEFAULT_CPU
+): DocumentIndex {
+
+    const text = document.getText();
+    // A `.cpu` directive or cpu pragma in the file always wins over the value
+    // inherited from the parent, mirroring the case-sensitivity cascade.
+    const effectiveCpu = detectCpu(text) ?? cpu;
+    // Which mnemonics count as opcodes depends on the target: label detection gates
+    // on this, so a mnemonic the CPU does not have leaves the line unindexed.
+    const opcodes = opcodesForCpu(effectiveCpu);
+
     const labels: LabelDefinition[] = [];
     const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null; withScopes: string[] }> = new Map();
     const parametersAtScope: Map<string, string[]> = new Map();
@@ -18,7 +32,6 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
     const labelDefinedByMacro: Map<string, string> = new Map();
     const structInstances: Map<string, string> = new Map();
     const includes: string[] = [];
-    const text = document.getText();
     const lines = text.split('\n');
 
     // Stack for directive-based scopes: { name, directive }
@@ -266,7 +279,7 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         // "<opcode> <opcode>" line (e.g. "  jsr rts") would otherwise be read as a
         // label followed by an opcode.
         const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([a-zA-Z]{3})\b/);
-        if (codeLabelOpcodeMatch && OPCODES.has(codeLabelOpcodeMatch[2].toLowerCase())) {
+        if (codeLabelOpcodeMatch && opcodes.has(codeLabelOpcodeMatch[2].toLowerCase())) {
             const labelName = codeLabelOpcodeMatch[1];
             currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
@@ -539,5 +552,5 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
     }
 
-    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, structInstances, includes, caseSensitive };
+    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, structInstances, includes, caseSensitive, cpu: effectiveCpu };
 }

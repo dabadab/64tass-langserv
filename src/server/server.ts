@@ -44,7 +44,7 @@ import * as fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
-import { parseNumericValue, formatNumericValue, detectCaseSensitivityPragma } from './utils';
+import { parseNumericValue, formatNumericValue, detectCaseSensitivityPragma, detectCpu } from './utils';
 import { parseDocument } from './parser';
 import {
     getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits,
@@ -54,6 +54,7 @@ import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
 import { collectSourceFiles, findFilePathAt } from './workspace';
+import { DEFAULT_CPU, isCpuName } from './constants';
 import { computeFoldingRanges } from './folding';
 import { indexDocument as indexDocumentWith, clearIncludeRefs as clearIncludeRefsWith, IndexContext } from './indexing';
 
@@ -92,10 +93,11 @@ function effectiveCaseSensitive(uri: string): boolean {
 // Configuration settings
 interface Settings {
     caseSensitive: boolean;
+    cpu: string;
 }
 
 // Default settings
-let globalSettings: Settings = { caseSensitive: false };
+let globalSettings: Settings = { caseSensitive: false, cpu: DEFAULT_CPU };
 let hasConfigurationCapability = false;
 // Whether the client accepts a dynamic registration for didChangeConfiguration.
 // Distinct from hasConfigurationCapability (workspace/configuration *requests*):
@@ -125,6 +127,7 @@ const indexContext: IndexContext = {
     getDocumentText: (uri) => getDocumentText(uri),
     getOpenDocument: (uri) => documents.get(uri),
     get defaultCaseSensitive() { return globalSettings.caseSensitive; },
+    get defaultCpu() { return globalSettings.cpu; },
     log: (message) => connection.console.warn(message)
 };
 
@@ -245,10 +248,11 @@ async function scanWorkspace(): Promise<void> {
         if (content === null) continue;
 
         const caseSensitive = detectCaseSensitivityPragma(content) ?? globalSettings.caseSensitive;
+        const cpu = detectCpu(content) ?? globalSettings.cpu;
         documentIndex.set(
             uri,
             parseDocument(TextDocument.create(uri, '64tass', 1, content), caseSensitive,
-                msg => connection.console.warn(msg))
+                msg => connection.console.warn(msg), cpu)
         );
         indexed++;
 
@@ -286,7 +290,8 @@ connection.onInitialized(() => {
         configReady = connection.workspace.getConfiguration('64tass').then(
             (config: any) => {
                 globalSettings = {
-                    caseSensitive: config.caseSensitive ?? false
+                    caseSensitive: config.caseSensitive ?? false,
+                    cpu: isCpuName(String(config.cpu ?? '')) ? String(config.cpu).toLowerCase() : DEFAULT_CPU
                 };
             },
             (error) => {
@@ -309,7 +314,8 @@ connection.onDidChangeConfiguration(() => {
     configReady = connection.workspace.getConfiguration('64tass').then(
         (config: any) => {
             globalSettings = {
-                caseSensitive: config.caseSensitive ?? false
+                caseSensitive: config.caseSensitive ?? false,
+                cpu: isCpuName(String(config.cpu ?? '')) ? String(config.cpu).toLowerCase() : DEFAULT_CPU
             };
         },
         (error) => {

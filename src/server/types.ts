@@ -61,4 +61,9 @@ export interface DocumentIndex {
     // this rather than assuming a single global value, since a pragma in one
     // compilation unit's root doesn't affect a sibling unit with no pragma.
     caseSensitive: boolean;
+    // The effective CPU target this index was built with: the workspace
+    // 64tass.cpu setting, or a `.cpu` directive / cpu pragma in the file (which
+    // cascades into its .include tree, like caseSensitive). Decides which opcodes
+    // and which register addressing modes are recognised.
+    cpu: string;
 }

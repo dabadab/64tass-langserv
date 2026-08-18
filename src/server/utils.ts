@@ -354,3 +354,31 @@ export function detectDefinePragmas(text: string): PragmaDefine[] {
     }
     return defines;
 }
+
+// Extension-only pragma for the CPU target, mirroring 64tass's CPU selection
+// flags (--m65816 and friends):
+//   ; 64tass-langserv: cpu 65816
+// Exists because the target is often set on the command line rather than in the
+// source. A `.cpu "..."` directive in the file is honoured too and needs no pragma.
+const CPU_PRAGMA = /^\s*;\s*64tass-langserv\s*:\s*cpu\s+([a-zA-Z0-9_]+)\s*$/i;
+
+// The assembler's own directive: .cpu "65816"
+const CPU_DIRECTIVE = /^\s*\.cpu\s+(["'])([^"']+)\1/i;
+
+/**
+ * The CPU a document targets, from a `.cpu` directive or the pragma above,
+ * whichever appears first. Returns null when the file says nothing, leaving the
+ * caller to fall back to the inherited or configured default.
+ *
+ * Only the first occurrence is used: 64tass allows `.cpu` to change mid-file, but
+ * the index stores one target per document, so a later switch is not modelled.
+ */
+export function detectCpu(text: string): string | null {
+    for (const line of text.split('\n')) {
+        const pragma = line.match(CPU_PRAGMA);
+        if (pragma) return pragma[1].toLowerCase();
+        const directive = line.match(CPU_DIRECTIVE);
+        if (directive) return directive[2].toLowerCase();
+    }
+    return null;
+}

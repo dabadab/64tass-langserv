@@ -690,18 +690,25 @@ describe('parseDocument - non-6502 CPU targets', () => {
     });
 
     it('indexes labels in a 65C02 source', () => {
-        const index = parse('start   stz $0400\nloop    bra loop\ndone    trb $02');
+        const index = parse('        .cpu "65c02"\nstart   stz $0400\nloop    bra loop\ndone    trb $02');
         expect(index.labels.map(l => l.name).sort()).toEqual(['done', 'loop', 'start']);
     });
 
-    it('indexes labels in a 4510 / 45GS02 source', () => {
-        const index = parse('start   map\nnext    ldq $1234\nlast    eom');
+    it('indexes labels in a 45GS02 source', () => {
+        const index = parse('        .cpu "45gs02"\nstart   map\nnext    ldq $1234\nlast    eom');
         expect(index.labels.map(l => l.name).sort()).toEqual(['last', 'next', 'start']);
     });
 
     it('sets the local scope from a non-6502 opcode line', () => {
         // A code label must still open a local-symbol scope
-        const index = parse('outer   xba\n_local = 1');
+        const index = parse('        .cpu "65816"\nouter   xba\n_local = 1');
         expect(index.labels.find(l => l.name === '_local')!.localScope).toBe('outer');
+    });
+
+    // The point of CPU modes: a mnemonic the target does not have is not an opcode
+    it('does not treat another CPU\'s mnemonic as an opcode by default', () => {
+        // No .cpu directive, so the 6502 default applies and "xba" is just a symbol
+        const index = parse('outer   xba');
+        expect(index.labels.find(l => l.name === 'outer' && l.kind === 'code')).toBeUndefined();
     });
 });

@@ -60,6 +60,13 @@ cannot be imported from a test.
   `.cpu` or a command-line flag the server cannot see. `opcodesForCpu()` exposes the
   per-CPU breakdown for a future narrowing. Label detection gates on `OPCODES.has()`,
   so a missing mnemonic means a file indexes to *no labels at all*.
+- **CPU target**: `DocumentIndex.cpu`, defaulting to `6502` (the 6502/6510 NMOS set,
+  which includes the undocumented opcodes - 64tass's own default target is the
+  narrower `default`/--m65xx). Set by `64tass.cpu`, overridden by a `.cpu "..."`
+  directive or a `; 64tass-langserv: cpu <name>` pragma, which cascade into the
+  `.include` tree exactly like case sensitivity (`detectCpu` in `utils.ts`).
+  Decides `opcodesForCpu()` and `registerModesForCpu()`. Only the FIRST `.cpu` in a
+  file is used: 64tass allows switching mid-file, which the index does not model.
 - **Register operands**: `REGISTER_MODES`/`INDEX_REGISTERS` in `constants.ts`. 64tass
   accepts a register where an address would go and assembles the matching
   instruction - `lda x` is TXA, `ldx s` is TSX, `asl a` is accumulator mode,
@@ -127,7 +134,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 741 tests)
+yarn test          # Run all tests (currently 763 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```

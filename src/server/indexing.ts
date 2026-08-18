@@ -2,7 +2,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DocumentIndex } from './types';
 import { IncludeGraph } from './includes';
 import { parseDocument } from './parser';
-import { detectCaseSensitivityPragma } from './utils';
+import { detectCaseSensitivityPragma, detectCpu } from './utils';
 
 /**
  * Everything indexing needs from the server, injected so the logic can be
@@ -23,6 +23,8 @@ export interface IndexContext {
     getOpenDocument: (uri: string) => TextDocument | undefined;
     /** Workspace case-sensitivity, used when no pragma overrides it. */
     defaultCaseSensitive: boolean;
+    /** Workspace CPU target, used when no directive or pragma overrides it. */
+    defaultCpu: string;
     log?: (message: string) => void;
 }
 
@@ -42,7 +44,8 @@ export function indexDocument(
     context: IndexContext,
     indexedUris: Set<string> = new Set(),
     rootUri?: string,
-    inheritedCaseSensitive: boolean = context.defaultCaseSensitive
+    inheritedCaseSensitive: boolean = context.defaultCaseSensitive,
+    inheritedCpu: string = context.defaultCpu
 ): void {
     // Prevent circular includes
     if (indexedUris.has(document.uri)) {
@@ -53,10 +56,15 @@ export function indexDocument(
     // The root URI is the top-level document that initiated the indexing
     const effectiveRootUri = rootUri ?? document.uri;
 
-    const pragma = detectCaseSensitivityPragma(document.getText());
+    const text = document.getText();
+    const pragma = detectCaseSensitivityPragma(text);
     const effectiveCaseSensitive = pragma ?? inheritedCaseSensitive;
+    // Same cascade as case sensitivity: a `.cpu` directive or cpu pragma in this
+    // file applies to it and everything it includes, unless one of those overrides
+    // it again further down.
+    const effectiveCpu = detectCpu(text) ?? inheritedCpu;
 
-    const index = parseDocument(document, effectiveCaseSensitive, context.log);
+    const index = parseDocument(document, effectiveCaseSensitive, context.log, effectiveCpu);
     context.documentIndex.set(document.uri, index);
 
     for (const includeUri of index.includes) {
@@ -72,7 +80,7 @@ export function indexDocument(
             ?? createDocument(includeUri, context.getDocumentText(includeUri));
         if (!includeDoc) continue;
 
-        indexDocument(includeDoc, context, indexedUris, effectiveRootUri, effectiveCaseSensitive);
+        indexDocument(includeDoc, context, indexedUris, effectiveRootUri, effectiveCaseSensitive, effectiveCpu);
     }
 }
 

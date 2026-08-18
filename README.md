@@ -36,6 +36,21 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 
 Default `false`. Mirrors 64tass's `-C` flag: when `true`, `MyLabel` and `mylabel` are distinct symbols.
 
+### `64tass.cpu`
+
+Default `6502`. Decides which opcodes and register addressing modes are
+recognised, mirroring 64tass's CPU selection flags. Accepts the same names as the
+`.cpu` directive: `default`, `6502`, `65c02`, `65ce02`, `65dtv02`, `65el02`,
+`65816`, `r65c02`, `w65c02`, `4510`, `45gs02`.
+
+There is no `6510`: the C64 CPU is `6502`, the NMOS set that includes the
+undocumented opcodes. This matters more than it looks - label detection keys off
+the opcode table, so a file whose CPU is wrong indexes to *no labels* and loses
+navigation entirely.
+
+A `.cpu "..."` directive in a file is honoured automatically, and overrides the
+setting for that file and everything it `.include`s.
+
 ## Pragmas
 
 **They are ordinary comments to 64tass** — they change only how
@@ -52,6 +67,15 @@ Overrides `64tass.caseSensitive` for the file it appears in **and everything tha
 file `.include`s**. Useful when one workspace holds several projects that are
 built with different `-C` settings. A nested file may override it again for its
 own subtree.
+
+### CPU target
+
+```asm
+; 64tass-langserv: cpu 65816
+```
+
+For when the target is set on the command line rather than in the source. A
+`.cpu "65816"` directive needs no pragma - it is picked up on its own.
 
 ### Build-time defines
 

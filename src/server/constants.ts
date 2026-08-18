@@ -99,6 +99,30 @@ export function opcodesForCpu(cpu: string): ReadonlySet<string> {
 }
 
 /**
+ * CPU targets 64tass accepts, exactly as spelled in the `.cpu` directive.
+ * Note there is no "6510": the C64 CPU is `6502` (NMOS, which is the set that
+ * includes the undocumented opcodes).
+ */
+export const CPU_NAMES = [
+    'default', '6502', '65c02', '65ce02', '65dtv02', '65el02',
+    '65816', 'r65c02', 'w65c02', '4510', '45gs02'
+] as const;
+
+export type CpuName = typeof CPU_NAMES[number];
+
+/**
+ * CPU assumed when a file says nothing. 64tass's own default target is the
+ * narrower `default` (--m65xx), but 6502 is the 6502/6510 set actually written
+ * for the C64 and includes the undocumented opcodes - and being too narrow here
+ * costs navigation, since label detection gates on the opcode table.
+ */
+export const DEFAULT_CPU: CpuName = '6502';
+
+export function isCpuName(name: string): name is CpuName {
+    return (CPU_NAMES as readonly string[]).includes(name.toLowerCase());
+}
+
+/**
  * Register and addressing-keyword operands.
  *
  * 64tass accepts a register where an address would normally go, assembling it to
@@ -106,40 +130,255 @@ export function opcodesForCpu(cpu: string): ReadonlySet<string> {
  * is TSX, `asl a` is accumulator-mode ASL, `psh p` is PHP. These are NOT symbol
  * references, so they must not be reported as undefined symbols.
  *
- * Derived by probing 64tass V1.60.3243 across every CPU target; the union is used
- * because the target may be set by .cpu or a flag the server cannot see.
+ * Probed from 64tass V1.60.3243 for every CPU target.
  */
-export const REGISTER_MODES: Record<string, readonly string[]> = {
-    ard: ['q'],
-    asd: ['q'],
-    asl: ['a', 'q'],
-    asr: ['a', 'q'],
-    dec: ['a', 'q', 'x', 'y', 'z'],
-    ded: ['q'],
-    inc: ['a', 'q', 'x', 'y', 'z'],
-    ind: ['q'],
-    lda: ['d', 'x', 'y', 'z'],
-    ldx: ['a', 'i', 'r', 's', 'y'],
-    ldy: ['a', 's', 'x'],
-    ldz: ['a'],
-    lsd: ['q'],
-    lsr: ['a', 'q'],
-    neg: ['a'],
-    psh: ['a', 'b', 'd', 'k', 'p', 'x', 'y', 'z'],
-    pul: ['a', 'b', 'd', 'p', 'x', 'y', 'z'],
-    rld: ['q'],
-    rol: ['a', 'q'],
-    ror: ['a', 'q'],
-    rrd: ['q'],
-    rsh: ['a', 'i', 'x', 'y'],
-    rul: ['a', 'i', 'x', 'y'],
-    shl: ['a', 'q'],
-    shr: ['a', 'q'],
-    sta: ['a', 'd'],
-    stx: ['s', 'x'],
-    sty: ['s', 'y'],
-    stz: ['z'],
+/**
+ * Valid register operands per opcode, for each CPU 64tass can target.
+ * Probed from the assembler across every target; see REGISTER_MODES above.
+ */
+const REGISTER_MODES_BY_CPU: Record<string, Record<string, readonly string[]>> = {
+    'default': {
+        asl: ['a'],
+        dec: ['x', 'y'],
+        inc: ['x', 'y'],
+        lda: ['x', 'y'],
+        ldx: ['a', 's'],
+        ldy: ['a'],
+        lsr: ['a'],
+        psh: ['a', 'p'],
+        pul: ['a', 'p'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+    },
+    '6502': {
+        asl: ['a'],
+        dec: ['x', 'y'],
+        inc: ['x', 'y'],
+        lda: ['x', 'y'],
+        ldx: ['a', 's'],
+        ldy: ['a'],
+        lsr: ['a'],
+        psh: ['a', 'p'],
+        pul: ['a', 'p'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+    },
+    '65c02': {
+        asl: ['a'],
+        dec: ['a', 'x', 'y'],
+        inc: ['a', 'x', 'y'],
+        lda: ['x', 'y'],
+        ldx: ['a', 's'],
+        ldy: ['a'],
+        lsr: ['a'],
+        psh: ['a', 'p', 'x', 'y'],
+        pul: ['a', 'p', 'x', 'y'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+        stz: ['z'],
+    },
+    '65ce02': {
+        asl: ['a'],
+        asr: ['a'],
+        dec: ['a', 'x', 'y', 'z'],
+        inc: ['a', 'x', 'y', 'z'],
+        lda: ['d', 'x', 'y', 'z'],
+        ldx: ['a', 's'],
+        ldy: ['a', 's'],
+        ldz: ['a'],
+        lsr: ['a'],
+        neg: ['a'],
+        psh: ['a', 'p', 'x', 'y', 'z'],
+        pul: ['a', 'p', 'x', 'y', 'z'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a', 'd'],
+        stx: ['s', 'x'],
+        sty: ['s', 'y'],
+        stz: ['z'],
+    },
+    '65dtv02': {
+        asl: ['a'],
+        dec: ['x', 'y'],
+        inc: ['x', 'y'],
+        lda: ['x', 'y'],
+        ldx: ['a', 's'],
+        ldy: ['a'],
+        lsr: ['a'],
+        psh: ['a', 'p'],
+        pul: ['a', 'p'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+    },
+    '65el02': {
+        asl: ['a'],
+        dec: ['a', 'x', 'y'],
+        inc: ['a', 'x', 'y'],
+        lda: ['d', 'x', 'y'],
+        ldx: ['a', 'i', 'r', 's', 'y'],
+        ldy: ['a', 'x'],
+        lsr: ['a'],
+        psh: ['a', 'd', 'p', 'x', 'y'],
+        pul: ['a', 'd', 'p', 'x', 'y'],
+        rol: ['a'],
+        ror: ['a'],
+        rsh: ['a', 'i', 'x', 'y'],
+        rul: ['a', 'i', 'x', 'y'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+        stz: ['z'],
+    },
+    '65816': {
+        asl: ['a'],
+        dec: ['a', 'x', 'y'],
+        inc: ['a', 'x', 'y'],
+        lda: ['d', 's', 'x', 'y'],
+        ldx: ['a', 's', 'y'],
+        ldy: ['a', 'x'],
+        lsr: ['a'],
+        psh: ['a', 'b', 'd', 'k', 'p', 'x', 'y'],
+        pul: ['a', 'b', 'd', 'p', 'x', 'y'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a', 's'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+        stz: ['z'],
+    },
+    'r65c02': {
+        asl: ['a'],
+        dec: ['a', 'x', 'y'],
+        inc: ['a', 'x', 'y'],
+        lda: ['x', 'y'],
+        ldx: ['a', 's'],
+        ldy: ['a'],
+        lsr: ['a'],
+        psh: ['a', 'p', 'x', 'y'],
+        pul: ['a', 'p', 'x', 'y'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+        stz: ['z'],
+    },
+    'w65c02': {
+        asl: ['a'],
+        dec: ['a', 'x', 'y'],
+        inc: ['a', 'x', 'y'],
+        lda: ['x', 'y'],
+        ldx: ['a', 's'],
+        ldy: ['a'],
+        lsr: ['a'],
+        psh: ['a', 'p', 'x', 'y'],
+        pul: ['a', 'p', 'x', 'y'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+        stz: ['z'],
+    },
+    '4510': {
+        asl: ['a'],
+        asr: ['a'],
+        dec: ['a', 'x', 'y', 'z'],
+        inc: ['a', 'x', 'y', 'z'],
+        lda: ['d', 'x', 'y', 'z'],
+        ldx: ['a', 's'],
+        ldy: ['a', 's'],
+        ldz: ['a'],
+        lsr: ['a'],
+        neg: ['a'],
+        psh: ['a', 'p', 'x', 'y', 'z'],
+        pul: ['a', 'p', 'x', 'y', 'z'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a', 'd'],
+        stx: ['s', 'x'],
+        sty: ['s', 'y'],
+        stz: ['z'],
+    },
+    '45gs02': {
+        ard: ['q'],
+        asd: ['q'],
+        asl: ['a', 'q'],
+        asr: ['a', 'q'],
+        dec: ['a', 'q', 'x', 'y', 'z'],
+        ded: ['q'],
+        inc: ['a', 'q', 'x', 'y', 'z'],
+        ind: ['q'],
+        lda: ['d', 'x', 'y', 'z'],
+        ldx: ['a', 's'],
+        ldy: ['a', 's'],
+        ldz: ['a'],
+        lsd: ['q'],
+        lsr: ['a', 'q'],
+        neg: ['a'],
+        psh: ['a', 'p', 'x', 'y', 'z'],
+        pul: ['a', 'p', 'x', 'y', 'z'],
+        rld: ['q'],
+        rol: ['a', 'q'],
+        ror: ['a', 'q'],
+        rrd: ['q'],
+        shl: ['a', 'q'],
+        shr: ['a', 'q'],
+        sta: ['a', 'd'],
+        stx: ['s', 'x'],
+        sty: ['s', 'y'],
+        stz: ['z'],
+    },
 };
+
+/** Valid register operands for one CPU, falling back to the default target. */
+export function registerModesForCpu(cpu: string): Record<string, readonly string[]> {
+    return REGISTER_MODES_BY_CPU[cpu.toLowerCase()] ?? REGISTER_MODES_BY_CPU[DEFAULT_CPU];
+}
+
+/** Union across all CPUs, for callers that do not know the target. */
+export const REGISTER_MODES: Record<string, readonly string[]> = (() => {
+    const merged: Record<string, Set<string>> = {};
+    for (const modes of Object.values(REGISTER_MODES_BY_CPU)) {
+        for (const [opcode, regs] of Object.entries(modes)) {
+            merged[opcode] ??= new Set();
+            for (const r of regs) merged[opcode].add(r);
+        }
+    }
+    return Object.fromEntries(Object.entries(merged).map(([k, v]) => [k, [...v].sort()]));
+})();
 
 /**
  * Names valid immediately after a comma in an operand: the index registers

@@ -8,7 +8,11 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN,
     ALL_DIRECTIVES,
-    opcodesForCpu
+    opcodesForCpu,
+    registerModesForCpu,
+    CPU_NAMES,
+    DEFAULT_CPU,
+    isCpuName
 } from '../../src/server/constants';
 
 describe('OPCODES', () => {
@@ -187,5 +191,51 @@ describe('opcodesForCpu', () => {
         for (const cpu of ['65c02', '65816', '4510', '45gs02', '65ce02', '65el02', '65dtv02']) {
             for (const op of opcodesForCpu(cpu)) expect(OPCODES.has(op), `${cpu}: ${op}`).toBe(true);
         }
+    });
+});
+
+describe('CPU targets', () => {
+    it('lists exactly the names the .cpu directive accepts', () => {
+        // Verified against the assembler: these are accepted, and "6510" is not
+        expect([...CPU_NAMES].sort()).toEqual([
+            '4510', '45gs02', '6502', '65816', '65c02', '65ce02', '65dtv02',
+            '65el02', 'default', 'r65c02', 'w65c02'
+        ]);
+        expect(isCpuName('6510')).toBe(false);
+    });
+
+    it('defaults to the 6502/6510 set, which includes the undocumented opcodes', () => {
+        expect(DEFAULT_CPU).toBe('6502');
+        expect(opcodesForCpu(DEFAULT_CPU).has('lax')).toBe(true);
+        expect(opcodesForCpu(DEFAULT_CPU).has('sax')).toBe(true);
+    });
+
+    it('recognises a name case-insensitively', () => {
+        expect(isCpuName('65C02')).toBe(true);
+        expect(isCpuName('nonsense')).toBe(false);
+    });
+
+    it('narrows opcodes to the target', () => {
+        expect(opcodesForCpu('6502').has('xba')).toBe(false);   // 65816 only
+        expect(opcodesForCpu('65816').has('xba')).toBe(true);
+        expect(opcodesForCpu('6502').has('map')).toBe(false);   // 4510 only
+        expect(opcodesForCpu('4510').has('map')).toBe(true);
+    });
+
+    it('narrows register modes to the target', () => {
+        // The 65C02 added accumulator DEC/INC ("dec a"); the NMOS 6502 has neither
+        expect(registerModesForCpu('65c02').dec).toContain('a');
+        expect(registerModesForCpu('6502').dec ?? []).not.toContain('a');
+        // 'z' is an operand only on the CPUs that have a Z register
+        expect(registerModesForCpu('4510').dec).toContain('z');
+        expect(registerModesForCpu('6502').dec ?? []).not.toContain('z');
+        // ...while the plain transfers exist everywhere
+        expect(registerModesForCpu('6502').ldx).toContain('s');   // TSX
+        expect(registerModesForCpu('65816').lda).toContain('x');  // TXA
+    });
+
+    it('falls back to the default for an unknown CPU name', () => {
+        expect(registerModesForCpu('nonsense')).toEqual(registerModesForCpu(DEFAULT_CPU));
+        expect(opcodesForCpu('nonsense').has('lda')).toBe(true);
     });
 });
