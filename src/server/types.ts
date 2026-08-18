@@ -52,8 +52,13 @@ export interface DocumentIndex {
     // Maps a .dstruct/.dunion instance name to the .struct/.union it instantiates,
     // so "instance.member" can be resolved to that type's member.
     structInstances: Map<string, string>;
-    // URIs of files included via .include directive
+    // URIs of files included via .include or .binclude
     includes: string[];
+    // For `.binclude`d files only: the full scope path their contents belong to.
+    // `label .binclude "f"` wraps f in a block scope, so f's `sym` is reachable as
+    // `label.sym` and not as `sym` (verified against the assembler). Plain
+    // `.include` is textual and gets no entry here.
+    includeScopes: Map<string, string>;
     // The effective case-sensitivity this index was built with: either the
     // workspace's 64tass.caseSensitive setting, or a per-file override from a
     // "; 64tass-langserv: case-sensitive" / "case-insensitive" pragma (see

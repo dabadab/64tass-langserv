@@ -712,3 +712,26 @@ describe('parseDocument - non-6502 CPU targets', () => {
         expect(index.labels.find(l => l.name === 'outer' && l.kind === 'code')).toBeUndefined();
     });
 });
+
+describe('.binclude labels', () => {
+    it('indexes the label as a block scope rather than a data label', () => {
+        // It names a scope, so hover, completion and semantic tokens should treat
+        // it as one - it used to fall through to the data-directive branch.
+        const index = parse('sprite  .binclude "nope.asm"');
+        const label = index.labels.filter(l => l.name === 'sprite');
+        expect(label).toHaveLength(1);
+        expect(label[0].kind).toBe('block');
+    });
+
+    it('records the label even when the path does not resolve', () => {
+        const index = parse('sprite  .binclude "missing.asm"');
+        expect(index.labels.map(l => l.name)).toContain('sprite');
+        expect(index.includes).toHaveLength(0);
+    });
+
+    it('leaves .include lines alone', () => {
+        const index = parse('        .include "nope.asm"');
+        expect(index.labels).toHaveLength(0);
+        expect(index.includeScopes.size).toBe(0);
+    });
+});

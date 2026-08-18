@@ -44,6 +44,101 @@ function makeContext(disk: Record<string, string>, open: Record<string, string> 
     };
 }
 
+describe('.binclude scoping', () => {
+    it('puts a bincluded file\'s symbols in the label\'s scope, not the global one', () => {
+        const w = makeContext({
+            'main.asm': '        * = $1000\nlib     .binclude "dep.asm"',
+            'dep.asm': 'inner   .byte 1',
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const dep = w.context.documentIndex.get(w.uriOf('dep.asm'))!;
+            expect(dep.labels.find(l => l.name === 'inner')?.scopePath).toBe('lib');
+        } finally { w.cleanup(); }
+    });
+
+    it('indexes the .binclude label itself as a block scope', () => {
+        const w = makeContext({
+            'main.asm': 'lib     .binclude "dep.asm"',
+            'dep.asm': 'inner   .byte 1',
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const main = w.context.documentIndex.get(w.uriOf('main.asm'))!;
+            const label = main.labels.find(l => l.name === 'lib');
+            expect(label?.kind).toBe('block');
+            expect(label?.scopePath).toBeNull();
+        } finally { w.cleanup(); }
+    });
+
+    it('nests, so a .binclude inside a .binclude gets the full path', () => {
+        const w = makeContext({
+            'main.asm': 'lib     .binclude "mid.asm"',
+            'mid.asm': 'sub     .binclude "dep.asm"',
+            'dep.asm': 'inner   .byte 1',
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const dep = w.context.documentIndex.get(w.uriOf('dep.asm'))!;
+            expect(dep.labels.find(l => l.name === 'inner')?.scopePath).toBe('lib.sub');
+        } finally { w.cleanup(); }
+    });
+
+    it('adds the enclosing scope, so a .binclude inside a .block nests under it', () => {
+        const w = makeContext({
+            'main.asm': 'outer   .block\nlib     .binclude "dep.asm"\n        .bend',
+            'dep.asm': 'inner   .byte 1',
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const dep = w.context.documentIndex.get(w.uriOf('dep.asm'))!;
+            expect(dep.labels.find(l => l.name === 'inner')?.scopePath).toBe('outer.lib');
+        } finally { w.cleanup(); }
+    });
+
+    it('carries the scope through a plain .include below a .binclude', () => {
+        // .include is textual, so a file pulled in that way stays in the scope the
+        // .binclude opened (verified against the assembler).
+        const w = makeContext({
+            'main.asm': 'lib     .binclude "mid.asm"',
+            'mid.asm': '        .include "dep.asm"',
+            'dep.asm': 'inner   .byte 1',
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const dep = w.context.documentIndex.get(w.uriOf('dep.asm'))!;
+            expect(dep.labels.find(l => l.name === 'inner')?.scopePath).toBe('lib');
+        } finally { w.cleanup(); }
+    });
+
+    it('leaves a plain .include in the global scope', () => {
+        const w = makeContext({
+            'main.asm': '        .include "dep.asm"',
+            'dep.asm': 'inner   .byte 1',
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const dep = w.context.documentIndex.get(w.uriOf('dep.asm'))!;
+            expect(dep.labels.find(l => l.name === 'inner')?.scopePath).toBeNull();
+        } finally { w.cleanup(); }
+    });
+
+    it('keeps an unlabelled .binclude out of the global scope', () => {
+        // The assembler opens an unnameable scope, so its symbols are unreachable
+        // from outside - a synthetic scope name reproduces that.
+        const w = makeContext({
+            'main.asm': '        .binclude "dep.asm"',
+            'dep.asm': 'inner   .byte 1',
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const dep = w.context.documentIndex.get(w.uriOf('dep.asm'))!;
+            expect(dep.labels.find(l => l.name === 'inner')?.scopePath).not.toBeNull();
+            expect(w.context.documentIndex.get(w.uriOf('main.asm'))!.labels).toHaveLength(0);
+        } finally { w.cleanup(); }
+    });
+});
+
 describe('indexDocument', () => {
     it('indexes a document and the files it includes', () => {
         const w = makeContext({

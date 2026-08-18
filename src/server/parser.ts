@@ -14,7 +14,10 @@ export function parseDocument(
     document: TextDocument,
     caseSensitive = false,
     log?: LogFunction,
-    cpu: string = DEFAULT_CPU
+    cpu: string = DEFAULT_CPU,
+    // Scope this whole file sits inside, set when it was reached through a
+    // `.binclude`. Prefixed onto every scope path the file produces.
+    baseScope: string | null = null
 ): DocumentIndex {
 
     const text = document.getText();
@@ -32,6 +35,7 @@ export function parseDocument(
     const labelDefinedByMacro: Map<string, string> = new Map();
     const structInstances: Map<string, string> = new Map();
     const includes: string[] = [];
+    const includeScopes: Map<string, string> = new Map();
     const lines = text.split('\n');
 
     // Stack for directive-based scopes: { name, directive }
@@ -51,7 +55,8 @@ export function parseDocument(
 
     function getCurrentScopePath(): string | null {
         const named = scopeStack.filter(s => s.name !== null).map(s => s.name);
-        return named.length > 0 ? named.join('.') : null;
+        const parts = baseScope ? [baseScope, ...named] : named;
+        return parts.length > 0 ? parts.join('.') : null;
     }
 
     // Symbols supplied by "; 64tass-langserv: define NAME = VALUE" pragmas, which
@@ -90,20 +95,59 @@ export function parseDocument(
             continue;
         }
 
-        // Check for .include directives
-        const includeMatch = line.match(/^\s*\.include\s+["']([^"']+)["']/i);
+        // `.include` splices a file in textually; `label .binclude "f"` wraps it in
+        // a block scope, so f's `sym` is reachable only as `label.sym` (verified).
+        // Both are followed when indexing, but a .binclude records the full scope
+        // path its contents land in, so the file can be parsed with that as its base.
+        const includeMatch = line.match(/^\s*(?:([a-zA-Z_][a-zA-Z0-9_]*)\s*:?)?\s*\.(include|binclude)\s+["']([^"']+)["']/i);
         if (includeMatch) {
-            const includePath = includeMatch[1];
+            const [, includeLabel, directive, includePath] = includeMatch;
+            const isBinclude = directive.toLowerCase() === 'binclude';
+            const enclosing = getCurrentScopePath();
+
             // Resolve relative to current document
             try {
                 const currentPath = fileURLToPath(document.uri);
                 const currentDir = path.dirname(currentPath);
                 const resolvedPath = path.resolve(currentDir, includePath);
                 if (fs.existsSync(resolvedPath)) {
-                    includes.push(pathToFileURL(resolvedPath).toString());
+                    const includeUri = pathToFileURL(resolvedPath).toString();
+                    includes.push(includeUri);
+                    if (isBinclude) {
+                        // An unlabelled .binclude still opens a scope, just an
+                        // unnameable one - its symbols are unreachable from outside
+                        // (verified). A synthetic name reproduces that: it keeps them
+                        // out of the global namespace while still indexing the file.
+                        const scopeName = includeLabel ? normalizeName(includeLabel) : `.binclude@${lineNum}`;
+                        includeScopes.set(includeUri, enclosing ? `${enclosing}.${scopeName}` : scopeName);
+                    }
                 }
             } catch (e) {
-                log?.(`Failed to resolve .include path '${includePath}': ${e}`);
+                log?.(`Failed to resolve .${directive} path '${includePath}': ${e}`);
+            }
+
+            if (isBinclude) {
+                // The label names a scope, so it is indexed as one rather than
+                // falling through to the data-directive branch below. Recorded even
+                // when the path did not resolve, so it is still a known symbol.
+                if (includeLabel) {
+                    const labelStart = line.indexOf(includeLabel);
+                    labels.push({
+                        name: normalizeName(includeLabel),
+                        originalName: includeLabel,
+                        uri: document.uri,
+                        range: Range.create(
+                            Position.create(lineNum, labelStart),
+                            Position.create(lineNum, labelStart + includeLabel.length)
+                        ),
+                        scopePath: enclosing,
+                        localScope: null,
+                        isLocal: false,
+                        kind: 'block',
+                        comment: getBlockComment(lines, lineNum)
+                    });
+                }
+                continue;
             }
         }
 
@@ -552,5 +596,5 @@ export function parseDocument(
         }
     }
 
-    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, structInstances, includes, caseSensitive, cpu: effectiveCpu };
+    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu };
 }

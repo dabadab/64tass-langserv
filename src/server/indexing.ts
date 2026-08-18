@@ -31,6 +31,10 @@ export interface IndexContext {
 /**
  * Index a document and, recursively, everything it `.include`s.
  *
+ * A `label .binclude "f"` wraps f's contents in a block scope, so f is parsed with
+ * that scope as its base and its symbols resolve as `label.sym`. Plain `.include`
+ * is textual and keeps whatever scope is already in effect.
+ *
  * Case sensitivity cascades: a pragma in a file overrides the inherited value for
  * that file and everything below it, so a whole compilation unit shares one
  * effective setting even when only its root declares it.
@@ -45,7 +49,10 @@ export function indexDocument(
     indexedUris: Set<string> = new Set(),
     rootUri?: string,
     inheritedCaseSensitive: boolean = context.defaultCaseSensitive,
-    inheritedCpu: string = context.defaultCpu
+    inheritedCpu: string = context.defaultCpu,
+    // Scope this document's contents belong to, non-null once a `.binclude` above
+    // it opened one. Inherited by plain `.include`s, since those are textual.
+    baseScope: string | null = null
 ): void {
     // Prevent circular includes
     if (indexedUris.has(document.uri)) {
@@ -64,7 +71,7 @@ export function indexDocument(
     // it again further down.
     const effectiveCpu = detectCpu(text) ?? inheritedCpu;
 
-    const index = parseDocument(document, effectiveCaseSensitive, context.log, effectiveCpu);
+    const index = parseDocument(document, effectiveCaseSensitive, context.log, effectiveCpu, baseScope);
     context.documentIndex.set(document.uri, index);
 
     for (const includeUri of index.includes) {
@@ -80,7 +87,10 @@ export function indexDocument(
             ?? createDocument(includeUri, context.getDocumentText(includeUri));
         if (!includeDoc) continue;
 
-        indexDocument(includeDoc, context, indexedUris, effectiveRootUri, effectiveCaseSensitive, effectiveCpu);
+        // A .binclude records the full scope path its contents land in; a plain
+        // .include has no entry and simply stays in whatever scope we are already in.
+        const childScope = index.includeScopes.get(includeUri) ?? baseScope;
+        indexDocument(includeDoc, context, indexedUris, effectiveRootUri, effectiveCaseSensitive, effectiveCpu, childScope);
     }
 }
 

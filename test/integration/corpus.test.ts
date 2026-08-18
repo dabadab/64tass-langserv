@@ -20,17 +20,18 @@ const COMPILE_FLAGS: Record<string, string[]> = {
 const files = fs.readdirSync(CORPUS).filter(f => f.endsWith('.asm')).sort();
 
 /** Index a document together with its include tree, as the server does. */
-function indexTree(doc: TextDocument, index: Map<string, DocumentIndex>, seen: Set<string>, inherited: boolean) {
+function indexTree(doc: TextDocument, index: Map<string, DocumentIndex>, seen: Set<string>, inherited: boolean, baseScope: string | null = null) {
     if (seen.has(doc.uri)) return;
     seen.add(doc.uri);
     const effective = detectCaseSensitivityPragma(doc.getText()) ?? inherited;
-    const parsed = parseDocument(doc, effective);
+    const parsed = parseDocument(doc, effective, undefined, undefined, baseScope);
     index.set(doc.uri, parsed);
     for (const includeUri of parsed.includes) {
         if (seen.has(includeUri)) continue;
         try {
             const content = fs.readFileSync(new URL(includeUri), 'utf-8');
-            indexTree(TextDocument.create(includeUri, '64tass', 1, content), index, seen, effective);
+            const childScope = parsed.includeScopes.get(includeUri) ?? baseScope;
+            indexTree(TextDocument.create(includeUri, '64tass', 1, content), index, seen, effective, childScope);
         } catch { /* unreadable include */ }
     }
 }

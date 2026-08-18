@@ -117,6 +117,13 @@ cannot be imported from a test.
   type's member. A member the type does not declare is still reported, matching the
   assembler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
+- **`.binclude` scoping**: `label .binclude "f"` wraps f in a block scope, so f's
+  `sym` is reachable only as `label.sym`, unlike the textual `.include`. The parser
+  records the full scope path in `DocumentIndex.includeScopes` and `indexDocument`
+  re-parses the target with it as `parseDocument`'s `baseScope`, which prefixes every
+  scope path the file produces. Nests, picks up an enclosing `.proc`/`.block`, and
+  cascades through plain `.include`s below it. One index entry per URI, so a file
+  bincluded twice under different labels only models the first.
 
 ## Build Commands
 
@@ -134,7 +141,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 763 tests)
+yarn test          # Run all tests (currently 777 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```
