@@ -226,11 +226,14 @@ export function validateDocument(
                 // Try to find the macro definition
                 const symbol = findSymbolInfo(fullMatch, document.uri, lineNum, documentIndex, caseSensitive);
                 if (!symbol) {
+                    // Point at the name, not the leading dot, so the range matches
+                    // the name the message quotes - and matches where 64tass points.
+                    const nameCol = startCol + (fullMatch.startsWith('.') ? 1 : 0);
                     diagnostics.push({
                         severity: DiagnosticSeverity.Warning,
                         range: Range.create(
-                            Position.create(lineNum, startCol),
-                            Position.create(lineNum, startCol + fullMatch.length)
+                            Position.create(lineNum, nameCol),
+                            Position.create(lineNum, nameCol + macroName.length)
                         ),
                         message: `Undefined macro '${macroName}'`,
                         source: '64tass'
@@ -249,12 +252,15 @@ export function validateDocument(
         let operand: string | null = null;
         let operandStart = 0;
 
+        // Both patterns are anchored and end with (.+)$, so the operand is the tail
+        // of the match - deriving its offset that way is exact, where indexOf(operand)
+        // could in principle find an earlier occurrence of the same text.
         if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
             operand = opcodeMatch[2];
-            operandStart = codeForRefs.indexOf(operand);
+            operandStart = opcodeMatch[0].length - operand.length;
         } else if (dataDirectiveMatch) {
             operand = dataDirectiveMatch[2];
-            operandStart = codeForRefs.indexOf(operand);
+            operandStart = dataDirectiveMatch[0].length - operand.length;
         } else if (assignmentRhs) {
             // "foo = undef + 1": the right-hand side is an expression whose symbols
             // should be checked, but there is no opcode or directive to anchor on.

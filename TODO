@@ -159,9 +159,17 @@ T8  - [DONE] added rename tests for: renaming across files (definition in one, u
       isValidSymbolName() (pattern verified against the assembler), refused in
       computeRenameEdits so no caller can bypass it, with a clear message from the
       rename handler.
-T9  - no assertions on diagnostic ranges in most tests. operandStart is computed with
-      code.indexOf(operand), which finds the first occurrence, not the operand's
-      actual position - an off-by-column risk.
+T9  - [DONE] added range assertions: a generic check that every diagnostic's range
+      covers exactly the name its message quotes, plus specific column checks and a
+      well-formedness check.
+      operandStart no longer uses indexOf - it is derived from the match length,
+      since both operand patterns are anchored and end with (.+)$. (The indexOf
+      risk turned out to be nearly unreachable in practice: the operand is the whole
+      operand string, and a single-token operand matching an earlier label would be
+      defined, so there would be no diagnostic to misplace. Fixed anyway.)
+      The range assertions DID find a real inconsistency: "Undefined macro" covered
+      ".name" while quoting "name". Now points at the name, matching where 64tass
+      itself points (verified).
 T10 - performance.test.ts is a benchmark in the unit directory, running and appending
       to performance-results.jsonl on every yarn test. (Left as-is deliberately.)
 T11 - no coverage tooling (@vitest/coverage-v8 not installed).

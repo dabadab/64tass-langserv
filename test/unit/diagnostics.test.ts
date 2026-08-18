@@ -587,3 +587,67 @@ describe('define pragma', () => {
         expect(errors(src).filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
     });
 });
+
+describe('diagnostic ranges', () => {
+    /** The source text the diagnostic's range actually covers. */
+    function slice(source: string, d: { range: { start: { line: number; character: number }; end: { character: number } } }) {
+        return source.split('\n')[d.range.start.line].slice(d.range.start.character, d.range.end.character);
+    }
+
+    // Every message quotes a name in single quotes; the range must cover exactly
+    // that text, otherwise the squiggle sits on the wrong token.
+    it.each([
+        ['        lda undef_sym'],
+        ['start\n        lda undef_sym'],
+        ['loop: lda undef_sym'],
+        ['foo = undef_sym + 1'],
+        ['foo := undef_sym + 1'],
+        ['tbl: .byte undef_sym'],
+        ['        .byte 1 2'],
+        ['        .byte 1 1 1'],
+        ['val     .byte val val'],
+        ['        .nonexistent'],
+        ['label\nlabel'],
+    ])('range matches the quoted name for %j', (source) => {
+        const diags = getDiagnostics(source);
+        expect(diags.length).toBeGreaterThan(0);
+        for (const d of diags) {
+            const quoted = d.message.match(/'([^']*)'/);
+            if (!quoted) continue; // messages without a quoted name (e.g. "Unclosed ...")
+            expect(slice(source, d), `${d.message} @ c${d.range.start.character}`).toBe(quoted[1]);
+        }
+    });
+
+    it('places the operand correctly when the label repeats the operand text', () => {
+        // Guards the operandStart derivation: indexOf would find the label at c0
+        const source = 'val     .byte val val';
+        const [d] = errors(source);
+        expect(slice(source, d)).toBe('val');
+        expect(d.range.start.character).toBe(source.lastIndexOf('val'));
+    });
+
+    it('reports a non-zero start column for an indented operand', () => {
+        const [d] = warnings('        lda undef_sym');
+        expect(d.range.start.character).toBe('        lda '.length);
+    });
+
+    it('gives every diagnostic a well-formed range', () => {
+        const source = 'label\nlabel\n        lda undef\n        .byte 1 2\n.pend';
+        for (const d of getDiagnostics(source)) {
+            expect(d.range.start.line).toBeGreaterThanOrEqual(0);
+            expect(d.range.start.character).toBeGreaterThanOrEqual(0);
+            expect(d.range.end.character).toBeGreaterThan(d.range.start.character);
+            expect(d.range.end.line).toBe(d.range.start.line);
+        }
+    });
+});
+
+describe('undefined macro range', () => {
+    it('points at the macro name, not the leading dot', () => {
+        // 64tass reports "not defined symbol 'nonexistent'" at the 'n', not the '.'
+        const source = '        .nonexistent';
+        const [d] = warnings(source);
+        expect(d.range.start.character).toBe(source.indexOf('nonexistent'));
+        expect(d.range.end.character).toBe(source.length);
+    });
+});
