@@ -11,7 +11,6 @@ import {
     Position,
     FoldingRangeParams,
     FoldingRange,
-    FoldingRangeKind,
     HoverParams,
     Hover,
     MarkupKind,
@@ -45,8 +44,7 @@ import * as fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
-import { FOLDING_PAIRS, CLOSING_DIRECTIVES } from './constants';
-import { parseLineStructure, stripStrings, parseNumericValue, formatNumericValue, detectCaseSensitivityPragma } from './utils';
+import { parseNumericValue, formatNumericValue, detectCaseSensitivityPragma } from './utils';
 import { parseDocument } from './parser';
 import {
     getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits,
@@ -56,6 +54,9 @@ import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
 import { collectSourceFiles, findFilePathAt } from './workspace';
+import { computeFoldingRanges } from './folding';
+import { indexDocument as indexDocumentWith, clearIncludeRefs as clearIncludeRefsWith, IndexContext } from './indexing';
+
 import { buildDocumentSymbols } from './documentSymbols';
 import { findWorkspaceSymbols } from './workspaceSymbols';
 import { getSignatureHelp } from './signatureHelp';
@@ -117,109 +118,26 @@ const includeGraph = new IncludeGraph();
 const DIAGNOSTIC_DEBOUNCE_MS = 250;
 const diagnosticDebouncer = new Debouncer(DIAGNOSTIC_DEBOUNCE_MS);
 
-// Remove all include references from a root document and clean up orphaned includes
+// Dependencies the indexing logic needs, bound to this server's state
+const indexContext: IndexContext = {
+    documentIndex,
+    includeGraph,
+    getDocumentText: (uri) => getDocumentText(uri),
+    getOpenDocument: (uri) => documents.get(uri),
+    get defaultCaseSensitive() { return globalSettings.caseSensitive; },
+    log: (message) => connection.console.warn(message)
+};
+
+/** Index a document and its include tree. */
+function indexDocument(document: TextDocument): void {
+    indexDocumentWith(document, indexContext);
+}
+
+/** Drop a root's include references, cleaning up any orphaned index entries. */
 function clearIncludeRefs(rootUri: string): void {
-    for (const uri of includeGraph.clearRoot(rootUri)) {
-        // Only drop documents that are not open in their own right
-        if (!documents.get(uri)) documentIndex.delete(uri);
-    }
+    clearIncludeRefsWith(rootUri, indexContext);
 }
 
-function indexDocument(
-    document: TextDocument,
-    indexedUris: Set<string> = new Set(),
-    rootUri?: string,
-    inheritedCaseSensitive: boolean = globalSettings.caseSensitive
-): void {
-    // Prevent circular includes
-    if (indexedUris.has(document.uri)) {
-        return;
-    }
-    indexedUris.add(document.uri);
-
-    // The root URI is the top-level document that initiated the indexing
-    const effectiveRootUri = rootUri ?? document.uri;
-
-    // A "; 64tass-langserv: case-sensitive"/"case-insensitive" pragma in this
-    // file overrides the inherited setting for itself and everything it
-    // .include's; otherwise it inherits from its parent (or the workspace
-    // 64tass.caseSensitive setting, at the top of the include tree).
-    const pragma = detectCaseSensitivityPragma(document.getText());
-    const effectiveCaseSensitive = pragma ?? inheritedCaseSensitive;
-
-    const index = parseDocument(document, effectiveCaseSensitive, (msg) => connection.console.warn(msg));
-    documentIndex.set(document.uri, index);
-
-    // Recursively index included files and track references
-    for (const includeUri of index.includes) {
-        // Track that this root document references this included file
-        includeGraph.addRef(includeUri, effectiveRootUri);
-
-        if (!indexedUris.has(includeUri)) {
-            // Prefer the open buffer over the file on disk: an include that is open
-            // with unsaved edits would otherwise be re-indexed back to its saved
-            // state every time the parent is edited.
-            const openDoc = documents.get(includeUri);
-            if (openDoc) {
-                indexDocument(openDoc, indexedUris, effectiveRootUri, effectiveCaseSensitive);
-            } else {
-                const content = getDocumentText(includeUri);
-                if (content === null) continue;
-                const includeDoc = TextDocument.create(includeUri, '64tass', 1, content);
-                indexDocument(includeDoc, indexedUris, effectiveRootUri, effectiveCaseSensitive);
-            }
-        }
-    }
-}
-
-function computeFoldingRanges(document: TextDocument): FoldingRange[] {
-    const ranges: FoldingRange[] = [];
-    const text = document.getText();
-    const lines = text.split('\n');
-
-    const stack: { directive: string; line: number }[] = [];
-
-    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const { code } = parseLineStructure(lines[lineNum]);
-        // Blank out string contents first, so a directive name inside a literal
-        // (.text "a .proc b") doesn't push a phantom entry onto the fold stack
-        const line = stripStrings(code).toLowerCase();
-
-        // Check for opening directives
-        for (const open of Object.keys(FOLDING_PAIRS)) {
-            // Safe: directive name from static constant (FOLDING_PAIRS)
-            const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`);
-            if (openPattern.test(line)) {
-                stack.push({ directive: open, line: lineNum });
-            }
-        }
-
-        // Check for closing directives
-        for (const [close, openers] of Object.entries(CLOSING_DIRECTIVES)) {
-            // Safe: directive name from static constant (CLOSING_DIRECTIVES)
-            const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`);
-            if (closePattern.test(line)) {
-                // Find the most recent matching opener
-                for (let i = stack.length - 1; i >= 0; i--) {
-                    if (openers.includes(stack[i].directive)) {
-                        const startLine = stack[i].line;
-                        stack.splice(i, 1);
-                        ranges.push(FoldingRange.create(
-                            startLine,
-                            lineNum,
-                            undefined,
-                            undefined,
-                            FoldingRangeKind.Region
-                        ));
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    return ranges;
-}
 
 /**
  * Re-publish diagnostics for `uri` and for every open root whose include tree it
@@ -443,7 +361,7 @@ connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return [];
 
-    return computeFoldingRanges(document);
+    return computeFoldingRanges(document.getText());
 });
 
 connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => {

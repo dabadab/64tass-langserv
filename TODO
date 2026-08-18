@@ -144,10 +144,24 @@ M8 - [DONE] diagnostics are debounced (250ms) via Debouncer (debounce.ts,
 
 TEST SUITE
 
-T1  - server.ts has (almost) no tests, and 5 of the 13 defects lived there.
-      PARTLY ADDRESSED: include ref-counting extracted to includes.ts + tested.
-      Still to extract: computeFoldingRanges, so folding is testable at all
-      (the C6 fix touched the folding path and could NOT be covered by a test).
+T1  - [DONE] the testable logic is out of server.ts.
+      Extracted over the course of this work: includes.ts, workspace.ts,
+      documentSymbols.ts, workspaceSymbols.ts, signatureHelp.ts, semanticTokens.ts,
+      debounce.ts, folding.ts, indexing.ts - all unit-tested.
+      folding.ts finally covers the C6 fix on the folding path (verified: reverting
+      the string-stripping fails "does not let a string corrupt a real fold").
+      indexing.ts covers the include tree: transitive includes, circular includes,
+      unreadable includes, the case-sensitivity cascade, and the L2/L3 behaviours.
+      Coverage 75.7% -> 82.0%; server.ts is down from 267 to 220 lines and is now
+      almost entirely LSP wiring: handler registration, capability declaration and
+      binding state to the extracted modules.
+      NOTE on L3: after extraction the module has NO filesystem access at all - an
+      include's text can only come from the injected getDocumentText, which is
+      contractually required to prefer the open buffer. That makes the original bug
+      (a direct fs.readFileSync) unexpressible rather than merely fixed. The
+      explicit open-document branch that the L3 commit added turned out to be
+      redundant with that accessor; it is kept only to reuse the existing
+      TextDocument instead of rebuilding one, and the comment now says so.
 T2  - [DONE] .github/workflows/ci.yml runs on push to main, PRs and manual dispatch:
       yarn install --frozen-lockfile, typecheck, test, compile. All four verified
       locally as the exact sequence CI runs.

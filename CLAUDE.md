@@ -33,7 +33,12 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 LSP extension with two components:
 
 1. **Client** (`src/extension.ts`): Starts the language server
-2. **Server** (`src/server/`): Provides go-to-definition, find references, rename, hover, folding, and diagnostics
+2. **Server** (`src/server/`): Provides go-to-definition, find references, rename, hover, folding, completion, document/workspace symbols, signature help, semantic tokens and diagnostics
+
+`server.ts` is deliberately thin: LSP handler registration and capability
+declaration only. Anything with logic worth testing lives in its own module and is
+unit-tested, because `server.ts` calls `createConnection()` at module load and so
+cannot be imported from a test.
 
 ### Key Concepts
 
@@ -84,7 +89,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 603 tests)
+yarn test          # Run all tests (currently 639 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```
