@@ -2,7 +2,8 @@ Remaining items from the code & test review (2026-08-17)
 https://claude.ai/code/artifact/c24a279f-b66e-4b6f-ab0a-a7c8ba2df0d8
 
 DONE so far: C1-C8 (all correctness defects) - see git log e123fd0..b2e1d57
-STILL OPEN: missing capabilities (M) and test (T) items below.
+STILL OPEN: missing capabilities (M) below, and T1 (server.ts testability).
+DONE: C1-C8, the .if design call, the whole L series, and T2-T12.
 DONE: C1-C8, the .if design call, and the whole L series (L1-L5).
 
 Suggested order from the review: T2 + T5 first (CI + corpus test, makes everything
@@ -179,8 +180,13 @@ T11 - [DONE] @vitest/coverage-v8 installed, `yarn test:coverage` added, config i
       Baseline: 75.7% lines overall - and that number is almost entirely server.ts,
       which is 0% of 267 lines. Every other module is 94-100%. That is T1 in one
       number: the untested code is exactly the code that is hard to test.
-T12 - yarn lint is broken: the script is declared but ESLint is not a dependency and
-      no config file exists, so it exits 2.
+T12 - [DONE] eslint 9 + typescript-eslint installed with a flat config
+      (eslint.config.mjs); the script is now `eslint .` (v9 dropped --ext) and CI
+      runs it. Passes with 0 errors.
+      It immediately found 4 real problems, all fixed: three unnecessary \- escapes
+      in anonymous-label character classes (verified the patterns behave identically
+      without them before changing) and a dead createDoc import in security.test.ts.
+      The 9 remaining warnings are deliberate `any` at the LSP/JSON boundary.
 
 -----------------------
 

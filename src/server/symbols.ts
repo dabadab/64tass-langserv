@@ -159,7 +159,7 @@ export function findSymbolInfo(
     caseSensitive = false
 ): LabelDefinition | null {
     // Check if word is an anonymous label reference
-    if (/^[+\-]+$/.test(word)) {
+    if (/^[+-]+$/.test(word)) {
         const direction = word[0] as '+' | '-';
         const distance = word.length;
         return findAnonymousLabel(direction, distance, fromUri, fromLine, documentIndex);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDoc, buildIndex } from '../helpers/doc';
+import { buildIndex } from '../helpers/doc';
 
 describe('Security: Regex injection prevention', () => {
     it('handles dotted symbol names safely', () => {

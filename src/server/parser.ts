@@ -363,7 +363,7 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         // Anonymous labels: + or - at start of line (can have multiples)
         // Can be on their own line or followed by an instruction: "-  INX"
         // Each symbol creates a separate label entry for precise distance calculation
-        const anonMatch = line.match(/^(\s*)([+\-]+)\s*(:)?(?:\s|;|$)/);
+        const anonMatch = line.match(/^(\s*)([+-]+)\s*(:)?(?:\s|;|$)/);
         if (anonMatch) {
             const symbols = anonMatch[2]; // The +++ or --- string
             const direction = symbols[0]; // First char: '+' or '-'

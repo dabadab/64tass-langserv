@@ -305,7 +305,7 @@ export function validateDocument(
             // ONLY in opcode context (branch/jump instructions), NOT in data directives
             // Data directives use +/- for arithmetic/unary operators
             if (opcodeMatch) {
-                const anonRefPattern = /([+\-]+)/g;
+                const anonRefPattern = /([+-]+)/g;
                 let anonMatch;
                 while ((anonMatch = anonRefPattern.exec(operand)) !== null) {
                     const ref = anonMatch[1]; // '+', '--', '+++', etc.
