@@ -39,10 +39,13 @@ L2 (Medium) - closing an included file drops it from the index  [DONE]
 	so it is unit-testable; onDidClose now keeps the index entry when another root
 	still includes the file. Partially addresses T1 as well.
 
-L3 (Medium) - re-indexing reads includes from disk, discarding unsaved buffers
+L3 (Medium) - re-indexing reads includes from disk, discarding unsaved buffers  [DONE]
 	indexDocument always fs.readFileSync's an included file even when it is open with
 	unsaved edits, so editing the parent silently reverts the include's index.
-	fix: reuse getDocumentText (server.ts), which already checks the open buffer first.
+	fixed: indexDocument now uses the open buffer for an include that is open, and
+	getDocumentText otherwise; onReferences' duplicate copy of that logic was folded
+	into getDocumentText too. NOT unit-tested - indexDocument still lives in
+	server.ts and would need its dependencies injected to be testable (see T1).
 
 L4 (Medium) - diagnostics published only for the document that changed
 	Editing an include never refreshes the parent's diagnostics. No

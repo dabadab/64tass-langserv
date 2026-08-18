@@ -121,13 +121,17 @@ function indexDocument(
         includeGraph.addRef(includeUri, effectiveRootUri);
 
         if (!indexedUris.has(includeUri)) {
-            try {
-                const includePath = fileURLToPath(includeUri);
-                const content = fs.readFileSync(includePath, 'utf-8');
+            // Prefer the open buffer over the file on disk: an include that is open
+            // with unsaved edits would otherwise be re-indexed back to its saved
+            // state every time the parent is edited.
+            const openDoc = documents.get(includeUri);
+            if (openDoc) {
+                indexDocument(openDoc, indexedUris, effectiveRootUri, effectiveCaseSensitive);
+            } else {
+                const content = getDocumentText(includeUri);
+                if (content === null) continue;
                 const includeDoc = TextDocument.create(includeUri, '64tass', 1, content);
                 indexDocument(includeDoc, indexedUris, effectiveRootUri, effectiveCaseSensitive);
-            } catch (e) {
-                connection.console.warn(`Failed to read included file '${includeUri}': ${e}`);
             }
         }
     }
@@ -388,20 +392,9 @@ connection.onReferences((params: ReferenceParams): Location[] => {
 
     // Search all indexed documents for references
     for (const [uri, index] of documentIndex) {
-        // Get document content
-        let docContent: string;
-        const openDoc = documents.get(uri);
-        if (openDoc) {
-            docContent = openDoc.getText();
-        } else {
-            try {
-                const filePath = fileURLToPath(uri);
-                docContent = fs.readFileSync(filePath, 'utf-8');
-            } catch (e) {
-                connection.console.warn(`Failed to read file for references '${uri}': ${e}`);
-                continue;
-            }
-        }
+        // Open buffer first, disk otherwise (see getDocumentText)
+        const docContent = getDocumentText(uri);
+        if (docContent === null) continue;
 
         const lines = docContent.split('\n');
 
