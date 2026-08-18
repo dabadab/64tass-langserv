@@ -26,7 +26,9 @@ import {
     DidChangeConfigurationNotification,
     DidChangeWatchedFilesNotification,
     FileChangeType,
-    DidChangeWatchedFilesParams
+    DidChangeWatchedFilesParams,
+    DocumentSymbolParams,
+    DocumentSymbol
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -43,6 +45,7 @@ import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
 import { collectSourceFiles } from './workspace';
+import { buildDocumentSymbols } from './documentSymbols';
 
 // Get the current text of a document by URI: prefer the open in-memory buffer,
 // fall back to reading the file from disk (for indexed-but-unopened .include files).
@@ -243,6 +246,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             renameProvider: { prepareProvider: true },
             foldingRangeProvider: true,
             hoverProvider: true,
+            documentSymbolProvider: true,
             completionProvider: {
                 triggerCharacters: ['.', '"', '/']
             }
@@ -428,6 +432,12 @@ connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
     if (!document) return [];
 
     return computeFoldingRanges(document);
+});
+
+connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => {
+    const index = documentIndex.get(params.textDocument.uri);
+    if (!index) return [];
+    return buildDocumentSymbols(index);
 });
 
 connection.onCompletion((params: CompletionParams): CompletionItem[] => {

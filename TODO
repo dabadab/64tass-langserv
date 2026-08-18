@@ -92,8 +92,14 @@ DESIGN CALL - symbols in inactive .if branches: DECIDED & DONE
 
 MISSING CAPABILITIES (ordered by value/effort; first three are nearly free)
 
-M1 - documentSymbol. No outline, no breadcrumbs, no Ctrl+Shift+O. DocumentIndex.labels
-     already carries name, kind, range and scope path - it is a mapping function.
+M1 - [DONE] documentSymbol: outline, breadcrumbs and Ctrl+Shift+O.
+     buildDocumentSymbols() in documentSymbols.ts (unit-tested; server.ts is thin glue).
+     Nests by directive scope, and local _name symbols under their code label.
+     Anonymous labels are omitted - they have no name and would be pure noise.
+     Scope ranges are derived from scopeAtLine so a scope spans its BODY, not just
+     its name; without that, breadcrumbs only light up when the cursor is on the
+     name itself. Note Range.create rejects MAX_SAFE_INTEGER (LSP caps a character
+     at uinteger max), hence the END_OF_LINE constant.
 M2 - workspaceSymbol (Ctrl+T). Blocked on L5 being useful.
 M3 - prepareRename. DONE as part of the C8 fix (bfa4fd8).
 M4 - signatureHelp for macro/function calls; parametersAtScope is already populated.

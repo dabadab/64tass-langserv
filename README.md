@@ -26,6 +26,9 @@ VS Code language support for the [64tass](http://tass64.sourceforge.net/) cross 
   - Numeric values displayed in binary, decimal, and hexadecimal
   - Shows associated comments from block definitions
 
+- **Document Outline** (Ctrl+Shift+O) - Outline view and breadcrumbs, with symbols
+  nested by scope and local `_name` symbols grouped under their code label
+
 - **Code Folding** - Fold blocks like `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif`, etc.
 
 - **Diagnostics** - Real-time error detection:
