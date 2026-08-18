@@ -138,8 +138,12 @@ T5  - [DONE] test/integration/corpus.test.ts over test/fixtures/corpus/*.asm.
       Currently 0 errors and 0 warnings; the warning budget is asserted at 0.
       Verified it has teeth: reverting the C4 float fix and the dead-branch
       suppression makes it fail.
-T6  - case sensitivity is never verified against the compiler; compile() takes
-      extraFlags but -C is never passed anywhere.
+T6  - [DONE] test/integration/case-sensitivity.test.ts assembles the same source
+      with and without -C and checks the validator agrees in the matching mode -
+      so the "equivalent to -C" claim is tested against the assembler, not just
+      against our own model. Covers: differently-cased reference resolving without
+      -C but not with it, exact-case resolving under -C, and two symbols differing
+      only by case being distinct under -C / a duplicate without it.
 T7  - buildIndex() cannot build a mixed-sensitivity index: it reads caseSensitive from
       args[0] and applies it to every document (test/helpers/doc.ts), so the
       per-document pragma cascade cannot be tested across documents.
