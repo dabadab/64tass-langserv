@@ -22,7 +22,8 @@ import {
     CompletionItem,
     PrepareRenameParams,
     ResponseError,
-    ErrorCodes
+    ErrorCodes,
+    DidChangeConfigurationNotification
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -72,6 +73,10 @@ interface Settings {
 // Default settings
 let globalSettings: Settings = { caseSensitive: false };
 let hasConfigurationCapability = false;
+// Whether the client accepts a dynamic registration for didChangeConfiguration.
+// Distinct from hasConfigurationCapability (workspace/configuration *requests*):
+// without registering for the notification the server is never told about changes.
+let hasDidChangeConfigurationCapability = false;
 
 // Tracks which parent documents reference each included file (for cleanup)
 // Maps included file URI -> Set of parent document URIs that include it
@@ -195,6 +200,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     hasConfigurationCapability = !!(
         capabilities.workspace && !!capabilities.workspace.configuration
     );
+    hasDidChangeConfigurationCapability = !!(
+        capabilities.workspace && !!capabilities.workspace.didChangeConfiguration?.dynamicRegistration
+    );
 
     return {
         capabilities: {
@@ -225,6 +233,14 @@ let configReady: Promise<void> = Promise.resolve();
 connection.onInitialized(() => {
     connection.console.log('64tass language server initialized');
 
+    // Without this the client never sends workspace/didChangeConfiguration:
+    // vscode-languageclient only wires that up if the client sets
+    // synchronize.configurationSection (we don't) or the server registers for it
+    // here. Missing it meant 64tass.caseSensitive changes did nothing until reload.
+    if (hasDidChangeConfigurationCapability) {
+        connection.client.register(DidChangeConfigurationNotification.type, undefined);
+    }
+
     if (hasConfigurationCapability) {
         configReady = connection.workspace.getConfiguration('64tass').then(
             (config: any) => {
@@ -245,20 +261,33 @@ connection.onInitialized(() => {
 
 // Handle configuration changes
 connection.onDidChangeConfiguration(() => {
-    if (hasConfigurationCapability) {
-        connection.workspace.getConfiguration('64tass').then(
-            (config: any) => {
-                globalSettings = {
-                    caseSensitive: config.caseSensitive ?? false
-                };
-                // Re-index all documents with new settings
-                documents.all().forEach(doc => indexDocument(doc));
-            },
-            (error) => {
-                connection.console.warn(`Failed to get configuration: ${error}`);
-            }
-        );
-    }
+    if (!hasConfigurationCapability) return;
+
+    configReady = connection.workspace.getConfiguration('64tass').then(
+        (config: any) => {
+            globalSettings = {
+                caseSensitive: config.caseSensitive ?? false
+            };
+        },
+        (error) => {
+            connection.console.warn(`Failed to get configuration: ${error}`);
+        }
+    );
+
+    configReady.then(() => {
+        // Re-index every open document under the new settings, then re-publish -
+        // re-indexing alone would leave the previous diagnostics on screen.
+        for (const doc of documents.all()) {
+            clearIncludeRefs(doc.uri);
+            indexDocument(doc);
+        }
+        for (const doc of documents.all()) {
+            connection.sendDiagnostics({
+                uri: doc.uri,
+                diagnostics: validateDocument(doc, documentIndex, effectiveCaseSensitive(doc.uri))
+            });
+        }
+    });
 });
 
 connection.onDefinition((params: DefinitionParams): Location | null => {

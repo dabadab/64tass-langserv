@@ -18,17 +18,18 @@ optional: case-insensitive labels
 
 SERVER LIFECYCLE (all in server.ts, which has no tests)
 
-L1 (High) - configuration changes never reach the server
+L1 (High) - configuration changes never reach the server  [DONE]
 	connection.onDidChangeConfiguration cannot fire: vscode-languageclient only
 	sends workspace/didChangeConfiguration if the client sets
 	synchronize.configurationSection or the server dynamically registers for it,
 	and we do neither (clientOptions.synchronize is {} in extension.ts).
 	So changing 64tass.caseSensitive does nothing until the window is reloaded -
 	contradicting the CHANGELOG's "Index automatically rebuilds when setting changes".
-	fix: register DidChangeConfigurationNotification.type in onInitialized when
-	hasConfigurationCapability. While there: that handler also needs to clear include
-	refs and re-publish diagnostics for open documents - today it re-indexes but
-	leaves stale diagnostics on screen.
+	fixed: registers DidChangeConfigurationNotification.type in onInitialized (gated
+	on the client's didChangeConfiguration.dynamicRegistration capability, which is
+	NOT the same as workspace.configuration that hasConfigurationCapability tracks).
+	The handler now also clears include refs and re-publishes diagnostics for all
+	open documents. This also makes D3 true - see below.
 
 L2 (Medium) - closing an included file drops it from the index
 	onDidClose calls documentIndex.delete(uri) unconditionally. If that file is
@@ -123,7 +124,7 @@ D1 - completions are undocumented: directive, opcode, symbol, parameter and file
 D2 - CHANGELOG stops at 0.8.0 while package.json reads 0.8.2. Nothing since is
      documented anywhere a user would look (case-sensitivity pragma, completions,
      and the whole C1-C8 series).
-D3 - the CHANGELOG states something untrue: "Index automatically rebuilds when setting
-     changes" (0.8.0). Per L1 it does not.
+D3 - RESOLVED by the L1 fix: "Index automatically rebuilds when setting changes"
+     (CHANGELOG 0.8.0) is now actually true.
 D4 - tsconfig.json includes only src/**/*, so yarn typecheck never type-checks the
      test suite; vitest transpiles without checking, so type errors in tests go unnoticed.
