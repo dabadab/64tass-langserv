@@ -16,6 +16,7 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
     const parametersAtScope: Map<string, string[]> = new Map();
     const macroSubLabels: Map<string, string[]> = new Map();
     const labelDefinedByMacro: Map<string, string> = new Map();
+    const structInstances: Map<string, string> = new Map();
     const includes: string[] = [];
     const text = document.getText();
     const lines = text.split('\n');
@@ -452,6 +453,33 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
 
 
+        // Struct/union instance: "p1 .dstruct pt, 1, 2" defines p1 whose members
+        // mirror pt's, so "p1.posx" must resolve to pt's posx (verified against the
+        // assembler, which also rejects a member the struct does not declare).
+        const structInstanceMatch = line.match(
+            /^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.(dstruct|dunion)\s+([a-zA-Z_][a-zA-Z0-9_.]*)/i);
+        if (structInstanceMatch) {
+            const startChar = structInstanceMatch[1].length;
+            const labelName = structInstanceMatch[2];
+            const structName = normalizeName(structInstanceMatch[4]);
+
+            labels.push({
+                name: normalizeName(labelName),
+                originalName: labelName,
+                uri: document.uri,
+                range: Range.create(
+                    Position.create(lineNum, startChar),
+                    Position.create(lineNum, startChar + labelName.length)
+                ),
+                scopePath: getCurrentScopePath(),
+                localScope: null,
+                isLocal: false,
+                kind: 'data'
+            });
+            structInstances.set(normalizeName(labelName), structName);
+            continue;
+        }
+
         // Labels defined via macro calls (e.g., "label .macro_name args")
         // Track which macro was used so we can validate sub-label references
         // Separated by whitespace or a colon: "label: .macro_name args", even "label:.macro_name"
@@ -511,5 +539,5 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
         }
     }
 
-    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, includes, caseSensitive };
+    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, structInstances, includes, caseSensitive };
 }

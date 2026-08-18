@@ -190,7 +190,17 @@ export function findSymbolInfo(
     if (lookupWord.includes('.')) {
         const parts = lookupWord.split('.');
         const targetName = parts[parts.length - 1];
-        const targetPath = parts.slice(0, -1).join('.');
+        let targetPath = parts.slice(0, -1).join('.');
+
+        // A .dstruct/.dunion instance exposes the members of the type it
+        // instantiates, so "p1.posx" is resolved as if it were "pt.posx".
+        for (const [, index] of documentIndex) {
+            const declaredType = index.structInstances.get(targetPath);
+            if (declaredType) {
+                targetPath = declaredType;
+                break;
+            }
+        }
 
         for (const [, index] of documentIndex) {
             for (const label of index.labels) {

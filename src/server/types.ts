@@ -49,6 +49,9 @@ export interface DocumentIndex {
     macroSubLabels: Map<string, string[]>;
     // Maps label name to the macro used to define it (for labels defined via macro calls)
     labelDefinedByMacro: Map<string, string>;
+    // Maps a .dstruct/.dunion instance name to the .struct/.union it instantiates,
+    // so "instance.member" can be resolved to that type's member.
+    structInstances: Map<string, string>;
     // URIs of files included via .include directive
     includes: string[];
     // The effective case-sensitivity this index was built with: either the

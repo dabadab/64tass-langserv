@@ -170,6 +170,7 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['m', ['p1', 'p2']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
+            structInstances: new Map(),
             includes: [],
             caseSensitive: false
         };
@@ -183,6 +184,7 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['outer', ['p1']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
+            structInstances: new Map(),
             includes: [],
             caseSensitive: false
         };
@@ -196,6 +198,7 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['m', ['p1']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
+            structInstances: new Map(),
             includes: [],
             caseSensitive: false
         };
@@ -209,6 +212,7 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['m', ['p1']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
+            structInstances: new Map(),
             includes: [],
             caseSensitive: false
         };
@@ -222,6 +226,7 @@ describe('isParameter', () => {
             parametersAtScope: new Map([['m', ['param']]]),
             macroSubLabels: new Map(),
             labelDefinedByMacro: new Map(),
+            structInstances: new Map(),
             includes: [],
             caseSensitive: false
         };
@@ -617,5 +622,52 @@ describe('.with imported scopes', () => {
         const source = BLOCK + '        .with scope\n        lda nope\n        .endwith';
         const { documentIndex, docs } = buildIndex({ source, uri: 'file:///w9.asm' });
         expect(findSymbolInfo('nope', docs[0].uri, 4, documentIndex)).toBeNull();
+    });
+});
+
+describe('.dstruct / .dunion instance members', () => {
+    // Verified against the assembler: an instance exposes the members of the type it
+    // instantiates, and a member the type does not declare is still an error.
+    const STRUCT = 'pt      .struct\nposx    .byte ?\nposy    .byte ?\n        .ends\n';
+
+    it('resolves a member through the instance', () => {
+        const source = STRUCT + 'p1      .dstruct pt, 1, 2\n        lda p1.posx';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///d1.asm' });
+        const found = findSymbolInfo('p1.posx', docs[0].uri, 5, documentIndex);
+        expect(found).not.toBeNull();
+        expect(found!.name).toBe('posx');
+        expect(found!.scopePath).toBe('pt');
+    });
+
+    it('resolves members of several instances of one type', () => {
+        const source = STRUCT + 'p1 .dstruct pt, 1, 2\np2 .dstruct pt, 3, 4\n        nop';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///d2.asm' });
+        expect(findSymbolInfo('p1.posy', docs[0].uri, 6, documentIndex)).not.toBeNull();
+        expect(findSymbolInfo('p2.posx', docs[0].uri, 6, documentIndex)).not.toBeNull();
+    });
+
+    it('does not invent a member the type does not declare', () => {
+        const source = STRUCT + 'p1      .dstruct pt, 1, 2\n        nop';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///d3.asm' });
+        expect(findSymbolInfo('p1.nosuch', docs[0].uri, 5, documentIndex)).toBeNull();
+    });
+
+    it('indexes the instance itself as a label', () => {
+        const source = STRUCT + 'p1      .dstruct pt, 1, 2\n        lda p1';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///d4.asm' });
+        expect(findSymbolInfo('p1', docs[0].uri, 5, documentIndex)).not.toBeNull();
+        expect(documentIndex.get(docs[0].uri)!.structInstances.get('p1')).toBe('pt');
+    });
+
+    it('works for .dunion too', () => {
+        const source = 'u .union\naa .byte ?\nbb .word ?\n.endu\nv .dunion u\n        lda v.bb';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///d5.asm' });
+        expect(findSymbolInfo('v.bb', docs[0].uri, 5, documentIndex)).not.toBeNull();
+    });
+
+    it('still resolves a member via the type name', () => {
+        const source = STRUCT + 'p1 .dstruct pt, 1, 2\n        lda pt.posx';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///d6.asm' });
+        expect(findSymbolInfo('pt.posx', docs[0].uri, 5, documentIndex)).not.toBeNull();
     });
 });
