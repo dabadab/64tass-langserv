@@ -37,7 +37,6 @@ import {
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import * as fs from 'fs';
-import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
@@ -48,7 +47,7 @@ import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits, 
 import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
-import { collectSourceFiles } from './workspace';
+import { collectSourceFiles, findFilePathAt } from './workspace';
 import { buildDocumentSymbols } from './documentSymbols';
 import { findWorkspaceSymbols } from './workspaceSymbols';
 import { getSignatureHelp } from './signatureHelp';
@@ -397,35 +396,20 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return null;
 
-    // Check if cursor is on an .include file path
-    const text = document.getText();
-    const lines = text.split('\n');
-    const line = lines[params.position.line];
+    // Cursor on a quoted file path (.include / .binclude / .binary) opens that file
+    const line = document.getText().split('\n')[params.position.line];
     if (line) {
-        const includeMatch = line.match(/^\s*\.include\s+(["'])([^"']+)\1/i);
-        if (includeMatch) {
-            const quote = includeMatch[1];
-            const includePath = includeMatch[2];
-            // Find the position of the path in the line
-            const pathStart = line.indexOf(quote) + 1;
-            const pathEnd = pathStart + includePath.length;
-
-            // Check if cursor is within the path
-            if (params.position.character >= pathStart && params.position.character <= pathEnd) {
-                try {
-                    const currentPath = fileURLToPath(document.uri);
-                    const currentDir = path.dirname(currentPath);
-                    const resolvedPath = path.resolve(currentDir, includePath);
-                    if (fs.existsSync(resolvedPath)) {
-                        return Location.create(
-                            pathToFileURL(resolvedPath).toString(),
-                            Range.create(Position.create(0, 0), Position.create(0, 0))
-                        );
-                    }
-                } catch (e) {
-                    connection.console.warn(`Failed to resolve include path for definition: ${e}`);
-                }
+        try {
+            const reference = findFilePathAt(line, params.position.character, fileURLToPath(document.uri));
+            if (reference?.resolved) {
+                return Location.create(
+                    pathToFileURL(reference.resolved).toString(),
+                    Range.create(Position.create(0, 0), Position.create(0, 0))
+                );
             }
+            if (reference) return null; // on a path, but it does not resolve
+        } catch (e) {
+            connection.console.warn(`Failed to resolve file path for definition: ${e}`);
         }
     }
 

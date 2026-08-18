@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { collectSourceFiles, SOURCE_EXTENSIONS, IGNORED_DIRECTORIES } from '../../src/server/workspace';
+import { collectSourceFiles, findFilePathAt, SOURCE_EXTENSIONS, IGNORED_DIRECTORIES } from '../../src/server/workspace';
 
 let root: string;
 
@@ -91,5 +91,80 @@ describe('collectSourceFiles - symlinks', () => {
         } finally {
             fs.rmSync(linkDir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('findFilePathAt', () => {
+    let dir: string;
+    let fromFile: string;
+
+    beforeAll(() => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), '64tass-paths-'));
+        fs.writeFileSync(path.join(dir, 'dep.asm'), '; dep\n');
+        fs.mkdirSync(path.join(dir, 'sub'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'sub', 'nested.inc'), '; nested\n');
+        fs.writeFileSync(path.join(dir, 'data.bin'), 'binary');
+        fromFile = path.join(dir, 'main.asm');
+    });
+
+    afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    const at = (line: string, ch: number) => findFilePathAt(line, ch, fromFile);
+
+    // M5: definition used to work for .include only, though completion offered all three
+    it.each(['include', 'binclude', 'binary'])('resolves a .%s path', (directive) => {
+        const line = `        .${directive} "dep.asm"`;
+        const ref = at(line, line.indexOf('dep.asm') + 2);
+        expect(ref).not.toBeNull();
+        expect(ref!.text).toBe('dep.asm');
+        expect(ref!.resolved).toBe(path.join(dir, 'dep.asm'));
+    });
+
+    it('resolves a path in a subdirectory', () => {
+        const line = '        .include "sub/nested.inc"';
+        expect(at(line, line.indexOf('sub/'))!.resolved).toBe(path.join(dir, 'sub', 'nested.inc'));
+    });
+
+    it('reports a path that does not exist as unresolved', () => {
+        const line = '        .include "missing.asm"';
+        const ref = at(line, line.indexOf('missing'));
+        expect(ref).not.toBeNull();
+        expect(ref!.resolved).toBeNull();
+    });
+
+    it('returns null when the cursor is outside the path', () => {
+        const line = '        .include "dep.asm" ; trailing';
+        expect(at(line, 2)).toBeNull();                              // on the directive
+        expect(at(line, line.indexOf('"'))).toBeNull();              // on the opening quote
+        expect(at(line, line.indexOf(';'))).toBeNull();              // in the comment
+    });
+
+    it('treats the position just past the last character as still on the path', () => {
+        // Clicking at the end of the path text is normal editor behaviour
+        const line = '        .include "dep.asm"';
+        const end = line.indexOf('dep.asm') + 'dep.asm'.length;
+        expect(at(line, end)).not.toBeNull();
+    });
+
+    it('reports the span of the path text', () => {
+        const line = '        .include "dep.asm"';
+        const ref = at(line, line.indexOf('dep.asm'))!;
+        expect(ref.start).toBe(line.indexOf('dep.asm'));
+        expect(ref.end).toBe(line.indexOf('dep.asm') + 'dep.asm'.length);
+    });
+
+    it('handles single quotes', () => {
+        const line = "        .include 'dep.asm'";
+        expect(at(line, line.indexOf('dep.asm'))!.resolved).toBe(path.join(dir, 'dep.asm'));
+    });
+
+    it('returns null for a line with no file directive', () => {
+        expect(at('        lda #1', 5)).toBeNull();
+        expect(at('        .byte "not a path"', 18)).toBeNull();
+    });
+
+    it('handles a label before the directive', () => {
+        const line = 'lbl     .binary "data.bin"';
+        expect(at(line, line.indexOf('data.bin'))!.resolved).toBe(path.join(dir, 'data.bin'));
     });
 });

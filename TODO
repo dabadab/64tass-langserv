@@ -109,8 +109,11 @@ M4 - [DONE] signatureHelp for macro and function calls, from parametersAtScope.
      signatureHelp.ts, unit-tested. Handles all three call forms the assembler
      accepts (verified): "#mac a, b", ".mac a, b", "fn(a, b)" - including a call
      after a label, nested parens, and commas inside nested calls.
-M5 - definition on .binclude / .binary paths (onDefinition handles .include only,
-     while completions.ts already covers all three).
+M5 - [DONE] go-to-definition now works on .include, .binclude AND .binary paths
+     (it handled .include only, though completion already offered all three).
+     Extracted from server.ts into findFilePathAt() in workspace.ts and unit-tested:
+     subdirectories, single quotes, a label before the directive, unresolved paths,
+     and cursor-outside-the-path cases.
 M6 - documentHighlight (occurrences of the symbol under the cursor).
 M7 - semantic tokens, to disambiguate what the TextMate grammar cannot.
 M8 - no debounce on validation: every keystroke re-indexes the whole include tree

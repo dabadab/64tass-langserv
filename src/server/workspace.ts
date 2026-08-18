@@ -60,3 +60,49 @@ export function collectSourceFiles(root: string, options: CollectOptions = {}): 
     if (found.length >= limit && limit !== Infinity) options.onLimit?.(limit);
     return found;
 }
+
+/** Directives whose argument is a quoted file path (same set completion offers). */
+const FILE_PATH_DIRECTIVE = /(?:^|\s)\.(include|binclude|binary)\s+(["'])([^"']*)\2/i;
+
+export interface FilePathReference {
+    /** The path exactly as written in the source */
+    text: string;
+    /** Absolute path if the file exists, else null */
+    resolved: string | null;
+    /** Column where the path text starts (excluding the quote) */
+    start: number;
+    /** Column just past the path text */
+    end: number;
+}
+
+/**
+ * The quoted file path under `character` on `line`, if any.
+ *
+ * Covers .include, .binclude and .binary - go-to-definition previously handled
+ * only .include, while completion already offered all three.
+ *
+ * @param fromFile absolute path of the file containing the line, used to resolve
+ *                 the reference relative to it
+ */
+export function findFilePathAt(line: string, character: number, fromFile: string): FilePathReference | null {
+    const match = line.match(FILE_PATH_DIRECTIVE);
+    if (!match || match.index === undefined) return null;
+
+    const pathText = match[3];
+    // Offset of the path within the line: match start + everything before the path
+    const start = match.index + match[0].length - pathText.length - 1; // -1 for the closing quote
+    const end = start + pathText.length;
+    if (character < start || character > end) return null;
+
+    let resolved: string | null = null;
+    if (pathText !== '') {
+        try {
+            const candidate = path.resolve(path.dirname(fromFile), pathText);
+            if (fs.existsSync(candidate)) resolved = candidate;
+        } catch {
+            resolved = null;
+        }
+    }
+
+    return { text: pathText, resolved, start, end };
+}

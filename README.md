@@ -15,7 +15,7 @@ VS Code language support for the [64tass](http://tass64.sourceforge.net/) cross 
 - **Go to Definition** (F12) - Navigate to label and symbol definitions
   - Supports scoped labels within `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, and `.namespace`
   - Works across files via `.include` directives
-  - Click on `.include` paths to open the included file
+  - Click on `.include`, `.binclude` or `.binary` paths to open that file
 
 - **Find All References** (Shift+F12) - Find all usages of a symbol across files
 
