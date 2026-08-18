@@ -509,3 +509,81 @@ describe('label definitions do not silence the rest of the line', () => {
         expect(diags.some(d => d.message.includes('operator'))).toBe(true);
     });
 });
+
+describe('inactive .if branches', () => {
+    // The assembler never evaluates a dead branch, so symbols there are not resolved.
+    // Only provably-dead branches are suppressed - undecidable ones stay reported.
+    it('suppresses undefined symbols in a .if 0 branch', () => {
+        expect(warnings('\t.if 0\n\tjsr nope\n\t.endif')).toHaveLength(0);
+    });
+
+    it('still reports them in a .if 1 branch', () => {
+        expect(warnings('\t.if 1\n\tjsr nope\n\t.endif')
+            .some(d => d.message.includes("'nope'"))).toBe(true);
+    });
+
+    it('decides a branch from a constant flag', () => {
+        expect(warnings('linking = 0\n\t.if linking = 1\n\tjsr nope\n\t.endif')).toHaveLength(0);
+        expect(warnings('linking = 1\n\t.if linking = 1\n\tjsr nope\n\t.endif')
+            .some(d => d.message.includes("'nope'"))).toBe(true);
+    });
+
+    it('keeps reporting when the condition cannot be decided', () => {
+        // The flag itself is undefined, so we must not assume either branch is dead
+        expect(warnings('\t.if unknown_flag\n\tjsr nope\n\t.endif')
+            .some(d => d.message.includes("'nope'"))).toBe(true);
+        // Program counter is not statically known
+        expect(warnings('\t.if *>=$1000\n\tjsr nope\n\t.endif')
+            .some(d => d.message.includes("'nope'"))).toBe(true);
+    });
+
+    it('reports only the taken side of an .else', () => {
+        const diags = warnings('f = 0\n\t.if f\n\tjsr a_nope\n\t.else\n\tjsr b_nope\n\t.endif');
+        expect(diags.some(d => d.message.includes("'a_nope'"))).toBe(false);
+        expect(diags.some(d => d.message.includes("'b_nope'"))).toBe(true);
+    });
+
+    it('reports only the taken side of an .elsif chain', () => {
+        const diags = warnings('f = 2\n\t.if f = 1\n\tjsr a_nope\n\t.elsif f = 2\n\tjsr b_nope\n\t.endif');
+        expect(diags.some(d => d.message.includes("'a_nope'"))).toBe(false);
+        expect(diags.some(d => d.message.includes("'b_nope'"))).toBe(true);
+    });
+
+    it('treats everything inside a dead outer block as dead', () => {
+        expect(warnings('\t.if 0\n\t.if 1\n\tjsr nope\n\t.endif\n\t.endif')).toHaveLength(0);
+    });
+
+    it('resumes reporting after .endif', () => {
+        const diags = warnings('\t.if 0\n\tjsr a_nope\n\t.endif\n\tjsr b_nope');
+        expect(diags.some(d => d.message.includes("'a_nope'"))).toBe(false);
+        expect(diags.some(d => d.message.includes("'b_nope'"))).toBe(true);
+    });
+
+    it('does not suppress other diagnostics in a dead branch', () => {
+        // Only undefined-symbol reporting is skipped; structural errors still apply
+        expect(errors('\t.if 0\n\t.byte 1 2\n\t.endif')
+            .some(d => d.message.includes('operator'))).toBe(true);
+    });
+});
+
+describe('define pragma', () => {
+    it('resolves a flag supplied by the pragma', () => {
+        const src = '; 64tass-langserv: define linking = 0\n\t.if linking = 1\n\tjsr nope\n\t.endif';
+        expect(warnings(src)).toHaveLength(0);
+    });
+
+    it('keeps the branch live when the pragma makes the condition true', () => {
+        const src = '; 64tass-langserv: define linking = 1\n\t.if linking = 1\n\tjsr nope\n\t.endif';
+        expect(warnings(src).some(d => d.message.includes("'nope'"))).toBe(true);
+    });
+
+    it('makes the defined symbol resolvable in ordinary code', () => {
+        const src = '; 64tass-langserv: define screen = $0400\nstart\n\tlda screen';
+        expect(warnings(src).filter(d => d.message.includes("'screen'"))).toHaveLength(0);
+    });
+
+    it('does not report a redefinition as a duplicate', () => {
+        const src = '; 64tass-langserv: define f = 0\n; 64tass-langserv: define f = 1\nstart';
+        expect(errors(src).filter(d => d.message.includes('Duplicate'))).toHaveLength(0);
+    });
+});

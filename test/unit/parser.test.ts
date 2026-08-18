@@ -651,3 +651,24 @@ describe('parseDocument - labelled loops', () => {
         expect(index.labels[0].name).toBe('i');
     });
 });
+
+describe('parseDocument - define pragma', () => {
+    it('indexes a pragma define as a re-assignable variable', () => {
+        const index = parse('; 64tass-langserv: define linking = 0\nstart');
+        const linking = index.labels.find(l => l.name === 'linking');
+        expect(linking).toBeDefined();
+        expect(linking!.kind).toBe('var');
+        expect(linking!.value).toBe('0');
+        expect(linking!.scopePath).toBeNull();
+        expect(linking!.range.start.line).toBe(0);
+    });
+
+    it('indexes several pragma defines', () => {
+        const index = parse('; 64tass-langserv: define a = 1\n; 64tass-langserv: define b = $FF\nstart');
+        expect(index.labels.filter(l => l.kind === 'var').map(l => l.name).sort()).toEqual(['a', 'b']);
+    });
+
+    it('ignores a non-pragma comment', () => {
+        expect(parse('; define linking = 0\nstart').labels.find(l => l.name === 'linking')).toBeUndefined();
+    });
+});

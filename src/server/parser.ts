@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { OPCODES, SCOPE_OPENERS } from './constants';
-import { stripComment, getBlockComment } from './utils';
+import { stripComment, getBlockComment, detectDefinePragmas } from './utils';
 
 export type LogFunction = (message: string) => void;
 
@@ -35,6 +35,26 @@ export function parseDocument(document: TextDocument, caseSensitive = false, log
     function getCurrentScopePath(): string | null {
         const named = scopeStack.filter(s => s.name !== null).map(s => s.name);
         return named.length > 0 ? named.join('.') : null;
+    }
+
+    // Symbols supplied by "; 64tass-langserv: define NAME = VALUE" pragmas, which
+    // stand in for the -D flags a real build passes on the command line. Indexed as
+    // ordinary re-assignable variables so they resolve like any other symbol.
+    for (const def of detectDefinePragmas(text)) {
+        labels.push({
+            name: normalizeName(def.name),
+            originalName: def.name,
+            uri: document.uri,
+            range: Range.create(
+                Position.create(def.line, def.nameStart),
+                Position.create(def.line, def.nameStart + def.name.length)
+            ),
+            scopePath: null,
+            localScope: null,
+            isLocal: false,
+            kind: 'var',
+            value: def.value
+        });
     }
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {

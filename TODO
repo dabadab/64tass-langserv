@@ -57,13 +57,14 @@ L5 (Low) - no workspace scan on startup
 
 -----------------------
 
-DESIGN CALL - symbols in inactive .if branches
-
-	64tass never evaluates inactive branches so the code assembles; the validator has
-	no conditional evaluation and reports the symbols as undefined anyway.
-	Three options, ascending cost: suppress undefined-symbol warnings inside any
-	conditional block; evaluate constant conditions where operands are known at index
-	time; or leave it and document the behaviour.
+DESIGN CALL - symbols in inactive .if branches: DECIDED & DONE
+	Chose option B (evaluate constant conditions, suppress only provably-dead
+	branches) plus a "; 64tass-langserv: define NAME = VALUE" pragma emulating
+	64tass's -D flag, so build-time flags can be resolved too.
+	Corpus effect: undefined-symbol warnings 559 -> 538.
+	Note ~36 of the remaining conditional warnings are undecidable only because the
+	flag lives in a file we never indexed - fixing L5 (or adding a define pragma)
+	is what unlocks those, not more evaluator work.
 
 -----------------------
 

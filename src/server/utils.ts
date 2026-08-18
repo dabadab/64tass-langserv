@@ -312,3 +312,42 @@ export function detectCaseSensitivityPragma(text: string): boolean | null {
     }
     return null;
 }
+
+// Extension-only pragma for defining a symbol, mirroring 64tass's "-D label=value"
+// command-line flag:
+//   ; 64tass-langserv: define linking = 0
+// Like the case-sensitivity pragma this is an ordinary comment to the assembler.
+// It exists so build-time flags that a project passes with -D (and which therefore
+// appear nowhere in the source) can still be resolved - most usefully to decide
+// which .if branches are dead. Keep it in sync with the -D flags of your real build.
+const DEFINE_PRAGMA = /^\s*;\s*64tass-langserv\s*:\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(\S+)\s*$/i;
+
+export interface PragmaDefine {
+    name: string;
+    value: string;
+    line: number;
+    /** Column where the defined name starts, for the label's range */
+    nameStart: number;
+}
+
+/**
+ * Scan a document's text for "; 64tass-langserv: define NAME = VALUE" pragmas.
+ * Later definitions of the same name win, matching how a re-assignable variable
+ * behaves; all occurrences are returned so each can be indexed as a definition.
+ */
+export function detectDefinePragmas(text: string): PragmaDefine[] {
+    const defines: PragmaDefine[] = [];
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const match = lines[i].match(DEFINE_PRAGMA);
+        if (match) {
+            defines.push({
+                name: match[1],
+                value: match[2],
+                line: i,
+                nameStart: lines[i].indexOf(match[1], lines[i].toLowerCase().indexOf('define'))
+            });
+        }
+    }
+    return defines;
+}

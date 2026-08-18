@@ -55,6 +55,17 @@ LSP extension with two components:
     `effectiveCaseSensitive` helper in `server.ts`) rather than assume a single global
     value - this is a comment as far as 64tass itself is concerned and has no effect
     on the real compiler.
+- **Conditional blocks**: `evaluateCondition` (`conditions.ts`) decides `.if`/`.elsif`
+  conditions statically where possible; `findDeadLines` in `diagnostics.ts` uses it to
+  skip undefined-symbol reporting inside branches that provably cannot be taken.
+  Deliberately conservative - anything undecidable returns `null` and leaves every
+  branch reported, so the evaluator can suppress but never invent. Supports literals,
+  index-resolved symbols, `!` `&&` `||`, `= == != < > <= >=`, arithmetic and parens;
+  the program counter `*` and strings are undecidable.
+- **Build-time defines**: a `; 64tass-langserv: define NAME = VALUE` pragma
+  (`detectDefinePragmas` in `utils.ts`) mirrors 64tass's `-D` flag and is indexed by
+  `parseDocument` as a normal `kind: 'var'` label, so it resolves like any other
+  symbol. Mainly exists so `-D`-supplied flags can decide `.if` branches.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
 
 ## Build Commands
@@ -73,7 +84,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test        # Run all tests (currently 304 tests)
+yarn test        # Run all tests (currently 433 tests)
 yarn test:watch  # Watch mode
 ```
 

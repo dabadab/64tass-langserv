@@ -10,6 +10,7 @@ import {
     formatNumericValue,
     escapeRegex,
     detectCaseSensitivityPragma,
+    detectDefinePragmas,
     tokenizeExpression
 } from '../../src/server/utils';
 
@@ -485,5 +486,37 @@ describe('detectCaseSensitivityPragma', () => {
     it('handles strings with no special characters', () => {
         expect(escapeRegex('abc123')).toBe('abc123');
         expect(escapeRegex('label_name')).toBe('label_name');
+    });
+});
+
+describe('detectDefinePragmas', () => {
+    it('finds a define pragma', () => {
+        expect(detectDefinePragmas('; 64tass-langserv: define linking = 0'))
+            .toEqual([{ name: 'linking', value: '0', line: 0, nameStart: 26 }]);
+    });
+
+    it('accepts varied spacing and casing', () => {
+        const found = detectDefinePragmas(';64tass-langserv:DEFINE  below_io=$01  ');
+        expect(found).toHaveLength(1);
+        expect(found[0].name).toBe('below_io');
+        expect(found[0].value).toBe('$01');
+    });
+
+    it('finds several across the file and records their lines', () => {
+        const found = detectDefinePragmas('; 64tass-langserv: define a = 1\nstart\n; 64tass-langserv: define b = 2');
+        expect(found.map(d => [d.name, d.value, d.line])).toEqual([['a', '1', 0], ['b', '2', 2]]);
+    });
+
+    it('returns an empty list when absent', () => {
+        expect(detectDefinePragmas('start\n        lda #1')).toEqual([]);
+    });
+
+    it('ignores prose mentioning the pragma', () => {
+        expect(detectDefinePragmas('; we should define linking = 0 one day')).toEqual([]);
+        expect(detectDefinePragmas('; 64tass-langserv: define')).toEqual([]);
+    });
+
+    it('does not confuse the case-sensitivity pragma for a define', () => {
+        expect(detectDefinePragmas('; 64tass-langserv: case-sensitive')).toEqual([]);
     });
 });

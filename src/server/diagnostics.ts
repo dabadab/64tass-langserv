@@ -17,6 +17,76 @@ import {
 } from './constants';
 import { parseLineStructure, stripStrings, tokenizeExpression } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
+import { evaluateCondition } from './conditions';
+
+/**
+ * Lines that sit inside a conditional branch which provably cannot be taken.
+ *
+ * Only branches whose condition evaluates to a definite true/false are decided;
+ * anything undecidable leaves every branch live, so this can suppress but never
+ * invent. Used to skip undefined-symbol reporting in dead code, matching the
+ * assembler, which never evaluates those branches at all.
+ */
+function findDeadLines(
+    lines: string[],
+    uri: string,
+    documentIndex: Map<string, DocumentIndex>,
+    caseSensitive: boolean
+): Set<number> {
+    const dead = new Set<number>();
+    // taken: has some branch of this chain already been taken?
+    // live: is the branch we are currently in possibly executable?
+    const stack: { live: boolean; taken: boolean | null }[] = [];
+    const isDead = () => stack.some(s => s.live === false);
+
+    for (let i = 0; i < lines.length; i++) {
+        const code = stripStrings(parseLineStructure(lines[i]).code);
+        const open = code.match(/(?:^|\s)\.(if|ifeq|ifne|ifmi|ifpl)\b(.*)$/i);
+        const elsif = code.match(/(?:^|\s)\.(elsif|elif)\b(.*)$/i);
+        const isElse = /(?:^|\s)\.else\b/i.test(code);
+        const isEnd = /(?:^|\s)\.(endif|fi)\b/i.test(code);
+
+        if (isEnd) {
+            stack.pop();
+            continue;
+        }
+
+        if (open) {
+            // Only plain .if conditions are evaluated; .ifeq/.ifne/... compare against
+            // the program counter era and are left undecided.
+            const cond = open[1].toLowerCase() === 'if'
+                ? evaluateCondition(open[2].trim(), uri, i, documentIndex, caseSensitive)
+                : null;
+            stack.push({ live: cond === null ? true : cond, taken: cond });
+            continue;
+        }
+
+        if (elsif && stack.length > 0) {
+            const frame = stack[stack.length - 1];
+            if (frame.taken === true) {
+                frame.live = false; // an earlier branch already ran
+            } else if (frame.taken === false) {
+                const cond = evaluateCondition(elsif[2].trim(), uri, i, documentIndex, caseSensitive);
+                frame.live = cond === null ? true : cond;
+                if (cond === true) frame.taken = true;
+                else if (cond !== null) frame.taken = false;
+            } else {
+                frame.live = true; // previous branch undecided, so this one is too
+            }
+            continue;
+        }
+
+        if (isElse && stack.length > 0) {
+            const frame = stack[stack.length - 1];
+            frame.live = frame.taken === null ? true : !frame.taken;
+            continue;
+        }
+
+        if (isDead()) dead.add(i);
+    }
+
+    return dead;
+}
 
 export function validateDocument(
     document: TextDocument,
@@ -29,6 +99,10 @@ export function validateDocument(
     const index = documentIndex.get(document.uri);
 
     if (!index) return diagnostics;
+
+    // Lines in .if branches the assembler provably never evaluates. Undefined-symbol
+    // reporting is skipped for these, since the assembler does not resolve them either.
+    const deadLines = findDeadLines(lines, document.uri, documentIndex, caseSensitive);
 
     // Check for duplicate labels (same name, same scopePath, same localScope)
     // All names are stored lowercase, so simple comparison works
@@ -309,7 +383,7 @@ export function validateDocument(
                 }
 
                 const symbol = findSymbolInfo(symName, document.uri, lineNum, documentIndex, caseSensitive);
-                if (!symbol) {
+                if (!symbol && !deadLines.has(lineNum)) {
                     const startCol = operandStart + match.index;
                     diagnostics.push({
                         severity: DiagnosticSeverity.Warning,

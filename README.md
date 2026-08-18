@@ -53,6 +53,30 @@ VS Code language support for the [64tass](http://tass64.sourceforge.net/) cross 
   concerned - it only affects how this extension reads the file, not what the
   real compiler does, so keep `-C` in sync with it yourself if you use it.
 
+- **Defining build-time symbols** - mirrors 64tass's `-D label=value` flag, for
+  symbols your build supplies on the command line and which therefore appear
+  nowhere in the source:
+  ```
+  ; 64tass-langserv: define linking = 0
+  ; 64tass-langserv: define below_io = $01
+  ```
+  This is most useful for deciding which `.if` branches are dead (see below).
+  Like the case-sensitivity pragma it is an ordinary comment to the assembler, so
+  keep it in sync with the `-D` flags of your real build.
+
+### Conditional blocks
+
+Symbols referenced in a `.if` branch that provably cannot be taken are not
+reported as undefined, matching the assembler, which never evaluates those
+branches. A branch is only treated as dead when its condition can be decided
+statically - numeric literals, symbols with known constant values, `!`, `&&`,
+`||`, the comparisons `=` `==` `!=` `<` `>` `<=` `>=`, arithmetic and
+parentheses. Anything undecidable (an unresolvable flag, the program counter
+`*`) leaves every branch reported as normal, so nothing is hidden by guesswork.
+
+If a condition depends on a flag your build passes with `-D`, add the matching
+`define` pragma above and the branch can then be decided.
+
 ## Known Issues
 
 - **Color swatch on `#`-prefixed values** (e.g. `cpx #250`) - VS Code's own built-in
