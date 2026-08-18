@@ -116,8 +116,11 @@ T2  - [DONE] .github/workflows/ci.yml runs on push to main, PRs and manual dispa
       locally as the exact sequence CI runs.
       NOTE: the integration tests (compiler-ref) will SKIP in CI since 64tass is not
       installed there - see T4, which makes that visible rather than silent.
-T3  - the release workflow runs npm install against a yarn.lock, so the lockfile is
-      ignored. Either commit package-lock.json or use yarn install --frozen-lockfile.
+T3  - [DONE] release.yml now uses yarn install --frozen-lockfile and yarn
+      compile:prod (was npm install, which ignored yarn.lock). Also gated the
+      release on yarn typecheck + yarn test, closing T2 for the release path too.
+      vsce's --no-yarn flags were left alone: node_modules/** is vsceignored and
+      esbuild bundles everything, so the package manager cannot affect the .vsix.
 T4  - integration tests vanish silently off this machine: TASS_PATH is hardcoded to
       /home/db/bin/64tass and describe.skipIf turns its absence into a green run.
       Make it env-overridable and hard-fail under a REQUIRE_TASS flag.

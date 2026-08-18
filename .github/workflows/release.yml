@@ -19,12 +19,23 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: '22'
+          cache: yarn
 
+      # This project uses yarn: npm install would ignore yarn.lock and resolve
+      # transitive dependencies fresh, so a release could ship versions that were
+      # never tested. --frozen-lockfile fails instead of silently updating.
       - name: Install dependencies
-        run: npm install
+        run: yarn install --frozen-lockfile
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      # Gate the release on the suite: a tag should not publish a broken build
+      - name: Test
+        run: yarn test
 
       - name: Build (production)
-        run: npm run compile:prod
+        run: yarn compile:prod
 
       - name: Package extension
         run: npx vsce package --no-yarn
