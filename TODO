@@ -31,11 +31,13 @@ L1 (High) - configuration changes never reach the server  [DONE]
 	The handler now also clears include refs and re-publishes diagnostics for all
 	open documents. This also makes D3 true - see below.
 
-L2 (Medium) - closing an included file drops it from the index
+L2 (Medium) - closing an included file drops it from the index  [DONE]
 	onDidClose calls documentIndex.delete(uri) unconditionally. If that file is
 	.include'd by a still-open document, the parent loses every symbol it provided.
 	includeRefCount already holds what's needed to decide this.
-	fix: only delete when no other root still references the URI.
+	fixed: the ref-counting moved out of server.ts into IncludeGraph (includes.ts)
+	so it is unit-testable; onDidClose now keeps the index entry when another root
+	still includes the file. Partially addresses T1 as well.
 
 L3 (Medium) - re-indexing reads includes from disk, discarding unsaved buffers
 	indexDocument always fs.readFileSync's an included file even when it is open with
@@ -87,8 +89,9 @@ M8 - no debounce on validation: every keystroke re-indexes the whole include tre
 
 TEST SUITE
 
-T1  - server.ts has zero tests, and 5 of the 13 defects lived there. computeFoldingRanges
-      in particular should move to its own module so folding is testable at all
+T1  - server.ts has (almost) no tests, and 5 of the 13 defects lived there.
+      PARTLY ADDRESSED: include ref-counting extracted to includes.ts + tested.
+      Still to extract: computeFoldingRanges, so folding is testable at all
       (the C6 fix touched the folding path and could NOT be covered by a test).
 T2  - nothing runs the tests in CI. release.yml fires only on v* tags and never
       invokes yarn test or yarn typecheck. Highest-value single addition.

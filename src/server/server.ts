@@ -38,6 +38,7 @@ import { parseDocument } from './parser';
 import { getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits, isRenameable } from './symbols';
 import { validateDocument } from './diagnostics';
 import { getCompletions } from './completions';
+import { IncludeGraph } from './includes';
 
 // Get the current text of a document by URI: prefer the open in-memory buffer,
 // fall back to reading the file from disk (for indexed-but-unopened .include files).
@@ -78,25 +79,14 @@ let hasConfigurationCapability = false;
 // without registering for the notification the server is never told about changes.
 let hasDidChangeConfigurationCapability = false;
 
-// Tracks which parent documents reference each included file (for cleanup)
-// Maps included file URI -> Set of parent document URIs that include it
-const includeRefCount: Map<string, Set<string>> = new Map();
+// Tracks which root documents reference each included file (for cleanup)
+const includeGraph = new IncludeGraph();
 
 // Remove all include references from a root document and clean up orphaned includes
 function clearIncludeRefs(rootUri: string): void {
-    const orphanedUris: string[] = [];
-
-    for (const [includeUri, refs] of includeRefCount) {
-        refs.delete(rootUri);
-        if (refs.size === 0) {
-            orphanedUris.push(includeUri);
-            includeRefCount.delete(includeUri);
-        }
-    }
-
-    // Remove orphaned includes from documentIndex
-    for (const uri of orphanedUris) {
-        documentIndex.delete(uri);
+    for (const uri of includeGraph.clearRoot(rootUri)) {
+        // Only drop documents that are not open in their own right
+        if (!documents.get(uri)) documentIndex.delete(uri);
     }
 }
 
@@ -128,10 +118,7 @@ function indexDocument(
     // Recursively index included files and track references
     for (const includeUri of index.includes) {
         // Track that this root document references this included file
-        if (!includeRefCount.has(includeUri)) {
-            includeRefCount.set(includeUri, new Set());
-        }
-        includeRefCount.get(includeUri)!.add(effectiveRootUri);
+        includeGraph.addRef(includeUri, effectiveRootUri);
 
         if (!indexedUris.has(includeUri)) {
             try {
@@ -571,10 +558,18 @@ documents.onDidChangeContent(change => {
 });
 
 documents.onDidClose(event => {
-    // Clean up this document and any orphaned includes
-    clearIncludeRefs(event.document.uri);
-    documentIndex.delete(event.document.uri);
-    connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
+    const uri = event.document.uri;
+
+    // Clean up the include tree this document was the root of
+    clearIncludeRefs(uri);
+
+    // Keep the index entry if another still-open document .includes this file -
+    // dropping it would strip every symbol it provides from that parent.
+    if (!includeGraph.isReferenced(uri)) {
+        documentIndex.delete(uri);
+    }
+
+    connection.sendDiagnostics({ uri, diagnostics: [] });
 });
 
 documents.listen(connection);
