@@ -111,8 +111,11 @@ T1  - server.ts has (almost) no tests, and 5 of the 13 defects lived there.
       PARTLY ADDRESSED: include ref-counting extracted to includes.ts + tested.
       Still to extract: computeFoldingRanges, so folding is testable at all
       (the C6 fix touched the folding path and could NOT be covered by a test).
-T2  - nothing runs the tests in CI. release.yml fires only on v* tags and never
-      invokes yarn test or yarn typecheck. Highest-value single addition.
+T2  - [DONE] .github/workflows/ci.yml runs on push to main, PRs and manual dispatch:
+      yarn install --frozen-lockfile, typecheck, test, compile. All four verified
+      locally as the exact sequence CI runs.
+      NOTE: the integration tests (compiler-ref) will SKIP in CI since 64tass is not
+      installed there - see T4, which makes that visible rather than silent.
 T3  - the release workflow runs npm install against a yarn.lock, so the lockfile is
       ignored. Either commit package-lock.json or use yarn install --frozen-lockfile.
 T4  - integration tests vanish silently off this machine: TASS_PATH is hardcoded to
