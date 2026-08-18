@@ -136,7 +136,9 @@ export const OPENER_TO_CLOSERS: Record<string, string[]> = {
     '.encode': ['.endencode'],
     '.alignblk': ['.endalignblk'],
     '.page': ['.endp', '.endpage'],
-    '.logical': ['.endlogical'],
+    // .here closes .logical only - the assembler rejects .virtual ... .here
+    // with "opening directive '.logical' not found" (verified)
+    '.logical': ['.endlogical', '.here'],
     '.virtual': ['.endv', '.endvirtual'],
     '.namespace': ['.endn', '.endnamespace'],
     '.section': ['.send', '.endsection'],

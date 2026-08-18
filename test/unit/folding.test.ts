@@ -83,3 +83,18 @@ describe('computeFoldingRanges - directives in strings and comments', () => {
         expect(pairs('p .proc ; open\n        nop\n.pend ; close')).toEqual([[0, 2]]);
     });
 });
+
+describe('computeFoldingRanges - .logical', () => {
+    // .here was not a registered closer, so a correctly written block folded not at all
+    it('folds .logical closed by .here', () => {
+        expect(pairs('        .logical $2000\n        nop\n        .here')).toEqual([[0, 2]]);
+    });
+
+    it('folds .logical closed by .endlogical', () => {
+        expect(pairs('        .logical $2000\n        nop\n        .endlogical')).toEqual([[0, 2]]);
+    });
+
+    it('folds .virtual closed by .endv', () => {
+        expect(pairs('        .virtual $2000\n        nop\n        .endv')).toEqual([[0, 2]]);
+    });
+});

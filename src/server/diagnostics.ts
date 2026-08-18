@@ -419,13 +419,11 @@ export function validateDocument(
         }
     }
 
-    // Check for unclosed blocks after processing all lines
-    const optionalClose = new Set(['.logical']);
-
+    // Check for unclosed blocks after processing all lines.
+    // .logical used to be exempted here, which silenced a real error: the assembler
+    // rejects an unclosed .logical with "closing directive '.endlogical' not found".
+    // The actual cause was that .here was not registered as one of its closers.
     for (const unclosed of blockStack) {
-        // Skip directives that have optional closers
-        if (optionalClose.has(unclosed.directive)) continue;
-
         const closeDirective = FOLDING_PAIRS[unclosed.directive];
         diagnostics.push({
             severity: DiagnosticSeverity.Error,

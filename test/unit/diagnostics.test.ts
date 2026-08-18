@@ -104,10 +104,39 @@ describe('unclosed block detection', () => {
         expect(diags.some(d => d.message.includes('without matching'))).toBe(true);
     });
 
-    it('allows .logical without close (optional)', () => {
+    // The assembler rejects an unclosed .logical with
+    // "closing directive '.endlogical' not found", so this must be reported.
+    // It used to be suppressed, because .here was not registered as a closer.
+    it('flags unclosed .logical', () => {
         const diags = errors('        .logical $2000\n        nop');
-        const unclosed = diags.filter(d => d.message.includes('Unclosed'));
-        expect(unclosed).toHaveLength(0);
+        expect(diags.some(d => d.message.includes('Unclosed'))).toBe(true);
+    });
+
+    it('accepts .logical closed by .here', () => {
+        const diags = errors('        .logical $2000\n        nop\n        .here');
+        expect(diags.filter(d => d.message.includes('Unclosed'))).toHaveLength(0);
+        expect(diags.filter(d => d.message.includes('without matching'))).toHaveLength(0);
+    });
+
+    it('accepts .logical closed by .endlogical', () => {
+        const diags = errors('        .logical $2000\n        nop\n        .endlogical');
+        expect(diags.filter(d => d.message.includes('Unclosed'))).toHaveLength(0);
+    });
+
+    it('flags unclosed .virtual', () => {
+        const diags = errors('        .virtual $2000\n        nop');
+        expect(diags.some(d => d.message.includes('Unclosed'))).toBe(true);
+    });
+
+    it('accepts .virtual closed by .endv', () => {
+        const diags = errors('        .virtual $2000\n        nop\n        .endv');
+        expect(diags.filter(d => d.message.includes('Unclosed'))).toHaveLength(0);
+    });
+
+    it('does not accept .here as a closer for .virtual', () => {
+        // Verified: the assembler rejects this with "opening directive '.logical' not found"
+        const diags = errors('        .virtual $2000\n        nop\n        .here');
+        expect(diags.some(d => d.message.includes('Unclosed') || d.message.includes('without matching'))).toBe(true);
     });
 });
 
