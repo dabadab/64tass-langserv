@@ -60,6 +60,13 @@ cannot be imported from a test.
   `.cpu` or a command-line flag the server cannot see. `opcodesForCpu()` exposes the
   per-CPU breakdown for a future narrowing. Label detection gates on `OPCODES.has()`,
   so a missing mnemonic means a file indexes to *no labels at all*.
+- **Register operands**: `REGISTER_MODES`/`INDEX_REGISTERS` in `constants.ts`. 64tass
+  accepts a register where an address would go and assembles the matching
+  instruction - `lda x` is TXA, `ldx s` is TSX, `asl a` is accumulator mode,
+  `psh p` is PHP - plus `,x`/`,y`/`,s` index registers and the `,b`/`,d`/`,k`/`,r`
+  addressing-size and bank suffixes. These are not symbol references, so the
+  undefined-symbol check skips them. Kept per-opcode rather than as a blanket list
+  of short names, so `lda i` is still reported.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`
 - **Local symbols**: Start with `_`, scoped to the nearest code label above them
 - **Scope resolution**: Searches from current scope up to global, then any scopes
@@ -120,7 +127,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 717 tests)
+yarn test          # Run all tests (currently 741 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```

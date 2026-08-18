@@ -9,6 +9,8 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { LabelDefinition, DocumentIndex } from './types';
 import {
     OPCODES,
+    REGISTER_MODES,
+    INDEX_REGISTERS,
     FOLDING_PAIRS,
     CLOSING_DIRECTIVES,
     OPENER_TO_CLOSERS,
@@ -378,6 +380,20 @@ export function validateDocument(
                 if (/^[0-9]/.test(symName)) continue;
                 // Skip hex numbers like $FE - if preceded by $ and only contains hex digits
                 if (match.index > 0 && operandNoStrings[match.index - 1] === '$' && /^[0-9A-Fa-f]+$/.test(symName)) continue;
+
+                // Register operands are instructions, not symbol references: "ldx s"
+                // is TSX and "asl a" is accumulator-mode ASL. Two forms:
+                //   - the whole operand is a register this opcode accepts ("lda x")
+                //   - an index register or addressing suffix after a comma ("tbl,x", "$01,s")
+                if (opcodeMatch) {
+                    const mnemonic = opcodeMatch[1].toLowerCase();
+                    const register = symName.toLowerCase();
+                    const isWholeOperand = operand.trim().toLowerCase() === register;
+                    if (isWholeOperand && REGISTER_MODES[mnemonic]?.includes(register)) continue;
+
+                    const before = operandNoStrings.slice(0, match.index).trimEnd();
+                    if (before.endsWith(',') && INDEX_REGISTERS.has(register)) continue;
+                }
                 // Skip if it's a parameter in the current scope
                 if (isParameter(symName, currentScopePath, index, caseSensitive)) continue;
 

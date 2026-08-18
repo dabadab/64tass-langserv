@@ -98,6 +98,57 @@ export function opcodesForCpu(cpu: string): ReadonlySet<string> {
     return new Set([...OPCODES_BASE, ...(OPCODES_BY_CPU[cpu.toLowerCase()] ?? [])]);
 }
 
+/**
+ * Register and addressing-keyword operands.
+ *
+ * 64tass accepts a register where an address would normally go, assembling it to
+ * the corresponding transfer or accumulator instruction: `lda x` is TXA, `ldx s`
+ * is TSX, `asl a` is accumulator-mode ASL, `psh p` is PHP. These are NOT symbol
+ * references, so they must not be reported as undefined symbols.
+ *
+ * Derived by probing 64tass V1.60.3243 across every CPU target; the union is used
+ * because the target may be set by .cpu or a flag the server cannot see.
+ */
+export const REGISTER_MODES: Record<string, readonly string[]> = {
+    ard: ['q'],
+    asd: ['q'],
+    asl: ['a', 'q'],
+    asr: ['a', 'q'],
+    dec: ['a', 'q', 'x', 'y', 'z'],
+    ded: ['q'],
+    inc: ['a', 'q', 'x', 'y', 'z'],
+    ind: ['q'],
+    lda: ['d', 'x', 'y', 'z'],
+    ldx: ['a', 'i', 'r', 's', 'y'],
+    ldy: ['a', 's', 'x'],
+    ldz: ['a'],
+    lsd: ['q'],
+    lsr: ['a', 'q'],
+    neg: ['a'],
+    psh: ['a', 'b', 'd', 'k', 'p', 'x', 'y', 'z'],
+    pul: ['a', 'b', 'd', 'p', 'x', 'y', 'z'],
+    rld: ['q'],
+    rol: ['a', 'q'],
+    ror: ['a', 'q'],
+    rrd: ['q'],
+    rsh: ['a', 'i', 'x', 'y'],
+    rul: ['a', 'i', 'x', 'y'],
+    shl: ['a', 'q'],
+    shr: ['a', 'q'],
+    sta: ['a', 'd'],
+    stx: ['s', 'x'],
+    sty: ['s', 'y'],
+    stz: ['z'],
+};
+
+/**
+ * Names valid immediately after a comma in an operand: the index registers
+ * (`lda tbl,x`, 65816 stack-relative `lda $01,s`) and the addressing-size / bank
+ * suffixes (`,b` forces absolute, `,d` forces direct page, `,k` program bank,
+ * `,r` data stack). Also not symbol references.
+ */
+export const INDEX_REGISTERS: ReadonlySet<string> = new Set(['b', 'd', 'k', 'r', 's', 'x', 'y', 'z']);
+
 // Directives that create new scopes (opener -> primary closer)
 export const SCOPE_OPENERS: Record<string, string> = {
     '.proc': '.pend',

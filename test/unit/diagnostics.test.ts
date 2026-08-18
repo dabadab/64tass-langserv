@@ -736,3 +736,46 @@ describe('duplicate labels across conditional branches', () => {
         expect(errors('foo\nfoo').some(d => d.message.includes('Duplicate'))).toBe(true);
     });
 });
+
+describe('register operands', () => {
+    // 64tass accepts a register where an address would go, assembling it to the
+    // matching transfer/accumulator instruction. Each case below was checked
+    // against the assembler.
+    it.each([
+        ['lda x', 'TXA'], ['lda y', 'TYA'],
+        ['ldx a', 'TAX'], ['ldy a', 'TAY'],
+        ['ldx s', 'TSX'], ['stx s', 'TXS'],
+        ['asl a', 'accumulator ASL'], ['lsr a', 'accumulator LSR'],
+        ['rol a', 'accumulator ROL'], ['ror a', 'accumulator ROR'],
+        ['psh p', 'PHP'], ['pul p', 'PLP'],
+        ['psh a', 'PHA'], ['pul a', 'PLA'],
+    ])('does not report %s (%s) as an undefined symbol', (source) => {
+        expect(warnings('        ' + source).filter(d => d.message.includes('Undefined'))).toHaveLength(0);
+    });
+
+    it.each([
+        'lda tbl,x',      // ordinary indexed
+        'lda tbl,y',
+        'lda $01,s',      // 65816 stack-relative
+        'lda $10,b',      // bank suffix (forces absolute)
+        'lda $10,d',      // direct-page suffix
+    ])('does not report the index register or suffix in %s', (source) => {
+        const diags = warnings('tbl .byte 1\n        ' + source);
+        expect(diags.filter(d => d.message.includes('Undefined'))).toHaveLength(0);
+    });
+
+    // ...without becoming a blanket exemption for short names
+    it('still reports a symbol that is not a register mode for that opcode', () => {
+        // 'i' is a register only on 65EL02, and never for lda
+        expect(warnings('        lda i').some(d => d.message.includes("Undefined symbol 'i'"))).toBe(true);
+    });
+
+    it('still reports the base symbol of an indexed operand', () => {
+        expect(warnings('        lda nope,x').some(d => d.message.includes("Undefined symbol 'nope'"))).toBe(true);
+    });
+
+    it('still reports an ordinary undefined operand', () => {
+        expect(warnings('        lda undefined_thing')
+            .some(d => d.message.includes("Undefined symbol 'undefined_thing'"))).toBe(true);
+    });
+});
