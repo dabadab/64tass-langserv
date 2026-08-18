@@ -122,7 +122,16 @@ M6 - [DONE] documentHighlight - occurrences of the symbol under the cursor, with
      scanning from server.ts, and find-references inherits rename's precise
      dotted-segment handling - the old inline scanner verified a bare name rather
      than the dotted prefix, so it treated "scope.member" differently from rename.
-M7 - semantic tokens, to disambiguate what the TextMate grammar cannot.
+M7 - [DONE] semantic tokens (semanticTokens.ts, unit-tested; server.ts only does
+     the delta encoding via SemanticTokensBuilder).
+     Says what the grammar cannot: ".byte" (builtin keyword) vs ".mymac" (a call to
+     a user macro), and what kind a bare identifier refers to - proc/code =>
+     function, block/struct/union/namespace => namespace, data => property,
+     const/var => variable (const also readonly), macro params => parameter.
+     Definitions carry the declaration modifier.
+     Deliberately emits NOTHING for opcodes, registers/builtins, strings, comments
+     and unresolvable identifiers - leaving the TextMate colouring rather than
+     overriding it with a guess.
 M8 - no debounce on validation: every keystroke re-indexes the whole include tree
      and runs a full validation pass.
 

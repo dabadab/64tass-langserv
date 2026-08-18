@@ -34,7 +34,10 @@ import {
     SignatureHelpParams,
     SignatureHelp,
     DocumentHighlightParams,
-    DocumentHighlight
+    DocumentHighlight,
+    SemanticTokensParams,
+    SemanticTokens,
+    SemanticTokensBuilder
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -56,6 +59,7 @@ import { collectSourceFiles, findFilePathAt } from './workspace';
 import { buildDocumentSymbols } from './documentSymbols';
 import { findWorkspaceSymbols } from './workspaceSymbols';
 import { getSignatureHelp } from './signatureHelp';
+import { buildSemanticTokens, encodeModifiers, TOKEN_TYPES, TOKEN_MODIFIERS } from './semanticTokens';
 
 // Get the current text of a document by URI: prefer the open in-memory buffer,
 // fall back to reading the file from disk (for indexed-but-unopened .include files).
@@ -258,6 +262,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             hoverProvider: true,
             documentSymbolProvider: true,
             documentHighlightProvider: true,
+            semanticTokensProvider: {
+                legend: { tokenTypes: [...TOKEN_TYPES], tokenModifiers: [...TOKEN_MODIFIERS] },
+                full: true
+            },
             workspaceSymbolProvider: true,
             signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },
             completionProvider: {
@@ -451,6 +459,26 @@ connection.onSignatureHelp((params: SignatureHelpParams): SignatureHelp | null =
         params.position
     ));
     return getSignatureHelp(linePrefix, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
+});
+
+connection.languages.semanticTokens.on((params: SemanticTokensParams): SemanticTokens => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return { data: [] };
+
+    const tokens = buildSemanticTokens(
+        document.getText(), params.textDocument.uri, documentIndex,
+        effectiveCaseSensitive(params.textDocument.uri)
+    );
+
+    // SemanticTokensBuilder handles the delta encoding the protocol requires
+    const builder = new SemanticTokensBuilder();
+    for (const token of tokens) {
+        builder.push(
+            token.line, token.startCharacter, token.length,
+            TOKEN_TYPES.indexOf(token.tokenType), encodeModifiers(token.tokenModifiers)
+        );
+    }
+    return builder.build();
 });
 
 connection.onCompletion((params: CompletionParams): CompletionItem[] => {
