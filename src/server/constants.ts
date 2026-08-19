@@ -494,6 +494,14 @@ for (const [open, closers] of Object.entries(OPENER_TO_CLOSERS)) {
  * `pi`, `gap`, `code`, `symbol` and `register` turned up - none of them were in
  * the hand-written list this replaced, so every use of them was reported.
  *
+ * Cross-checked against the reference manual at https://tass64.sourceforge.net/
+ * ("Mathematical functions", "Byte string functions", "Other functions",
+ * "Built-in type names", plus the constants pi/true/false): all 63 documented
+ * names are here. `namespace` and `register` are here too and are NOT in the
+ * manual - but they are real type objects, verified: `type(n) == namespace` and
+ * `type(x) == register` both evaluate to true, so omitting them would report a
+ * name the assembler resolves.
+ *
  * Includes the type objects (`int`, `bool`, `str`, `bytes`, `list`, `dict`,
  * `tuple`, `float`, `bits`, `code`, `gap`, `type`, `address`, `register`,
  * `symbol`, `namespace`), which appear in real sources as conversions.

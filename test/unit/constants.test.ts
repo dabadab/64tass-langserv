@@ -259,6 +259,39 @@ describe('CPU targets', () => {
 });
 
 describe('BUILTINS', () => {
+    /**
+     * Every built-in named in the reference manual at https://tass64.sourceforge.net/
+     * - the four sections that enumerate them, plus the predefined constants.
+     * Transcribed so a future trim of BUILTINS cannot silently drop one.
+     */
+    const MANUAL_BUILTINS = [
+        // "Mathematical functions"
+        'floor', 'round', 'ceil', 'trunc', 'frac', 'sqrt', 'cbrt', 'log10', 'log',
+        'exp', 'pow', 'sin', 'asin', 'sinh', 'cos', 'acos', 'cosh', 'tan', 'atan',
+        'tanh', 'rad', 'deg', 'hypot', 'atan2', 'abs', 'sign',
+        // "Byte string functions"
+        'byte', 'char', 'word', 'sint', 'long', 'lint', 'dword', 'dint', 'addr', 'rta',
+        // "Other functions"
+        'all', 'any', 'binary', 'format', 'len', 'random', 'range', 'repr', 'size', 'sort',
+        // "Built-in type names"
+        'address', 'bits', 'bool', 'bytes', 'code', 'dict', 'float', 'gap', 'int',
+        'list', 'str', 'symbol', 'tuple', 'type',
+        // Predefined constants
+        'pi', 'true', 'false',
+    ];
+
+    it('covers every built-in the reference manual documents', () => {
+        expect(MANUAL_BUILTINS.filter(name => !BUILTINS.has(name))).toEqual([]);
+    });
+
+    it('adds only names the manual omits but the assembler resolves', () => {
+        // namespace and register are undocumented type objects - verified:
+        // type(n) == namespace and type(x) == register are both true.
+        const registers = ['a', 'x', 'y'];
+        const extra = [...BUILTINS].filter(b => !MANUAL_BUILTINS.includes(b) && !registers.includes(b));
+        expect(extra.sort()).toEqual(['namespace', 'register']);
+    });
+
     it('includes the type objects real sources use as conversions', () => {
         // These were all missing from the hand-written list, so every use of one
         // was reported as an undefined symbol.
