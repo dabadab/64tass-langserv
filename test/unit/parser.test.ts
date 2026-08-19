@@ -789,3 +789,31 @@ describe('.for loop variables', () => {
         expect(index.labels.find(l => l.name === 'i')?.kind).toBe('var');
     });
 });
+
+describe('.function parameter forms', () => {
+    it('indexes a typed parameter by name only', () => {
+        // "loadkla .function _data : binary" - the annotation is not part of the name
+        const index = parse('loadkla .function _data : binary\n        .endf _data');
+        expect(index.parametersAtScope.get('loadkla')).toEqual(['_data']);
+    });
+
+    it('indexes a parameter with a default value', () => {
+        const index = parse('f       .function count = 5\n        .endf count');
+        expect(index.parametersAtScope.get('f')).toEqual(['count']);
+    });
+
+    it('indexes a parameter with both a type and a default', () => {
+        const index = parse('f       .function n : int = 5\n        .endf n');
+        expect(index.parametersAtScope.get('f')).toEqual(['n']);
+    });
+
+    it('does not split a default value that contains commas', () => {
+        const index = parse('f       .function a = [1,2,3], b = 9\n        .endf b');
+        expect(index.parametersAtScope.get('f')).toEqual(['a', 'b']);
+    });
+
+    it('still handles plain macro parameters', () => {
+        const index = parse('m       .macro ptr, val\n        .endm');
+        expect(index.parametersAtScope.get('m')).toEqual(['ptr', 'val']);
+    });
+});

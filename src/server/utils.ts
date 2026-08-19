@@ -382,3 +382,46 @@ export function detectCpu(text: string): string | null {
     }
     return null;
 }
+
+/**
+ * Split on a separator that is not inside brackets or a string literal.
+ *
+ * Needed for parameter lists, where a default value may itself contain commas:
+ * `.function a = [1,2,3], b = 9` has two parameters, not four (verified).
+ */
+export function splitTopLevel(text: string, separator = ','): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let quote: string | null = null;
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (quote) {
+            // 64tass escapes a quote by doubling it, so a doubled one stays inside.
+            if (c === quote) {
+                if (text[i + 1] === quote) i++;
+                else quote = null;
+            }
+        } else if (c === '"' || c === "'") {
+            quote = c;
+        } else if (c === '(' || c === '[' || c === '{') {
+            depth++;
+        } else if (c === ')' || c === ']' || c === '}') {
+            depth = Math.max(0, depth - 1);
+        } else if (c === separator && depth === 0) {
+            parts.push(text.slice(start, i));
+            start = i + 1;
+        }
+    }
+    parts.push(text.slice(start));
+    return parts;
+}
+
+/**
+ * The declared name of one parameter, dropping a `: type` annotation and an
+ * `= default` value - `.function` accepts both (verified; `.macro` accepts
+ * neither). Returns null for an entry with no identifier.
+ */
+export function parameterName(entry: string): string | null {
+    return entry.trim().match(/^[a-zA-Z_][a-zA-Z0-9_]*/)?.[0] ?? null;
+}

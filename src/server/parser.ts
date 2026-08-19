@@ -4,7 +4,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { SCOPE_OPENERS, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { resolveIncludePath } from './paths';
-import { stripComment, getBlockComment, detectDefinePragmas, detectCpu } from './utils';
+import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName } from './utils';
 
 export type LogFunction = (message: string) => void;
 
@@ -261,7 +261,12 @@ export function parseDocument(
                 // Extract parameters for .function and .macro (stored normalized)
                 if ((open === '.function' || open === '.macro') && paramsStr) {
                     const newScopePath = getCurrentScopePath() || normalizeName(labelName);
-                    const params = paramsStr.split(',').map(p => normalizeName(p.trim())).filter(p => p.length > 0);
+                    // A .function parameter may carry a `: type` and an `= default`,
+                    // and a default may itself contain commas.
+                    const params = splitTopLevel(paramsStr)
+                        .map(parameterName)
+                        .filter((name): name is string => name !== null)
+                        .map(name => normalizeName(name));
                     if (params.length > 0) {
                         parametersAtScope.set(newScopePath, params);
                     }

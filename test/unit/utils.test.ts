@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+    splitTopLevel,
+    parameterName,
     parseLineStructure,
     stripComment,
     stripStrings,
@@ -581,5 +583,50 @@ describe('detectCpu', () => {
 
     it('ignores prose that merely mentions cpu', () => {
         expect(detectCpu('; we use cpu 65816 here\nstart')).toBeNull();
+    });
+});
+
+describe('splitTopLevel', () => {
+    it('splits on top-level separators', () => {
+        expect(splitTopLevel('a, b, c').map(s => s.trim())).toEqual(['a', 'b', 'c']);
+    });
+
+    it('ignores separators inside brackets', () => {
+        expect(splitTopLevel('a = [1,2,3], b = 9').map(s => s.trim())).toEqual(['a = [1,2,3]', 'b = 9']);
+        expect(splitTopLevel('a = range(0,4), b').map(s => s.trim())).toEqual(['a = range(0,4)', 'b']);
+    });
+
+    it('ignores separators inside strings', () => {
+        expect(splitTopLevel('a = "x,y", b').map(s => s.trim())).toEqual(['a = "x,y"', 'b']);
+    });
+
+    it('handles a doubled quote as an escape', () => {
+        expect(splitTopLevel('a = "say ""hi"", ok", b')).toHaveLength(2);
+    });
+
+    it('returns one part when there is no separator', () => {
+        expect(splitTopLevel('single')).toEqual(['single']);
+    });
+});
+
+describe('parameterName', () => {
+    it('returns a plain name', () => {
+        expect(parameterName('ptr')).toBe('ptr');
+    });
+
+    it('drops a type annotation', () => {
+        expect(parameterName('_data : binary')).toBe('_data');
+    });
+
+    it('drops a default value', () => {
+        expect(parameterName('count = 5')).toBe('count');
+    });
+
+    it('drops both', () => {
+        expect(parameterName(' n : int = 5 ')).toBe('n');
+    });
+
+    it('returns null when there is no identifier', () => {
+        expect(parameterName('   ')).toBeNull();
     });
 });
