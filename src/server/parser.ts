@@ -8,6 +8,9 @@ import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTop
 
 export type LogFunction = (message: string) => void;
 
+// Compound assignments modify an existing variable rather than defining one.
+const COMPOUND_ASSIGNMENT = /^(?:\.\.|\*\*|<<|>>|[-+*/&|^%])=$/;
+
 
 export interface ParseOptions {
     /** Effective case sensitivity for this document (pragma may have overridden the setting). */
@@ -475,11 +478,21 @@ export function parseDocument(
             continue;
         }
 
-        // Local symbol: starts with underscore
-        const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(?::|=|:=|\s|;|$)/);
+        // Local symbol: starts with underscore. The operator decides what it is:
+        //   _v = 1     a constant
+        //   _v := 1    a re-assignable variable, so exempt from the duplicate check
+        //   _v ..= [1] a compound assignment - a modification of an existing
+        //              variable, not a definition, so it is left as a reference
+        // 64tass has ..= += -= *= /= &= |= ^= <<= >>= %= **= (all verified).
+        const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(\.\.=|\*\*=|<<=|>>=|[-+*/&|^%]=|:=|=|:|\s|;|$)/);
         if (localMatch) {
             const labelName = localMatch[2];
             const startChar = localMatch[1].length;
+            const operator = localMatch[3];
+
+            if (COMPOUND_ASSIGNMENT.test(operator)) {
+                continue;   // modifies the variable defined elsewhere
+            }
 
             labels.push({
                 name: normalizeName(labelName),
@@ -492,7 +505,7 @@ export function parseDocument(
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope,
                 isLocal: true,
-                kind: 'const'
+                kind: operator === ':=' ? 'var' : 'const'
             });
             continue;
         }

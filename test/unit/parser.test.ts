@@ -846,3 +846,31 @@ describe('.comment blocks', () => {
         expect(() => parse('        .comment\n        .proc\n        .byte "unterminated\n        .endc')).not.toThrow();
     });
 });
+
+describe('local symbol assignment operators', () => {
+    it('records "_v = 1" as a constant', () => {
+        expect(parse('_c      = 5').labels.find(l => l.name === '_c')?.kind).toBe('const');
+    });
+
+    it('records "_v := 1" as a re-assignable variable', () => {
+        // Matches how a non-local ":=" is recorded, so it is exempt from the
+        // duplicate check the way the assembler treats it.
+        expect(parse('_v      := 5').labels.find(l => l.name === '_v')?.kind).toBe('var');
+    });
+
+    it.each(['..=', '+=', '-=', '*=', '/=', '&=', '|=', '^=', '<<=', '>>=', '%=', '**='])(
+        'does not treat "%s" as a new definition', (op) => {
+            const index = parse(`_v      := 0\n_v      ${op} 1`);
+            expect(index.labels.filter(l => l.name === '_v')).toHaveLength(1);
+        });
+
+    it('does not report a duplicate for a list built up with ..=', () => {
+        // The shape of 64tass's own runtime_relocation example.
+        const index = parse('_differences    := []\n_differences    ..= [1]\n_differences    ..= [2]');
+        expect(index.labels.filter(l => l.name === '_differences')).toHaveLength(1);
+    });
+
+    it('still records a bare local label', () => {
+        expect(parse('_x\n        lda #1').labels.find(l => l.name === '_x')?.kind).toBe('const');
+    });
+});

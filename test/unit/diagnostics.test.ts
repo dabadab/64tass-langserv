@@ -862,3 +862,9 @@ describe('dict literals', () => {
         expect(warnings('        .nosuchmacro').map(d => d.code)).toContain('undefined-macro');
     });
 });
+
+describe('compound assignment', () => {
+    it('does not report a duplicate when a local is appended to', () => {
+        expect(errors('_differences    := []\n_differences    ..= [1]')).toEqual([]);
+    });
+});
