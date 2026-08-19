@@ -874,3 +874,24 @@ describe('local symbol assignment operators', () => {
         expect(parse('_x\n        lda #1').labels.find(l => l.name === '_x')?.kind).toBe('const');
     });
 });
+
+describe('labels on macro calls', () => {
+    const MACRO = ['drv     .macro', 'inner   nop', 'patchme lda #0', '        .endm', '        * = $1000'].join('\n');
+
+    it.each(['.drv', '#drv'])('records a label calling a macro with "%s"', (call) => {
+        const index = parse(`${MACRO}\nvirt    ${call}`);
+        expect(index.labels.map(l => l.name)).toContain('virt');
+        expect(index.labelDefinedByMacro.get('virt')).toBe('drv');
+    });
+
+    it('does not mistake an immediate operand for a macro call', () => {
+        // "lda #COLORS" is an opcode with an immediate, not a label named lda.
+        const index = parse('COLORS  = 1\n        * = $1000\n        lda #COLORS');
+        expect(index.labels.map(l => l.name)).not.toContain('lda');
+    });
+
+    it('does not mistake an immediate on a labelled line for a macro call', () => {
+        const index = parse('COLORS  = 1\n        * = $1000\nstart   lda #COLORS');
+        expect(index.labelDefinedByMacro.has('start')).toBe(false);
+    });
+});

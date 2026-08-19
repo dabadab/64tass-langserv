@@ -202,6 +202,17 @@ export function findSymbolInfo(
             }
         }
 
+        // A label on a macro call does the same for the macro's own labels:
+        // "virt #drv" makes drv's `patchme` reachable as `virt.patchme`
+        // (verified), so the lookup is retargeted at the macro's scope.
+        for (const [, index] of documentIndex) {
+            const definingMacro = index.labelDefinedByMacro.get(targetPath);
+            if (definingMacro) {
+                targetPath = definingMacro;
+                break;
+            }
+        }
+
         for (const [, index] of documentIndex) {
             for (const label of index.labelsByName.get(targetName) ?? []) {
                 // Check if scope path matches or ends with the target path

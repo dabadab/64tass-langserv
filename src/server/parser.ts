@@ -597,15 +597,22 @@ export function parseDocument(
             continue;
         }
 
-        // Labels defined via macro calls (e.g., "label .macro_name args")
-        // Track which macro was used so we can validate sub-label references
+        // Labels defined via macro calls: "label .macro_name args" and the
+        // equally valid "label #macro_name args" (verified). Such a label opens a
+        // scope holding the macro's own labels, so `virt #drv` makes the macro's
+        // `patchme` reachable as `virt.patchme` and not as bare `patchme` - which
+        // is why the macro used is recorded here and resolved at query time.
         // Separated by whitespace or a colon: "label: .macro_name args", even "label:.macro_name"
         // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
-        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
-        if (macroLabelMatch) {
+        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([.#])([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
+        // "lda #COLORS" is an opcode with an immediate operand, not a label calling
+        // a macro, so the '#' form has to rule the mnemonics out.
+        const isImmediateOperand = macroLabelMatch?.[3] === '#'
+            && opcodes.has(macroLabelMatch[2].toLowerCase());
+        if (macroLabelMatch && !isImmediateOperand) {
             const labelName = macroLabelMatch[2];
             const startChar = macroLabelMatch[1].length;
-            const macroCalled = normalizeName(macroLabelMatch[3]);
+            const macroCalled = normalizeName(macroLabelMatch[4]);
             // Skip if this is a scope-creating directive (already handled above)
             if (!Object.keys(SCOPE_OPENERS).includes('.' + macroCalled)) {
                 labels.push({

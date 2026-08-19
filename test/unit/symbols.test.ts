@@ -626,3 +626,28 @@ describe('.dstruct / .dunion instance members', () => {
         expect(findSymbolInfo('pt.posx', docs[0].uri, 5, documentIndex)).not.toBeNull();
     });
 });
+
+describe('members of a label on a macro call', () => {
+    const SOURCE = [
+        'drv     .macro',
+        'inner   nop',
+        'patchme lda #0',
+        '        .endm',
+        '        * = $1000',
+        'virt    #drv',
+        '        sta virt.patchme + 1',
+    ].join('\n');
+
+    it('resolves a member through the macro the label calls', () => {
+        // Verified: "virt #drv" makes drv's patchme reachable as virt.patchme,
+        // and not as a bare patchme.
+        const { documentIndex, docs } = buildIndex({ source: SOURCE });
+        const found = findSymbolInfo('virt.patchme', docs[0].uri, 6, documentIndex, false);
+        expect(found?.name).toBe('patchme');
+    });
+
+    it('returns nothing for a member the macro does not define', () => {
+        const { documentIndex, docs } = buildIndex({ source: SOURCE });
+        expect(findSymbolInfo('virt.nosuch', docs[0].uri, 6, documentIndex, false)).toBeNull();
+    });
+});
