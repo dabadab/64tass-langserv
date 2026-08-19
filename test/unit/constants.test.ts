@@ -206,8 +206,12 @@ describe('CPU targets', () => {
         expect(isCpuName('6510')).toBe(false);
     });
 
-    it('defaults to the assembler\'s own default target', () => {
-        expect(DEFAULT_CPU).toBe('6502');
+    it('defaults to the NMOS set including the undocumented opcodes', () => {
+        // Deliberately wider than 64tass's own default: label detection gates on
+        // the opcode table, so a C64 source using `lax` would index to no labels
+        // at all on a narrower target.
+        expect(DEFAULT_CPU).toBe('6502i');
+        expect(opcodesForCpu(DEFAULT_CPU).has('lax')).toBe(true);
     });
 
     it('keeps the undocumented opcodes to 6502i, not 6502', () => {

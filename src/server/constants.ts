@@ -117,12 +117,17 @@ export const CPU_NAMES = [
 export type CpuName = typeof CPU_NAMES[number];
 
 /**
- * CPU assumed when a file says nothing, matching 64tass's own default target
- * (--m65xx, which `.cpu` spells as both `default` and `6502` - they are the same
- * set). A C64 source that uses the undocumented opcodes needs `6502i`, set
- * through the `64tass.cpu` setting, a `.cpu` directive or the cpu pragma.
+ * CPU assumed when a file says nothing: the NMOS set including the undocumented
+ * opcodes, which is what a C64's 6510 is.
+ *
+ * Deliberately wider than 64tass's own default target (--m65xx, spelled both
+ * `default` and `6502` - the same set). Being too narrow is the more expensive
+ * mistake here: label detection gates on the opcode table, so a C64 source using
+ * `lax` indexes that whole line to nothing and silently loses navigation. Being
+ * too wide only risks reading a label literally named after an undocumented
+ * mnemonic as an instruction.
  */
-export const DEFAULT_CPU: CpuName = '6502';
+export const DEFAULT_CPU: CpuName = '6502i';
 
 export function isCpuName(name: string): name is CpuName {
     return (CPU_NAMES as readonly string[]).includes(name.toLowerCase());

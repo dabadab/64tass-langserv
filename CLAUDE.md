@@ -77,8 +77,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   `.cpu` or a command-line flag the server cannot see. `opcodesForCpu()` exposes the
   per-CPU breakdown for a future narrowing. Label detection gates on `OPCODES.has()`,
   so a missing mnemonic means a file indexes to *no labels at all*.
-- **CPU target**: `DocumentIndex.cpu`, defaulting to `6502`, which is 64tass's own
-  default target. Set by `64tass.cpu`, overridden by a `.cpu "..."`
+- **CPU target**: `DocumentIndex.cpu`, defaulting to `6502i` - the NMOS set with
+  the undocumented opcodes, which is what a C64's 6510 is. Deliberately wider
+  than 64tass's own default (`--m65xx`, spelled both `default` and `6502`),
+  because label detection gates on the opcode table: on too narrow a target a
+  line using `lax` indexes to no labels at all. Set by `64tass.cpu`, overridden by a `.cpu "..."`
   directive or a `; 64tass-langserv: cpu <name>` pragma, which cascade into the
   `.include` tree exactly like case sensitivity (`detectCpu` in `utils.ts`).
   Decides `opcodesForCpu()` and `registerModesForCpu()`. Only the FIRST `.cpu` in a

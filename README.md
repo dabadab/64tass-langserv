@@ -48,15 +48,20 @@ Default `false`. Mirrors 64tass's `-C` flag: when `true`, `MyLabel` and `mylabel
 
 ### `64tass.cpu`
 
-Default `6502`. Decides which opcodes and register addressing modes are
+Default `6502i`. Decides which opcodes and register addressing modes are
 recognised, mirroring 64tass's CPU selection flags. Accepts the same names as the
-`.cpu` directive: `default`, `6502`, `65c02`, `65ce02`, `65dtv02`, `65el02`,
-`65816`, `r65c02`, `w65c02`, `4510`, `45gs02`.
+`.cpu` directive: `default`, `6502`, `6502i`, `65c02`, `65ce02`, `65dtv02`,
+`65el02`, `65816`, `r65c02`, `w65c02`, `4510`, `45gs02`.
 
-There is no `6510`: the C64 CPU is `6502`, the NMOS set that includes the
-undocumented opcodes. This matters more than it looks - label detection keys off
-the opcode table, so a file whose CPU is wrong indexes to *no labels* and loses
-navigation entirely.
+There is no `6510`: the C64's CPU is `6502i`, the NMOS set that *includes* the
+undocumented opcodes. Plain `6502` is the documented set only and is the same
+target as `default`.
+
+The default is deliberately wider than 64tass's own (`--m65xx`, i.e. `6502`).
+Label detection keys off the opcode table, so on too narrow a target a line like
+`start lax $10` indexes to *no label at all* and navigation silently disappears.
+Being too wide only risks reading a label named after an undocumented mnemonic as
+an instruction.
 
 A `.cpu "..."` directive in a file is honoured automatically, and overrides the
 setting for that file and everything it `.include`s.
