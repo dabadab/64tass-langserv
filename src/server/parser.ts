@@ -353,55 +353,84 @@ export function parseDocument(
             continue;
         }
 
-        // Loop variable of ".for i = 0, i < 13, i = i + 1" (and .bfor). Recorded as
-        // a re-assignable 'var': the assembler keeps it defined after .next and lets
-        // a later loop reuse the same name, so it must not trip the duplicate check.
-        // .while/.rept take no variable, so they are deliberately not matched here.
+        // Loop variables of a `.for` / `.bfor`. Two forms, both verified:
+        //   .for i = 0, i < 13, i = i + 1   - exactly one variable
+        //   .for a, b in [1,2], [3,4]       - a comma-separated list
+        // Recorded as re-assignable 'var's: the assembler keeps them defined after
+        // .next and lets a later loop reuse the name, so they must not trip the
+        // duplicate check. .while/.rept take no variable and are not matched here.
         // The loop may itself be labelled ("squarelo .for i = 0, ..."), in which case
-        // that label is a data label for the emitted bytes and is recorded too.
+        // that label is a data label for the emitted bytes and is recorded too. The
+        // label may also be anonymous ("-  .for i in ..."), which is left for the
+        // anonymous-label branch further down to record.
         const forVarMatch = line.match(
-            /^(\s*)((?:[a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+))?(\.b?for\s+)([a-zA-Z_][a-zA-Z0-9_]*)\s*=/i
+            /^(\s*)((?:[+-]+|[a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+))?(\.b?for\s+)(.*)$/i
         );
         if (forVarMatch) {
             const indent = forVarMatch[1].length;
             const loopLabel = forVarMatch[2];
+            const rest = forVarMatch[4];
+            const restStart = indent + (loopLabel?.length ?? 0) + forVarMatch[3].length;
 
-            // Optional label in front of the loop, e.g. "squarelo .for ..."
-            if (loopLabel) {
-                const loopLabelName = loopLabel.replace(/[\s:]+$/, '');
-                labels.push({
-                    name: normalizeName(loopLabelName),
-                    originalName: loopLabelName,
-                    uri: document.uri,
-                    range: Range.create(
-                        Position.create(lineNum, indent),
-                        Position.create(lineNum, indent + loopLabelName.length)
-                    ),
-                    scopePath: getCurrentScopePath(),
-                    localScope: null,
-                    isLocal: false,
-                    kind: 'data'
-                });
+            // Variable names, with their offsets within `rest` so each gets its own
+            // range. The `in` list must stop at ` in `, not run past it.
+            const loopVars: { name: string; offset: number }[] = [];
+            const assignForm = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
+            const inForm = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)\s+in\s/i);
+            if (assignForm) {
+                loopVars.push({ name: assignForm[1], offset: 0 });
+            } else if (inForm) {
+                let cursor = 0;
+                for (const part of inForm[1].split(',')) {
+                    const name = part.trim();
+                    const offset = inForm[1].indexOf(name, cursor);
+                    loopVars.push({ name, offset });
+                    cursor = offset + name.length;
+                }
             }
 
-            const startChar = indent + (loopLabel?.length ?? 0) + forVarMatch[3].length;
-            const labelName = forVarMatch[4];
-            const isLocal = labelName.startsWith('_');
+            const anonymousPrefix = !!loopLabel && /^[+-]/.test(loopLabel);
 
-            labels.push({
-                name: normalizeName(labelName),
-                originalName: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, startChar),
-                    Position.create(lineNum, startChar + labelName.length)
-                ),
-                scopePath: getCurrentScopePath(),
-                localScope: isLocal ? currentLocalScope : null,
-                isLocal,
-                kind: 'var'
-            });
-            continue;
+            if (loopVars.length > 0) {
+                // Optional named label in front of the loop, e.g. "squarelo .for ..."
+                if (loopLabel && !anonymousPrefix) {
+                    const loopLabelName = loopLabel.replace(/[\s:]+$/, '');
+                    labels.push({
+                        name: normalizeName(loopLabelName),
+                        originalName: loopLabelName,
+                        uri: document.uri,
+                        range: Range.create(
+                            Position.create(lineNum, indent),
+                            Position.create(lineNum, indent + loopLabelName.length)
+                        ),
+                        scopePath: getCurrentScopePath(),
+                        localScope: null,
+                        isLocal: false,
+                        kind: 'data'
+                    });
+                }
+
+                for (const { name, offset } of loopVars) {
+                    const startChar = restStart + offset;
+                    const isLocal = name.startsWith('_');
+                    labels.push({
+                        name: normalizeName(name),
+                        originalName: name,
+                        uri: document.uri,
+                        range: Range.create(
+                            Position.create(lineNum, startChar),
+                            Position.create(lineNum, startChar + name.length)
+                        ),
+                        scopePath: getCurrentScopePath(),
+                        localScope: isLocal ? currentLocalScope : null,
+                        isLocal,
+                        kind: 'var'
+                    });
+                }
+                // An anonymous label on this line still has to be registered, so
+                // fall through to that branch rather than ending the line here.
+                if (!anonymousPrefix) continue;
+            }
         }
 
         // Re-assignable variable: "v .var 1". Unlike "=" constants these may be

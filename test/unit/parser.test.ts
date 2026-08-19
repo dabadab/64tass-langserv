@@ -735,3 +735,57 @@ describe('.binclude labels', () => {
         expect(index.includeScopes.size).toBe(0);
     });
 });
+
+describe('.for loop variables', () => {
+    it('indexes the variable of the "=" form', () => {
+        const index = parse('        .for i = 0, i < 3, i = i + 1\n        .byte i\n        .next');
+        expect(index.labels.find(l => l.name === 'i')?.kind).toBe('var');
+    });
+
+    it('indexes the variable of the "in" form', () => {
+        const index = parse('        .for v in [1,2,3]\n        .byte v\n        .next');
+        expect(index.labels.find(l => l.name === 'v')?.kind).toBe('var');
+    });
+
+    it('indexes every variable of a multi-variable "in" form', () => {
+        const index = parse('        .for a, b, c in [1], [2], [3]\n        .next');
+        expect(index.labels.filter(l => l.kind === 'var').map(l => l.name).sort()).toEqual(['a', 'b', 'c']);
+    });
+
+    it('gives each variable of an "in" list its own range', () => {
+        const source = '        .for aa, bb in [1], [2]\n        .next';
+        const index = parse(source);
+        for (const name of ['aa', 'bb']) {
+            const label = index.labels.find(l => l.name === name)!;
+            expect(source.slice(label.range.start.character, label.range.end.character)).toBe(name);
+        }
+    });
+
+    it('does not mistake the iterable for a variable', () => {
+        const index = parse('        .for v in range(0, 1024, 256)\n        .next');
+        expect(index.labels.map(l => l.name)).toEqual(['v']);
+    });
+
+    it('treats an "in" variable starting with _ as local', () => {
+        const index = parse('lbl     nop\n        .for _v in [1,2]\n        .next');
+        expect(index.labels.find(l => l.name === '_v')?.isLocal).toBe(true);
+    });
+
+    it('handles .bfor as well', () => {
+        expect(parse('        .bfor v in [1]\n        .next').labels.map(l => l.name)).toContain('v');
+    });
+
+    it('still records a named label in front of the loop', () => {
+        const index = parse('tbl     .for v in [1,2]\n        .next');
+        expect(index.labels.find(l => l.name === 'tbl')?.kind).toBe('data');
+        expect(index.labels.find(l => l.name === 'v')?.kind).toBe('var');
+    });
+
+    it('still records an anonymous label in front of the loop', () => {
+        // "-  .for i in ..." - the loop branch must not swallow the line before
+        // the anonymous-label branch has seen it.
+        const index = parse('-       .for i in [1,2]\n        .next');
+        expect(index.labels.find(l => l.isAnonymous)?.name).toBe('-');
+        expect(index.labels.find(l => l.name === 'i')?.kind).toBe('var');
+    });
+});
