@@ -14,6 +14,8 @@ import {
     HoverParams,
     DocumentLink,
     DocumentLinkParams,
+    SelectionRange,
+    SelectionRangeParams,
     Hover,
     ReferenceParams,
     RenameParams,
@@ -48,6 +50,7 @@ import { DocumentIndex } from './types';
 import { absoluteSearchPaths } from './paths';
 import { buildHover } from './hover';
 import { buildDocumentLinks } from './documentLinks';
+import { computeSelectionRanges } from './selectionRanges';
 import { detectCaseSensitivityPragma, detectCpu } from './utils';
 import { parseDocument } from './parser';
 import {
@@ -209,6 +212,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             renameProvider: { prepareProvider: true },
             foldingRangeProvider: true,
             documentLinkProvider: { resolveProvider: false },
+            selectionRangeProvider: true,
             hoverProvider: true,
             documentSymbolProvider: true,
             documentHighlightProvider: true,
@@ -454,6 +458,12 @@ connection.onDocumentLinks((params: DocumentLinkParams): DocumentLink[] => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return [];
     return buildDocumentLinks(document, searchPaths());
+});
+
+connection.onSelectionRanges((params: SelectionRangeParams): SelectionRange[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+    return computeSelectionRanges(document.getText(), params.positions);
 });
 
 connection.onReferences((params: ReferenceParams): Location[] => {
