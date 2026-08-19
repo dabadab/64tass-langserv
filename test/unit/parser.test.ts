@@ -817,3 +817,32 @@ describe('.function parameter forms', () => {
         expect(index.parametersAtScope.get('m')).toEqual(['ptr', 'val']);
     });
 });
+
+describe('.comment blocks', () => {
+    it('does not index labels inside a comment block', () => {
+        // Verified: a label defined inside .comment is not defined at all.
+        const index = parse('        .comment\ninside  = 1\n        .endc\noutside = 2');
+        expect(index.labels.map(l => l.name)).toEqual(['outside']);
+    });
+
+    it('does not report a duplicate when the block repeats a later label', () => {
+        // This is the shape of 64tass's own loading_a_sid_file example: an earlier
+        // version of the program kept inside .comment, followed by the real one.
+        const index = parse('        .comment\nstart   lda #0\n        .endc\nstart   lda #0');
+        expect(index.labels.filter(l => l.name === 'start')).toHaveLength(1);
+    });
+
+    it('still indexes a label on the .comment line itself', () => {
+        const index = parse('lbl     .comment\n        junk\n        .endc');
+        expect(index.labels.map(l => l.name)).toContain('lbl');
+    });
+
+    it('nests', () => {
+        const index = parse('        .comment\na = 1\n        .comment\nb = 2\n        .endc\nc = 3\n        .endc\nd = 4');
+        expect(index.labels.map(l => l.name)).toEqual(['d']);
+    });
+
+    it('ignores text that is not valid assembly', () => {
+        expect(() => parse('        .comment\n        .proc\n        .byte "unterminated\n        .endc')).not.toThrow();
+    });
+});

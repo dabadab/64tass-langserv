@@ -823,3 +823,25 @@ describe('missing-operator check: expression syntax', () => {
         expect(errorsFor('        .byte 1 2')).toHaveLength(1);
     });
 });
+
+describe('.comment blocks', () => {
+    it('reports nothing inside a comment block', () => {
+        expect(getDiagnostics('        .comment\n        lda undefined_thing\n        .endc\n        nop')).toEqual([]);
+    });
+
+    it('does not see a duplicate across a comment block', () => {
+        expect(errors('        .comment\nstart   lda #0\n        .endc\nstart   lda #0')).toEqual([]);
+    });
+
+    it('still reports an unclosed comment block', () => {
+        // The delimiting lines are not skipped, so the pairing check still runs.
+        const reported = errors('        .comment\n        junk');
+        expect(reported.map(d => d.code)).toContain('unclosed-block');
+    });
+
+    it('still reports outside the block', () => {
+        const reported = warnings('        .comment\n        junk\n        .endc\n        lda undefined_thing');
+        expect(reported).toHaveLength(1);
+        expect(reported[0].range.start.line).toBe(3);
+    });
+});

@@ -4,9 +4,10 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { SCOPE_OPENERS, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { resolveIncludePath } from './paths';
-import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName } from './utils';
+import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines } from './utils';
 
 export type LogFunction = (message: string) => void;
+
 
 export interface ParseOptions {
     /** Effective case sensitivity for this document (pragma may have overridden the setting). */
@@ -46,6 +47,7 @@ export function parseDocument(
     const includes: string[] = [];
     const includeScopes: Map<string, string> = new Map();
     const lines = text.split('\n');
+    const commentBlockLines = findCommentBlockLines(lines);
 
     // Stack for directive-based scopes: { name, directive }
     const scopeStack: { name: string | null; directive: string }[] = [];
@@ -101,6 +103,12 @@ export function parseDocument(
 
         // Skip empty lines and comment-only lines
         if (/^\s*;/.test(line) || /^\s*$/.test(line)) {
+            continue;
+        }
+
+        // Everything between `.comment` and `.endc`/`.endcomment` is ignored by the
+        // assembler, so nothing in there is indexed.
+        if (commentBlockLines.has(lineNum)) {
             continue;
         }
 

@@ -17,7 +17,7 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN
 } from './constants';
-import { parseLineStructure, stripStrings, tokenizeExpression } from './utils';
+import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
@@ -98,6 +98,9 @@ export function validateDocument(
     const diagnostics: Diagnostic[] = [];
     const text = document.getText();
     const lines = text.split('\n');
+    // The assembler ignores everything inside a `.comment` block, so nothing in
+    // there is checked. The delimiting lines still are, so an unclosed one reports.
+    const commentBlockLines = findCommentBlockLines(lines);
     const index = documentIndex.get(document.uri);
 
     if (!index) return diagnostics;
@@ -154,6 +157,7 @@ export function validateDocument(
     const macroCallPattern = /\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        if (commentBlockLines.has(lineNum)) continue;
         const line = lines[lineNum];
         const { code } = parseLineStructure(line);
         // Blank out string contents before looking for block directives, so a

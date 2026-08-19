@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    findCommentBlockLines,
     splitTopLevel,
     parameterName,
     parseLineStructure,
@@ -628,5 +629,41 @@ describe('parameterName', () => {
 
     it('returns null when there is no identifier', () => {
         expect(parameterName('   ')).toBeNull();
+    });
+});
+
+describe('findCommentBlockLines', () => {
+    const inside = (source: string) => [...findCommentBlockLines(source.split('\n'))].sort((a, b) => a - b);
+
+    it('returns the interior of a block', () => {
+        expect(inside('        .comment\n        junk\n        .endc')).toEqual([1]);
+    });
+
+    it('excludes the delimiting lines, which are ordinary', () => {
+        // A label on the .comment line is defined (verified), and both lines must
+        // still pair up for the unclosed-block check.
+        expect(inside('lbl     .comment\n        junk\n        .endcomment')).toEqual([1]);
+    });
+
+    it('accepts either closer', () => {
+        expect(inside('        .comment\n        a\n        .endcomment')).toEqual([1]);
+        expect(inside('        .comment\n        a\n        .endc')).toEqual([1]);
+    });
+
+    it('nests', () => {
+        const source = ['        .comment', '  a', '        .comment', '  b', '        .endc', '  c', '        .endc', '  d'].join('\n');
+        expect(inside(source)).toEqual([1, 3, 5]);
+    });
+
+    it('runs to the end of the file when never closed', () => {
+        expect(inside('        .comment\n  a\n  b')).toEqual([1, 2]);
+    });
+
+    it('returns nothing when there is no block', () => {
+        expect(inside('start\n        lda #1')).toEqual([]);
+    });
+
+    it('is not fooled by a directive-looking word inside a string', () => {
+        expect(inside('        .text "not a .comment here"\n        nop')).toEqual([]);
     });
 });

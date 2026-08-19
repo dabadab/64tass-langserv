@@ -442,3 +442,38 @@ export function splitTopLevel(text: string, separator = ','): string[] {
 export function parameterName(entry: string): string | null {
     return entry.trim().match(/^[a-zA-Z_][a-zA-Z0-9_]*/)?.[0] ?? null;
 }
+
+// `.comment` opens a block the assembler ignores wholesale; `.endc` or
+// `.endcomment` closes it, and the blocks nest.
+const COMMENT_BLOCK_OPEN = /(?:^|\s)\.comment\b/i;
+const COMMENT_BLOCK_CLOSE = /(?:^|\s)\.end(?:c|comment)\b/i;
+
+/**
+ * Line numbers strictly inside a `.comment` block - not the `.comment` line, and
+ * not the `.endc`/`.endcomment` that closes it.
+ *
+ * The assembler ignores everything in between: a label defined in there is not
+ * defined at all, and the text need not be valid assembly (verified). The
+ * delimiting lines themselves are ordinary - a label on the `.comment` line IS
+ * defined, and both lines still have to pair up for the unclosed-block check.
+ *
+ * Outside a block the opener is matched against string-stripped, comment-free
+ * text, so `.text "a .comment b"` does not open one (verified). Inside a block
+ * the raw line is used instead: the contents may contain an unterminated string
+ * literal, which would swallow the closer if strings were honoured.
+ */
+export function findCommentBlockLines(lines: string[]): Set<number> {
+    const inside = new Set<number>();
+    let depth = 0;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (depth > 0) {
+            if (COMMENT_BLOCK_OPEN.test(line)) { depth++; continue; }
+            if (COMMENT_BLOCK_CLOSE.test(line)) { depth--; continue; }
+            inside.add(i);
+        } else if (COMMENT_BLOCK_OPEN.test(stripStrings(parseLineStructure(line).code))) {
+            depth++;
+        }
+    }
+    return inside;
+}
