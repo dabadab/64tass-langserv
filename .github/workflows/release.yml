@@ -8,6 +8,9 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      # Keep in step with TABLES_PROBED_FROM in test/helpers/compiler.ts
+      TASS_VERSION: 1.60.3243
     environment: vs marketplace publishing
     permissions:
       contents: write
@@ -28,15 +31,33 @@ jobs:
       - name: Typecheck
         run: yarn typecheck
 
-      - name: Install 64tass
-        run: sudo apt-get update && sudo apt-get install -y 64tass
+      # Build the exact 64tass the opcode tables were probed from. The apt
+      # package is older (Ubuntu 24.04 ships 1.59.3120) and lacks mnemonics this
+      # project's fixtures use, and testing the generated tables against a
+      # different assembler verifies nothing - so the version is pinned here and
+      # asserted. Takes about three seconds.
+      - name: Build 64tass ${{ env.TASS_VERSION }}
+        env:
+          TASS_VERSION: ${{ env.TASS_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -sSL --retry 3 -o /tmp/64tass-src.zip \
+            "https://sourceforge.net/projects/tass64/files/source/64tass-${TASS_VERSION}-src.zip/download"
+          unzip -q /tmp/64tass-src.zip -d /tmp/64tass-src
+          make -C "/tmp/64tass-src/64tass-${TASS_VERSION}-src" -j"$(nproc)"
+          sudo install "/tmp/64tass-src/64tass-${TASS_VERSION}-src/64tass" /usr/local/bin/64tass
+          64tass --version
+          64tass --version | grep -q "V${TASS_VERSION}$" \
+            || { echo "::error::64tass is not V${TASS_VERSION}"; exit 1; }
 
       # Gate the release on the suite: a tag should not publish a broken build.
       # REQUIRE_TASS so the integration suites cannot silently skip here either.
+      # REQUIRE_TASS turns a missing or wrong-version assembler into a failure
+      # rather than a silent skip, so a green run cannot mean "verified nothing".
       - name: Test
         run: yarn test
         env:
-          TASS_PATH: /usr/bin/64tass
+          TASS_PATH: /usr/local/bin/64tass
           REQUIRE_TASS: '1'
 
       - name: Build (production)

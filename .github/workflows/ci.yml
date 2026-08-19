@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Keep in step with TABLES_PROBED_FROM in test/helpers/compiler.ts
+      TASS_VERSION: 1.60.3243
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -29,17 +32,31 @@ jobs:
       - name: Typecheck
         run: yarn typecheck
 
-      # The integration suites compare this extension's behaviour against the real
-      # assembler. Without it they skip silently, so a green CI run would be
-      # verifying nothing about 64tass compatibility - REQUIRE_TASS makes a missing
-      # binary a hard failure instead.
-      - name: Install 64tass
-        run: sudo apt-get update && sudo apt-get install -y 64tass
+      # Build the exact 64tass the opcode tables were probed from. The apt
+      # package is older (Ubuntu 24.04 ships 1.59.3120) and lacks mnemonics this
+      # project's fixtures use, and testing the generated tables against a
+      # different assembler verifies nothing - so the version is pinned here and
+      # asserted. Takes about three seconds.
+      - name: Build 64tass ${{ env.TASS_VERSION }}
+        env:
+          TASS_VERSION: ${{ env.TASS_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -sSL --retry 3 -o /tmp/64tass-src.zip \
+            "https://sourceforge.net/projects/tass64/files/source/64tass-${TASS_VERSION}-src.zip/download"
+          unzip -q /tmp/64tass-src.zip -d /tmp/64tass-src
+          make -C "/tmp/64tass-src/64tass-${TASS_VERSION}-src" -j"$(nproc)"
+          sudo install "/tmp/64tass-src/64tass-${TASS_VERSION}-src/64tass" /usr/local/bin/64tass
+          64tass --version
+          64tass --version | grep -q "V${TASS_VERSION}$" \
+            || { echo "::error::64tass is not V${TASS_VERSION}"; exit 1; }
 
+      # REQUIRE_TASS turns a missing or wrong-version assembler into a failure
+      # rather than a silent skip, so a green run cannot mean "verified nothing".
       - name: Test
         run: yarn test
         env:
-          TASS_PATH: /usr/bin/64tass
+          TASS_PATH: /usr/local/bin/64tass
           REQUIRE_TASS: '1'
 
       - name: Build

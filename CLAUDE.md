@@ -252,7 +252,13 @@ building one literally.
   `addressing.test.ts` and `register-modes.test.ts` compare the GENERATED tables
   back against the assembler; those two additionally skip unless the assembler is
   `TABLES_PROBED_FROM` (the version the tables were probed from), because another
-  version may legitimately differ.
+  version may legitimately differ - but under `REQUIRE_TASS` a mismatch is an
+  ERROR, since skipping them there would leave CI green having verified nothing.
+  CI therefore BUILDS that exact version from source (about three seconds) rather
+  than installing the apt package: Ubuntu 24.04 ships 1.59.3120, which has no
+  `psh`/`pul`, so `corpus/register-modes.asm` does not even assemble under it.
+  The pinned version lives in `TASS_VERSION` in both workflows and must be kept in
+  step with `TABLES_PROBED_FROM`.
 - **Fixtures:** `test/fixtures/` — `.asm` files used by integration tests.
   `test/fixtures/all-opcodes/` holds one file per `.cpu` target exercising every
   mnemonic and addressing form, all assembling with zero errors AND zero warnings.

@@ -54,11 +54,22 @@ export const TASS_VERSION: string | null = (() => {
 export const TABLES_MATCH_TASS = TASS_VERSION === TABLES_PROBED_FROM;
 
 if (TASS_EXISTS && !TABLES_MATCH_TASS) {
-    console.warn(
-        `[integration] 64tass is V${TASS_VERSION}, but the generated opcode tables were ` +
-        `probed from V${TABLES_PROBED_FROM} - the table-comparison tests will be SKIPPED. ` +
-        `Everything else still runs against this assembler.`
-    );
+    const detail =
+        `64tass is V${TASS_VERSION}, but the generated opcode tables were probed from ` +
+        `V${TABLES_PROBED_FROM}. Comparing them against a different assembler proves ` +
+        `nothing, and its fixtures may not even assemble - Ubuntu's 1.59.3120, for one, ` +
+        `has no 'psh'/'pul'.`;
+    if (REQUIRE_TASS) {
+        // REQUIRE_TASS means "the assembler checks must actually run". Skipping the
+        // table comparisons on a version mismatch would leave CI green having
+        // verified nothing about them, which is the failure this flag exists to
+        // prevent - so here it is an error, not a warning.
+        throw new Error(
+            `REQUIRE_TASS is set but ${detail} Install V${TABLES_PROBED_FROM} or point ` +
+            `TASS_PATH at it.`
+        );
+    }
+    console.warn(`[integration] ${detail} The table-comparison tests will be SKIPPED.`);
 }
 
 /**
