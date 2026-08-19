@@ -198,8 +198,12 @@ const VALUE_PATTERN = new RegExp('^(' + [
 // Used for validating operator presence between data directive values
 export function tokenizeExpression(expr: string): Token[] {
     const tokens: Token[] = [];
-    const operators = /^(,|\+|-|\*|\/|&|\||<<|>>|<|>|\^)/;
-    const parens = /^[()]/;
+    // Longest first, so "<<" is not read as two "<" and ".." not as a float.
+    // All verified against the assembler.
+    const operators = /^(<<|>>|\*\*|==|!=|<=|>=|&&|\|\||\.\.|,|\+|-|\*|\/|&|\||<|>|\^|\?|:|!|~)/;
+    // Brackets index and slice (`d[2]`, `d[:6:2]`); ':' inside them is the slice
+    // separator, and is also the ternary's second half - both are operators above.
+    const parens = /^[()[\]]/;
     const value = VALUE_PATTERN;
 
     let pos = 0;
@@ -242,6 +246,19 @@ export function tokenizeExpression(expr: string): Token[] {
         }
 
         const remaining = expr.substring(pos);
+
+        // '%' is modulo after a value, and a binary-literal prefix otherwise -
+        // which is how the assembler reads it too: `7%10` is 7, `%1010` is 10.
+        if (char === '%') {
+            const previous = tokens[tokens.length - 1];
+            const isModulo = previous !== undefined
+                && (previous.type === 'value' || previous.text === ')' || previous.text === ']');
+            if (isModulo) {
+                tokens.push({ type: 'operator', text: '%', start: pos });
+                pos++;
+                continue;
+            }
+        }
 
         // Try to match operator (check multi-char first)
         const opMatch = remaining.match(operators);

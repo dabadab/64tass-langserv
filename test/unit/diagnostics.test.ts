@@ -779,3 +779,47 @@ describe('register operands', () => {
             .some(d => d.message.includes("Undefined symbol 'undefined_thing'"))).toBe(true);
     });
 });
+
+describe('missing-operator check: expression syntax', () => {
+    const errorsFor = (source: string) =>
+        getDiagnostics(source).filter(d => d.message.includes(String.raw`operator is expected`)).map(d => d.message);
+
+    it.each([
+        ['index', '        .text d[2]'],
+        ['slice a:b', '        .text d[2:4]'],
+        ['slice :n', '        .text d[:4]'],
+        ['slice n:', '        .text d[4:]'],
+        ['slice ::step', '        .text d[::2]'],
+        ['slice :n:step', '        .text d[:6:2]'],
+        ['ternary', '        .byte f ? 1 : 2'],
+        ['ternary with a slice', '        .text d[:2000:2]'],
+        ['ternary yielding a list', '        .text f ? d : []'],
+        ['concatenation', '        .text "ab" .. "cd"'],
+        ['equality', '        .byte 1 == 1'],
+        ['inequality', '        .byte 1 != 2'],
+        ['less or equal', '        .byte 1 <= 2'],
+        ['greater or equal', '        .byte 2 >= 1'],
+        ['logical and', '        .byte 1 && 1'],
+        ['logical or', '        .byte 1 || 0'],
+        ['power', '        .byte 2 ** 3'],
+        ['modulo', '        .byte 7 % 3'],
+        ['modulo without spaces', '        .byte 7%10'],
+        ['unary not', '        .byte !0'],
+        ['unary complement', '        .byte ~1 & 3'],
+    ])('accepts %s', (_name, line) => {
+        expect(errorsFor(`d = "abcdefgh"\nf = 1\n${line}`)).toEqual([]);
+    });
+
+    it('reads % as a binary prefix at the start and as modulo after a value', () => {
+        // Verified against the assembler: `.byte %1010` emits 10, and
+        // `.byte %1010 %0101` emits 10 as well - binary 1010 modulo decimal 101 -
+        // so the second % is an operator and the line is not an error.
+        expect(errorsFor('        .byte %1010')).toEqual([]);
+        expect(errorsFor('        .byte %1010 %0101')).toEqual([]);
+    });
+
+    it('still reports two values with no operator between them', () => {
+        expect(errorsFor('        .text "hello" "world"')).toHaveLength(1);
+        expect(errorsFor('        .byte 1 2')).toHaveLength(1);
+    });
+});
