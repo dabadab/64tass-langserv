@@ -18,6 +18,7 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │       ├── hover.ts              # Symbol and opcode hover
 │       ├── documentLinks.ts      # Clickable .include/.binclude/.binary paths
 │       ├── selectionRanges.ts    # Expand-selection hierarchy
+│       ├── codeActions.ts        # Quick fixes for spelling and unclosed blocks
 │       ├── addressing.ts         # GENERATED addressing modes per CPU (probed from 64tass)
 │       ├── opcodeDocs.ts         # Hand-written mnemonic descriptions and flags
 │       ├── indexing.ts           # indexDocument — include tree + case-sensitivity cascade
@@ -123,6 +124,10 @@ cannot be imported from a test.
   type's member. A member the type does not declare is still reported, matching the
   assembler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
+- **Diagnostic codes**: diagnostics that a quick fix can act on carry a `code`
+  (`undefined-symbol`, `undefined-macro`, `unclosed-block`); `codeActions.ts`
+  matches on that rather than on message text, so wording can change freely. An
+  `unclosed-block` also carries the closer to insert in `data`.
 - **Symbol lookup cost**: `findSymbolInfo` filters by name first via
   `DocumentIndex.labelsByName`, then by scope. It used to scan every label of
   every document per call, so cost grew with the whole workspace (~0.1 ms per
@@ -168,7 +173,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 845 tests)
+yarn test          # Run all tests (currently 860 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

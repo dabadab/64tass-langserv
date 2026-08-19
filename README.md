@@ -31,6 +31,8 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Document links** on the quoted paths of `.include`, `.binclude` and
   `.binary` — ctrl-click to open. Only paths that actually resolve become links,
   so a broken one is visible as plain text.
+- **Quick fixes** for a misspelled symbol or macro name (suggesting the closest
+  visible label) and for a block that was never closed.
 - **Expand selection** (<kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>→</kbd>) stepping
   out through word, operand, operand list, line, each enclosing block, document.
 - **Folding** for `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif` and friends.

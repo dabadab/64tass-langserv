@@ -16,6 +16,9 @@ import {
     DocumentLinkParams,
     SelectionRange,
     SelectionRangeParams,
+    CodeAction,
+    CodeActionKind,
+    CodeActionParams,
     Hover,
     ReferenceParams,
     RenameParams,
@@ -51,6 +54,7 @@ import { absoluteSearchPaths } from './paths';
 import { buildHover } from './hover';
 import { buildDocumentLinks } from './documentLinks';
 import { computeSelectionRanges } from './selectionRanges';
+import { buildCodeActions } from './codeActions';
 import { detectCaseSensitivityPragma, detectCpu } from './utils';
 import { parseDocument } from './parser';
 import {
@@ -213,6 +217,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             foldingRangeProvider: true,
             documentLinkProvider: { resolveProvider: false },
             selectionRangeProvider: true,
+            codeActionProvider: { codeActionKinds: [CodeActionKind.QuickFix] },
             hoverProvider: true,
             documentSymbolProvider: true,
             documentHighlightProvider: true,
@@ -464,6 +469,15 @@ connection.onSelectionRanges((params: SelectionRangeParams): SelectionRange[] =>
     const document = documents.get(params.textDocument.uri);
     if (!document) return [];
     return computeSelectionRanges(document.getText(), params.positions);
+});
+
+connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+    // Only the diagnostics the client sends for the current range, so a fix is
+    // never offered for a problem the user cannot see.
+    return buildCodeActions(document, params.context.diagnostics, documentIndex,
+        effectiveCaseSensitive(params.textDocument.uri));
 });
 
 connection.onReferences((params: ReferenceParams): Location[] => {

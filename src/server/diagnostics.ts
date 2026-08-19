@@ -256,7 +256,8 @@ export function validateDocument(
                             Position.create(lineNum, nameCol + macroName.length)
                         ),
                         message: `Undefined macro '${macroName}'`,
-                        source: '64tass'
+                        source: '64tass',
+                        code: 'undefined-macro'
                     });
                 }
             }
@@ -432,7 +433,8 @@ export function validateDocument(
                             Position.create(lineNum, startCol + symName.length)
                         ),
                         message: `Undefined symbol '${symName}'`,
-                        source: '64tass'
+                        source: '64tass',
+                        code: 'undefined-symbol'
                     });
                 }
             }
@@ -452,7 +454,11 @@ export function validateDocument(
                 Position.create(unclosed.line, lines[unclosed.line].length)
             ),
             message: `Unclosed '${unclosed.directive}' - missing '${closeDirective}'`,
-            source: '64tass'
+            source: '64tass',
+            code: 'unclosed-block',
+            // The closer to insert, so the quick fix does not have to re-derive it
+            // from the message text.
+            data: { closeDirective, openLine: unclosed.line }
         });
     }
 
