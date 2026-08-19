@@ -84,9 +84,9 @@
     }
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "yarn compile && vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "yarn compile && vitest run --coverage",
     "compile": "node esbuild.js",
     "compile:prod": "node esbuild.js --production",
     "watch": "node esbuild.js --watch",

@@ -59,6 +59,16 @@ declaration only. Anything with logic worth testing lives in its own module and 
 unit-tested, because `server.ts` calls `createConnection()` at module load and so
 cannot be imported from a test.
 
+What `server.ts` itself does get is `test/integration/protocol.test.ts`, which
+spawns the built server as a child process and talks LSP to it over stdio, as the
+editor does. That covers the wiring - capabilities declared, requests routed,
+responses shaped right - which is the only kind of bug that can live in a file
+that thin. Note the v8 coverage report still shows `server.ts` at 0%: the code
+runs in another process, where the instrumentation cannot see it.
+
+Because those tests run against the *bundle*, `yarn test` compiles first. Testing
+a stale `out/server/server.js` would be worse than not testing it at all.
+
 ### Key Concepts
 
 - **CPU targets**: `OPCODES` in `constants.ts` is the UNION of mnemonics across all 11
@@ -173,7 +183,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 860 tests)
+yarn test          # Run all tests (currently 877 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
