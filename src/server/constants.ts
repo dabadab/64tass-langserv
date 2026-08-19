@@ -80,8 +80,12 @@ const OPCODES_BY_CPU: Record<string, string[]> = {
         'plz', 'rld', 'rlw', 'rmb', 'row', 'rrd', 'rtn', 'sbq', 'see', 'smb', 'stq', 'stz', 'tab',
         'tad', 'taz', 'tba', 'tda', 'trb', 'tsb', 'tsy', 'tys', 'tza'
     ],
-    // NMOS 65xx (-i), which adds the undocumented opcodes
-    '6502': [
+    // NMOS 65xx (the -i / --m6502 flag), which adds the undocumented opcodes.
+    // Note this is `6502i`, NOT `6502`: `.cpu "6502"` selects the standard set
+    // and is identical to `default` (verified - both are --m65xx, and both
+    // reject `lax`). Getting these two the wrong way round made every
+    // undocumented mnemonic look valid on a plain 6502 target.
+    '6502i': [
         'ahx', 'alr', 'anc', 'ane', 'arr', 'asr', 'axs', 'dcm', 'dcp', 'ins', 'isb', 'isc', 'jam',
         'lae', 'las', 'lax', 'lds', 'lxa', 'rla', 'rra', 'sax', 'sbx', 'sha', 'shs', 'shx', 'shy',
         'slo', 'sre', 'tas', 'xaa'
@@ -100,21 +104,23 @@ export function opcodesForCpu(cpu: string): ReadonlySet<string> {
 
 /**
  * CPU targets 64tass accepts, exactly as spelled in the `.cpu` directive.
- * Note there is no "6510": the C64 CPU is `6502` (NMOS, which is the set that
- * includes the undocumented opcodes).
+ *
+ * There is no "6510": the C64's CPU is spelled `6502i` here, the NMOS set that
+ * includes the undocumented opcodes. Plain `6502` is the documented set only and
+ * is the same target as `default` (both --m65xx).
  */
 export const CPU_NAMES = [
-    'default', '6502', '65c02', '65ce02', '65dtv02', '65el02',
+    'default', '6502', '6502i', '65c02', '65ce02', '65dtv02', '65el02',
     '65816', 'r65c02', 'w65c02', '4510', '45gs02'
 ] as const;
 
 export type CpuName = typeof CPU_NAMES[number];
 
 /**
- * CPU assumed when a file says nothing. 64tass's own default target is the
- * narrower `default` (--m65xx), but 6502 is the 6502/6510 set actually written
- * for the C64 and includes the undocumented opcodes - and being too narrow here
- * costs navigation, since label detection gates on the opcode table.
+ * CPU assumed when a file says nothing, matching 64tass's own default target
+ * (--m65xx, which `.cpu` spells as both `default` and `6502` - they are the same
+ * set). A C64 source that uses the undocumented opcodes needs `6502i`, set
+ * through the `64tass.cpu` setting, a `.cpu` directive or the cpu pragma.
  */
 export const DEFAULT_CPU: CpuName = '6502';
 
@@ -130,13 +136,74 @@ export function isCpuName(name: string): name is CpuName {
  * is TSX, `asl a` is accumulator-mode ASL, `psh p` is PHP. These are NOT symbol
  * references, so they must not be reported as undefined symbols.
  *
- * Probed from 64tass V1.60.3243 for every CPU target.
+ * Probed from 64tass V1.60.3243 for every CPU target, over the whole alphabet
+ * rather than a hand-picked set of letters - a curated list silently omitted
+ * 45gs02's `q` and 65el02's `i`, which then read as undefined symbols.
  */
 /**
  * Valid register operands per opcode, for each CPU 64tass can target.
  * Probed from the assembler across every target; see REGISTER_MODES above.
  */
 const REGISTER_MODES_BY_CPU: Record<string, Record<string, readonly string[]>> = {
+    '4510': {
+        asl: ['a'],
+        asr: ['a'],
+        dec: ['a', 'x', 'y', 'z'],
+        inc: ['a', 'x', 'y', 'z'],
+        lda: ['d', 'x', 'y', 'z'],
+        ldx: ['a', 's'],
+        ldy: ['a', 's'],
+        ldz: ['a'],
+        lsr: ['a'],
+        neg: ['a'],
+        psh: ['a', 'p', 'x', 'y', 'z'],
+        pul: ['a', 'p', 'x', 'y', 'z'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a', 'd'],
+        stx: ['s', 'x'],
+        sty: ['s', 'y'],
+        stz: ['z'],
+    },
+    '6502': {
+        asl: ['a'],
+        dec: ['x', 'y'],
+        inc: ['x', 'y'],
+        lda: ['x', 'y'],
+        ldx: ['a', 's'],
+        ldy: ['a'],
+        lsr: ['a'],
+        psh: ['a', 'p'],
+        pul: ['a', 'p'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+    },
+    '65816': {
+        asl: ['a'],
+        dec: ['a', 'x', 'y'],
+        inc: ['a', 'x', 'y'],
+        lda: ['d', 's', 'x', 'y'],
+        ldx: ['a', 's', 'y'],
+        ldy: ['a', 'x'],
+        lsr: ['a'],
+        psh: ['a', 'b', 'd', 'k', 'p', 'x', 'y'],
+        pul: ['a', 'b', 'd', 'p', 'x', 'y'],
+        rol: ['a'],
+        ror: ['a'],
+        shl: ['a'],
+        shr: ['a'],
+        sta: ['a', 's'],
+        stx: ['s', 'x'],
+        sty: ['y'],
+        stz: ['z'],
+    },
     'default': {
         asl: ['a'],
         dec: ['x', 'y'],
@@ -155,7 +222,7 @@ const REGISTER_MODES_BY_CPU: Record<string, Record<string, readonly string[]>> =
         stx: ['s', 'x'],
         sty: ['y'],
     },
-    '6502': {
+    '6502i': {
         asl: ['a'],
         dec: ['x', 'y'],
         inc: ['x', 'y'],
@@ -253,25 +320,6 @@ const REGISTER_MODES_BY_CPU: Record<string, Record<string, readonly string[]>> =
         sty: ['y'],
         stz: ['z'],
     },
-    '65816': {
-        asl: ['a'],
-        dec: ['a', 'x', 'y'],
-        inc: ['a', 'x', 'y'],
-        lda: ['d', 's', 'x', 'y'],
-        ldx: ['a', 's', 'y'],
-        ldy: ['a', 'x'],
-        lsr: ['a'],
-        psh: ['a', 'b', 'd', 'k', 'p', 'x', 'y'],
-        pul: ['a', 'b', 'd', 'p', 'x', 'y'],
-        rol: ['a'],
-        ror: ['a'],
-        shl: ['a'],
-        shr: ['a'],
-        sta: ['a', 's'],
-        stx: ['s', 'x'],
-        sty: ['y'],
-        stz: ['z'],
-    },
     'r65c02': {
         asl: ['a'],
         dec: ['a', 'x', 'y'],
@@ -308,28 +356,6 @@ const REGISTER_MODES_BY_CPU: Record<string, Record<string, readonly string[]>> =
         sta: ['a'],
         stx: ['s', 'x'],
         sty: ['y'],
-        stz: ['z'],
-    },
-    '4510': {
-        asl: ['a'],
-        asr: ['a'],
-        dec: ['a', 'x', 'y', 'z'],
-        inc: ['a', 'x', 'y', 'z'],
-        lda: ['d', 'x', 'y', 'z'],
-        ldx: ['a', 's'],
-        ldy: ['a', 's'],
-        ldz: ['a'],
-        lsr: ['a'],
-        neg: ['a'],
-        psh: ['a', 'p', 'x', 'y', 'z'],
-        pul: ['a', 'p', 'x', 'y', 'z'],
-        rol: ['a'],
-        ror: ['a'],
-        shl: ['a'],
-        shr: ['a'],
-        sta: ['a', 'd'],
-        stx: ['s', 'x'],
-        sty: ['s', 'y'],
         stz: ['z'],
     },
     '45gs02': {

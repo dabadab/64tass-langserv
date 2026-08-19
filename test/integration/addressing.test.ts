@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as cp from 'child_process';
-import { TASS_PATH, TASS_EXISTS, TABLES_MATCH_TASS } from '../helpers/compiler';
+import { TASS_PATH, TASS_EXISTS, TABLES_MATCH_TASS, CPU_FLAG } from '../helpers/compiler';
 import { addressingModesFor } from '../../src/server/addressing';
 import { opcodesForCpu } from '../../src/server/constants';
 
@@ -12,10 +12,12 @@ import { opcodesForCpu } from '../../src/server/constants';
  * This re-runs that probe and compares, so a wrong or stale table cannot ship -
  * and if 64tass itself changes, the failure says exactly which forms moved.
  *
- * Three representative targets rather than all eleven: the base NMOS set, the
- * CMOS additions, and the 16-bit set that has the most distinct forms.
+ * Four representative targets rather than all twelve: the documented set, the
+ * same set plus the undocumented opcodes, the CMOS additions, and the 16-bit set
+ * that has the most distinct forms. `6502` and `6502i` are both here because
+ * they are the pair that is easiest to get the wrong way round.
  */
-const PROBED_CPUS = ['6502', '65c02', '65816'];
+const PROBED_CPUS = ['6502', '6502i', '65c02', '65816'];
 
 const SYNTAXES = [
     '', 'a', '*+2', '#$12', '$34', '$34,x', '$34,y', '$1234', '$1234,x', '$1234,y',
@@ -27,7 +29,7 @@ interface Probe { pattern: string; opcode: number; length: number; }
 
 function probe(cpu: string, mnemonic: string, dir: string): Probe[] {
     const file = path.join(dir, 'p.asm');
-    const flag = `--m${cpu}`;
+    const flag = CPU_FLAG[cpu];
     const header = ['        * = $1000', '        .as', '        .xs'];
     const run = (syntaxes: string[], listTo?: string) => {
         fs.writeFileSync(file, header.concat(syntaxes.map(s => `        ${mnemonic} ${s}`)).join('\n') + '\n');
@@ -130,6 +132,21 @@ describe('addressing table spot checks', () => {
 
     it('does not give a 6502 the 65816-only long forms', () => {
         expect(addressingModesFor('6502', 'lda').map(m => m[0])).not.toContain('$hhhhhh');
+    });
+
+    it('keeps the undocumented opcodes to 6502i, not 6502', () => {
+        // `.cpu "6502"` is the documented set (--m65xx, the same target as
+        // `default`); the undocumented opcodes are `6502i` (--m6502). Having
+        // these the wrong way round made `lax` look valid on a plain 6502.
+        expect(addressingModesFor('6502', 'lax')).toEqual([]);
+        expect(addressingModesFor('6502i', 'lax').length).toBeGreaterThan(0);
+        expect(addressingModesFor('default', 'lax')).toEqual([]);
+    });
+
+    it('treats 6502 and default as the same target', () => {
+        for (const mnemonic of ['lda', 'jmp', 'rts', 'bne']) {
+            expect(addressingModesFor('6502', mnemonic)).toEqual(addressingModesFor('default', mnemonic));
+        }
     });
 
     it('has no modes for a mnemonic the CPU lacks', () => {

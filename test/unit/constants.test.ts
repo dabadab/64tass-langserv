@@ -198,16 +198,28 @@ describe('CPU targets', () => {
     it('lists exactly the names the .cpu directive accepts', () => {
         // Verified against the assembler: these are accepted, and "6510" is not
         expect([...CPU_NAMES].sort()).toEqual([
-            '4510', '45gs02', '6502', '65816', '65c02', '65ce02', '65dtv02',
-            '65el02', 'default', 'r65c02', 'w65c02'
+            '4510', '45gs02', '6502', '6502i', '65816', '65c02', '65ce02',
+            '65dtv02', '65el02', 'default', 'r65c02', 'w65c02'
         ]);
         expect(isCpuName('6510')).toBe(false);
     });
 
-    it('defaults to the 6502/6510 set, which includes the undocumented opcodes', () => {
+    it('defaults to the assembler\'s own default target', () => {
         expect(DEFAULT_CPU).toBe('6502');
-        expect(opcodesForCpu(DEFAULT_CPU).has('lax')).toBe(true);
-        expect(opcodesForCpu(DEFAULT_CPU).has('sax')).toBe(true);
+    });
+
+    it('keeps the undocumented opcodes to 6502i, not 6502', () => {
+        // `.cpu "6502"` is the documented set only - the same target as
+        // `default` (--m65xx). The undocumented opcodes are `6502i` (--m6502).
+        for (const undocumented of ['lax', 'sax', 'dcp', 'slo', 'anc']) {
+            expect(opcodesForCpu('6502').has(undocumented), `6502 ${undocumented}`).toBe(false);
+            expect(opcodesForCpu('default').has(undocumented), `default ${undocumented}`).toBe(false);
+            expect(opcodesForCpu('6502i').has(undocumented), `6502i ${undocumented}`).toBe(true);
+        }
+    });
+
+    it('treats 6502 and default as the same opcode set', () => {
+        expect([...opcodesForCpu('6502')].sort()).toEqual([...opcodesForCpu('default')].sort());
     });
 
     it('recognises a name case-insensitively', () => {

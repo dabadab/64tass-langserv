@@ -37,8 +37,10 @@ describe('opcodeHover', () => {
     });
 
     it('marks an undocumented opcode as such', () => {
-        expect(text(opcodeHover('lax', '6502'))).toContain('undocumented');
-        expect(text(opcodeHover('lda', '6502'))).not.toContain('undocumented');
+        // lax exists on 6502i, not on plain 6502
+        expect(text(opcodeHover('lax', '6502i'))).toContain('undocumented');
+        expect(text(opcodeHover('lda', '6502i'))).not.toContain('undocumented');
+        expect(opcodeHover('lax', '6502')).toBeNull();
     });
 
     it('still lists modes for a mnemonic with no written description', () => {

@@ -10,6 +10,10 @@
  * from an absolute jump. See test/integration/addressing.test.ts, which checks
  * this table back against the assembler.
  *
+ * Each target is probed under the flag that actually selects it (see CPU_FLAG in
+ * test/helpers/compiler.ts) - notably `6502` is --m65xx and `6502i` is --m6502,
+ * not the other way round.
+ *
  * Operand patterns use `$hh` for one byte, `$hhhh` for two, `$hhhhhh` for three,
  * `<label>` for a relative branch target and `<bit>` for a bit number.
  */
@@ -111,11 +115,7 @@ const MODE_LISTS: readonly (readonly AddressingMode[])[] = [
     [['', 43, 1]],
     [['', 107, 1]],
     [['($hh,x)', 97, 2], ['$hh', 101, 2], ['#$hh', 105, 2], ['$hhhh', 109, 3], ['($hh),y', 113, 2], ['$hh,x', 117, 2], ['$hhhh,y', 121, 3], ['$hhhh,x', 125, 3]],
-    [['#$hh', 11, 2]],
     [['($hh,x)', 33, 2], ['$hh', 37, 2], ['#$hh', 41, 2], ['$hhhh', 45, 3], ['($hh),y', 49, 2], ['$hh,x', 53, 2], ['$hhhh,y', 57, 3], ['$hhhh,x', 61, 3]],
-    [['#$hh', 139, 2]],
-    [['#$hh', 107, 2]],
-    [['#$hh', 75, 2]],
     [['<label>', 144, 2]],
     [['<label>', 176, 2]],
     [['<label>', 240, 2]],
@@ -126,30 +126,15 @@ const MODE_LISTS: readonly (readonly AddressingMode[])[] = [
     [['<label>', 80, 2]],
     [['<label>', 112, 2]],
     [['($hh,x)', 193, 2], ['$hh', 197, 2], ['#$hh', 201, 2], ['$hhhh', 205, 3], ['($hh),y', 209, 2], ['$hh,x', 213, 2], ['$hhhh,y', 217, 3], ['$hhhh,x', 221, 3]],
-    [['($hh,x)', 195, 2], ['$hh', 199, 2], ['$hhhh', 207, 3], ['($hh),y', 211, 2], ['$hh,x', 215, 2], ['$hhhh,y', 219, 3], ['$hhhh,x', 223, 3]],
     [['$hh', 198, 2], ['$hhhh', 206, 3], ['$hh,x', 214, 2], ['$hhhh,x', 222, 3]],
     [['($hh,x)', 65, 2], ['$hh', 69, 2], ['#$hh', 73, 2], ['$hhhh', 77, 3], ['($hh),y', 81, 2], ['$hh,x', 85, 2], ['$hhhh,y', 89, 3], ['$hhhh,x', 93, 3]],
     [['$hh', 230, 2], ['$hhhh', 238, 3], ['$hh,x', 246, 2], ['$hhhh,x', 254, 3]],
-    [['($hh,x)', 227, 2], ['$hh', 231, 2], ['$hhhh', 239, 3], ['($hh),y', 243, 2], ['$hh,x', 247, 2], ['$hhhh,y', 251, 3], ['$hhhh,x', 255, 3]],
     [['$hhhh', 76, 3], ['($hhhh)', 108, 3]],
     [['$hhhh', 32, 3]],
-    [['($hh,x)', 163, 2], ['$hh', 167, 2], ['#$hh', 171, 2], ['$hhhh', 175, 3], ['($hh),y', 179, 2], ['$hh,y', 183, 2], ['$hhhh,y', 191, 3]],
     [['($hh,x)', 161, 2], ['$hh', 165, 2], ['#$hh', 169, 2], ['$hhhh', 173, 3], ['($hh),y', 177, 2], ['$hh,x', 181, 2], ['$hhhh,y', 185, 3], ['$hhhh,x', 189, 3]],
-    [['$hhhh,y', 187, 3]],
-    [['$hh', 4, 2], ['$hhhh', 12, 3], ['$hh,x', 20, 2], ['$hhhh,x', 28, 3], ['#$hh', 128, 2], ['', 234, 1]],
     [['($hh,x)', 1, 2], ['$hh', 5, 2], ['#$hh', 9, 2], ['$hhhh', 13, 3], ['($hh),y', 17, 2], ['$hh,x', 21, 2], ['$hhhh,y', 25, 3], ['$hhhh,x', 29, 3]],
-    [['($hh,x)', 35, 2], ['$hh', 39, 2], ['$hhhh', 47, 3], ['($hh),y', 51, 2], ['$hh,x', 55, 2], ['$hhhh,y', 59, 3], ['$hhhh,x', 63, 3]],
-    [['($hh,x)', 99, 2], ['$hh', 103, 2], ['$hhhh', 111, 3], ['($hh),y', 115, 2], ['$hh,x', 119, 2], ['$hhhh,y', 123, 3], ['$hhhh,x', 127, 3]],
     [['', 96, 1]],
-    [['($hh,x)', 131, 2], ['$hh', 135, 2], ['$hhhh', 143, 3], ['$hh,y', 151, 2]],
     [['($hh,x)', 225, 2], ['$hh', 229, 2], ['#$hh', 233, 2], ['$hhhh', 237, 3], ['($hh),y', 241, 2], ['$hh,x', 245, 2], ['$hhhh,y', 249, 3], ['$hhhh,x', 253, 3]],
-    [['#$hh', 203, 2]],
-    [['($hh),y', 147, 2], ['$hhhh,y', 159, 3]],
-    [['$hhhh,y', 155, 3]],
-    [['$hhhh,y', 158, 3]],
-    [['$hhhh,x', 156, 3]],
-    [['($hh,x)', 3, 2], ['$hh', 7, 2], ['$hhhh', 15, 3], ['($hh),y', 19, 2], ['$hh,x', 23, 2], ['$hhhh,y', 27, 3], ['$hhhh,x', 31, 3]],
-    [['($hh,x)', 67, 2], ['$hh', 71, 2], ['$hhhh', 79, 3], ['($hh),y', 83, 2], ['$hh,x', 87, 2], ['$hhhh,y', 91, 3], ['$hhhh,x', 95, 3]],
     [['($hh,x)', 129, 2], ['$hh', 133, 2], ['$hhhh', 141, 3], ['($hh),y', 145, 2], ['$hh,x', 149, 2], ['$hhhh,y', 153, 3], ['$hhhh,x', 157, 3]],
     [['$hh', 134, 2], ['$hhhh', 142, 3], ['$hh,y', 150, 2]],
     [['$hh', 132, 2], ['$hhhh', 140, 3], ['$hh,x', 148, 2]],
@@ -181,6 +166,25 @@ const MODE_LISTS: readonly (readonly AddressingMode[])[] = [
     [['', 203, 1]],
     [['#$hh', 66, 2]],
     [['', 235, 1]],
+    [['#$hh', 11, 2]],
+    [['#$hh', 139, 2]],
+    [['#$hh', 107, 2]],
+    [['#$hh', 75, 2]],
+    [['($hh,x)', 195, 2], ['$hh', 199, 2], ['$hhhh', 207, 3], ['($hh),y', 211, 2], ['$hh,x', 215, 2], ['$hhhh,y', 219, 3], ['$hhhh,x', 223, 3]],
+    [['($hh,x)', 227, 2], ['$hh', 231, 2], ['$hhhh', 239, 3], ['($hh),y', 243, 2], ['$hh,x', 247, 2], ['$hhhh,y', 251, 3], ['$hhhh,x', 255, 3]],
+    [['($hh,x)', 163, 2], ['$hh', 167, 2], ['#$hh', 171, 2], ['$hhhh', 175, 3], ['($hh),y', 179, 2], ['$hh,y', 183, 2], ['$hhhh,y', 191, 3]],
+    [['$hhhh,y', 187, 3]],
+    [['$hh', 4, 2], ['$hhhh', 12, 3], ['$hh,x', 20, 2], ['$hhhh,x', 28, 3], ['#$hh', 128, 2], ['', 234, 1]],
+    [['($hh,x)', 35, 2], ['$hh', 39, 2], ['$hhhh', 47, 3], ['($hh),y', 51, 2], ['$hh,x', 55, 2], ['$hhhh,y', 59, 3], ['$hhhh,x', 63, 3]],
+    [['($hh,x)', 99, 2], ['$hh', 103, 2], ['$hhhh', 111, 3], ['($hh),y', 115, 2], ['$hh,x', 119, 2], ['$hhhh,y', 123, 3], ['$hhhh,x', 127, 3]],
+    [['($hh,x)', 131, 2], ['$hh', 135, 2], ['$hhhh', 143, 3], ['$hh,y', 151, 2]],
+    [['#$hh', 203, 2]],
+    [['($hh),y', 147, 2], ['$hhhh,y', 159, 3]],
+    [['$hhhh,y', 155, 3]],
+    [['$hhhh,y', 158, 3]],
+    [['$hhhh,x', 156, 3]],
+    [['($hh,x)', 3, 2], ['$hh', 7, 2], ['$hhhh', 15, 3], ['($hh),y', 19, 2], ['$hh,x', 23, 2], ['$hhhh,y', 27, 3], ['$hhhh,x', 31, 3]],
+    [['($hh,x)', 67, 2], ['$hh', 71, 2], ['$hhhh', 79, 3], ['($hh),y', 83, 2], ['$hh,x', 87, 2], ['$hhhh,y', 91, 3], ['$hhhh,x', 95, 3]],
     [['($hh,x)', 97, 2], ['$hh', 101, 2], ['#$hh', 105, 2], ['$hhhh', 109, 3], ['($hh),y', 113, 2], ['($hh)', 114, 2], ['$hh,x', 117, 2], ['$hhhh,y', 121, 3], ['$hhhh,x', 125, 3]],
     [['($hh,x)', 33, 2], ['$hh', 37, 2], ['#$hh', 41, 2], ['$hhhh', 45, 3], ['($hh),y', 49, 2], ['($hh)', 50, 2], ['$hh,x', 53, 2], ['$hhhh,y', 57, 3], ['$hhhh,x', 61, 3]],
     [['($hh,x)', 193, 2], ['$hh', 197, 2], ['#$hh', 201, 2], ['$hhhh', 205, 3], ['($hh),y', 209, 2], ['($hh)', 210, 2], ['$hh,x', 213, 2], ['$hhhh,y', 217, 3], ['$hhhh,x', 221, 3]],
@@ -220,15 +224,16 @@ const MODE_LISTS: readonly (readonly AddressingMode[])[] = [
 // mnemonic -> index into MODE_LISTS, per CPU
 const MODES_BY_CPU: Record<string, Record<string, number>> = {
     '4510': { adc: 0, and: 1, asl: 2, asr: 3, asw: 4, bbr: 5, bbs: 6, bcc: 7, bcs: 8, beq: 9, bit: 10, bmi: 11, bne: 12, bpl: 13, bra: 14, brk: 15, bsr: 16, bvc: 17, bvs: 18, clc: 19, cld: 20, cle: 21, cli: 22, clv: 23, cmp: 24, cpx: 25, cpy: 26, cpz: 27, dec: 28, dew: 29, dex: 30, dey: 31, dez: 32, eor: 33, inc: 34, inw: 35, inx: 36, iny: 37, inz: 38, jmp: 39, jsr: 40, lda: 41, ldx: 42, ldy: 43, ldz: 44, lsr: 45, map: 46, neg: 47, nop: 48, ora: 49, pha: 50, php: 51, phw: 52, phx: 53, phy: 54, phz: 55, pla: 56, plp: 57, plx: 58, ply: 59, plz: 60, rlw: 61, rmb: 62, rol: 63, ror: 64, rti: 65, rts: 66, sbc: 67, sec: 68, sed: 69, see: 70, sei: 71, smb: 72, sta: 73, stx: 74, sty: 75, stz: 76, tad: 77, tax: 78, tay: 79, taz: 80, tda: 81, trb: 82, tsb: 83, tsx: 84, tsy: 85, txa: 86, txs: 87, tya: 88, tys: 89, tza: 90 },
-    '6502': { adc: 91, anc: 92, and: 93, ane: 94, arr: 95, asl: 2, asr: 96, bcc: 97, bcs: 98, beq: 99, bit: 100, bmi: 101, bne: 102, bpl: 103, brk: 15, bvc: 104, bvs: 105, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 106, cpx: 25, cpy: 26, dcp: 107, dec: 108, dex: 30, dey: 31, eor: 109, inc: 110, inx: 36, iny: 37, isb: 111, jam: 21, jmp: 112, jsr: 113, lax: 114, lda: 115, lds: 116, ldx: 42, ldy: 43, lsr: 45, nop: 117, ora: 118, pha: 50, php: 51, pla: 56, plp: 57, rla: 119, rol: 63, ror: 64, rra: 120, rti: 65, rts: 121, sax: 122, sbc: 123, sbx: 124, sec: 68, sed: 69, sei: 71, sha: 125, shs: 126, shx: 127, shy: 128, slo: 129, sre: 130, sta: 131, stx: 132, sty: 133, tax: 78, tay: 79, tsx: 84, txa: 86, txs: 87, tya: 88 },
-    '65816': { adc: 134, and: 135, asl: 2, bcc: 97, bcs: 98, beq: 99, bit: 10, bmi: 101, bne: 102, bpl: 103, bra: 136, brk: 15, brl: 137, bvc: 104, bvs: 105, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 138, cop: 21, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, eor: 139, inc: 34, inx: 36, iny: 37, jml: 140, jmp: 141, jsl: 142, jsr: 143, lda: 144, ldx: 42, ldy: 43, lsr: 45, mvn: 145, mvp: 146, nop: 48, ora: 147, pea: 148, pei: 149, per: 150, pha: 50, phb: 151, phd: 85, phk: 80, php: 51, phx: 53, phy: 54, pla: 56, plb: 152, pld: 89, plp: 57, plx: 58, ply: 59, rep: 153, rol: 63, ror: 64, rti: 65, rtl: 90, rts: 121, sbc: 154, sec: 68, sed: 69, sei: 71, sep: 155, sta: 156, stp: 55, stx: 132, sty: 133, stz: 76, tax: 78, tay: 79, tcd: 77, tcs: 38, tdc: 81, trb: 82, tsb: 83, tsc: 32, tsx: 84, txa: 86, txs: 87, txy: 157, tya: 88, tyx: 158, wai: 159, wdm: 160, xba: 161, xce: 60 },
-    'default': { adc: 91, and: 93, asl: 2, bcc: 97, bcs: 98, beq: 99, bit: 100, bmi: 101, bne: 102, bpl: 103, brk: 15, bvc: 104, bvs: 105, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 106, cpx: 25, cpy: 26, dec: 108, dex: 30, dey: 31, eor: 109, inc: 110, inx: 36, iny: 37, jmp: 112, jsr: 113, lda: 115, ldx: 42, ldy: 43, lsr: 45, nop: 48, ora: 118, pha: 50, php: 51, pla: 56, plp: 57, rol: 63, ror: 64, rti: 65, rts: 121, sbc: 123, sec: 68, sed: 69, sei: 71, sta: 131, stx: 132, sty: 133, tax: 78, tay: 79, tsx: 84, txa: 86, txs: 87, tya: 88 },
-    '65c02': { adc: 162, and: 163, asl: 2, bcc: 97, bcs: 98, beq: 99, bit: 10, bmi: 101, bne: 102, bpl: 103, bra: 136, brk: 15, bvc: 104, bvs: 105, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 164, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, eor: 165, inc: 34, inx: 36, iny: 37, jmp: 39, jsr: 113, lda: 166, ldx: 42, ldy: 43, lsr: 45, nop: 48, ora: 167, pha: 50, php: 51, phx: 53, phy: 54, pla: 56, plp: 57, plx: 58, ply: 59, rol: 63, ror: 64, rti: 65, rts: 121, sbc: 168, sec: 68, sed: 69, sei: 71, sta: 169, stx: 132, sty: 133, stz: 76, tax: 78, tay: 79, trb: 82, tsb: 83, tsx: 84, txa: 86, txs: 87, tya: 88 },
+    '6502': { adc: 91, and: 92, asl: 2, bcc: 93, bcs: 94, beq: 95, bit: 96, bmi: 97, bne: 98, bpl: 99, brk: 15, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 102, cpx: 25, cpy: 26, dec: 103, dex: 30, dey: 31, eor: 104, inc: 105, inx: 36, iny: 37, jmp: 106, jsr: 107, lda: 108, ldx: 42, ldy: 43, lsr: 45, nop: 48, ora: 109, pha: 50, php: 51, pla: 56, plp: 57, rol: 63, ror: 64, rti: 65, rts: 110, sbc: 111, sec: 68, sed: 69, sei: 71, sta: 112, stx: 113, sty: 114, tax: 78, tay: 79, tsx: 84, txa: 86, txs: 87, tya: 88 },
+    '65816': { adc: 115, and: 116, asl: 2, bcc: 93, bcs: 94, beq: 95, bit: 10, bmi: 97, bne: 98, bpl: 99, bra: 117, brk: 15, brl: 118, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 119, cop: 21, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, eor: 120, inc: 34, inx: 36, iny: 37, jml: 121, jmp: 122, jsl: 123, jsr: 124, lda: 125, ldx: 42, ldy: 43, lsr: 45, mvn: 126, mvp: 127, nop: 48, ora: 128, pea: 129, pei: 130, per: 131, pha: 50, phb: 132, phd: 85, phk: 80, php: 51, phx: 53, phy: 54, pla: 56, plb: 133, pld: 89, plp: 57, plx: 58, ply: 59, rep: 134, rol: 63, ror: 64, rti: 65, rtl: 90, rts: 110, sbc: 135, sec: 68, sed: 69, sei: 71, sep: 136, sta: 137, stp: 55, stx: 113, sty: 114, stz: 76, tax: 78, tay: 79, tcd: 77, tcs: 38, tdc: 81, trb: 82, tsb: 83, tsc: 32, tsx: 84, txa: 86, txs: 87, txy: 138, tya: 88, tyx: 139, wai: 140, wdm: 141, xba: 142, xce: 60 },
+    'default': { adc: 91, and: 92, asl: 2, bcc: 93, bcs: 94, beq: 95, bit: 96, bmi: 97, bne: 98, bpl: 99, brk: 15, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 102, cpx: 25, cpy: 26, dec: 103, dex: 30, dey: 31, eor: 104, inc: 105, inx: 36, iny: 37, jmp: 106, jsr: 107, lda: 108, ldx: 42, ldy: 43, lsr: 45, nop: 48, ora: 109, pha: 50, php: 51, pla: 56, plp: 57, rol: 63, ror: 64, rti: 65, rts: 110, sbc: 111, sec: 68, sed: 69, sei: 71, sta: 112, stx: 113, sty: 114, tax: 78, tay: 79, tsx: 84, txa: 86, txs: 87, tya: 88 },
+    '6502i': { adc: 91, anc: 143, and: 92, ane: 144, arr: 145, asl: 2, asr: 146, bcc: 93, bcs: 94, beq: 95, bit: 96, bmi: 97, bne: 98, bpl: 99, brk: 15, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 102, cpx: 25, cpy: 26, dcp: 147, dec: 103, dex: 30, dey: 31, eor: 104, inc: 105, inx: 36, iny: 37, isb: 148, jam: 21, jmp: 106, jsr: 107, lax: 149, lda: 108, lds: 150, ldx: 42, ldy: 43, lsr: 45, nop: 151, ora: 109, pha: 50, php: 51, pla: 56, plp: 57, rla: 152, rol: 63, ror: 64, rra: 153, rti: 65, rts: 110, sax: 154, sbc: 111, sbx: 155, sec: 68, sed: 69, sei: 71, sha: 156, shs: 157, shx: 158, shy: 159, slo: 160, sre: 161, sta: 112, stx: 113, sty: 114, tax: 78, tay: 79, tsx: 84, txa: 86, txs: 87, tya: 88 },
+    '65c02': { adc: 162, and: 163, asl: 2, bcc: 93, bcs: 94, beq: 95, bit: 10, bmi: 97, bne: 98, bpl: 99, bra: 117, brk: 15, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 164, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, eor: 165, inc: 34, inx: 36, iny: 37, jmp: 39, jsr: 107, lda: 166, ldx: 42, ldy: 43, lsr: 45, nop: 48, ora: 167, pha: 50, php: 51, phx: 53, phy: 54, pla: 56, plp: 57, plx: 58, ply: 59, rol: 63, ror: 64, rti: 65, rts: 110, sbc: 168, sec: 68, sed: 69, sei: 71, sta: 169, stx: 113, sty: 114, stz: 76, tax: 78, tay: 79, trb: 82, tsb: 83, tsx: 84, txa: 86, txs: 87, tya: 88 },
     '65ce02': { adc: 0, and: 1, asl: 2, asr: 3, asw: 4, bbr: 5, bbs: 6, bcc: 7, bcs: 8, beq: 9, bit: 10, bmi: 11, bne: 12, bpl: 13, bra: 14, brk: 15, bsr: 16, bvc: 17, bvs: 18, clc: 19, cld: 20, cle: 21, cli: 22, clv: 23, cmp: 24, cpx: 25, cpy: 26, cpz: 27, dec: 28, dew: 29, dex: 30, dey: 31, dez: 32, eor: 33, inc: 34, inw: 35, inx: 36, iny: 37, inz: 38, jmp: 39, jsr: 40, lda: 41, ldx: 42, ldy: 43, ldz: 44, lsr: 45, neg: 47, nop: 48, ora: 49, pha: 50, php: 51, phw: 52, phx: 53, phy: 54, phz: 55, pla: 56, plp: 57, plx: 58, ply: 59, plz: 60, rlw: 61, rmb: 62, rol: 63, ror: 64, rti: 65, rts: 66, sbc: 67, sec: 68, sed: 69, see: 70, sei: 71, smb: 72, sta: 73, stx: 74, sty: 75, stz: 76, tad: 77, tax: 78, tay: 79, taz: 80, tda: 81, trb: 82, tsb: 83, tsx: 84, tsy: 85, txa: 86, txs: 87, tya: 88, tys: 89, tza: 90 },
-    '65dtv02': { adc: 91, and: 93, ane: 94, arr: 95, asl: 2, asr: 96, bcc: 97, bcs: 98, beq: 99, bit: 100, bmi: 101, bne: 102, bpl: 103, bra: 170, brk: 15, bvc: 104, bvs: 105, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 106, cpx: 25, cpy: 26, dcp: 107, dec: 108, dex: 30, dey: 31, eor: 109, inc: 110, inx: 36, iny: 37, isb: 111, jmp: 112, jsr: 113, lax: 114, lda: 115, ldx: 42, ldy: 43, lsr: 45, nop: 48, ora: 118, pha: 50, php: 51, pla: 56, plp: 57, rla: 119, rol: 63, ror: 64, rra: 120, rti: 65, rts: 121, sac: 171, sax: 122, sbc: 123, sec: 68, sed: 69, sei: 71, sir: 160, slo: 129, sre: 130, sta: 131, stx: 132, sty: 133, tax: 78, tay: 79, tsx: 84, txa: 86, txs: 87, tya: 88 },
-    '65el02': { adc: 172, and: 173, asl: 2, bcc: 97, bcs: 98, beq: 99, bit: 10, bmi: 101, bne: 102, bpl: 103, bra: 136, brk: 15, bvc: 104, bvs: 105, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 174, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, div: 175, ent: 176, eor: 177, inc: 34, inx: 36, iny: 37, jmp: 39, jsr: 143, lda: 178, ldx: 42, ldy: 43, lsr: 45, mmu: 179, mul: 180, nop: 48, nxa: 181, nxt: 21, ora: 182, pea: 148, pei: 149, per: 150, pha: 50, phd: 183, php: 51, phx: 53, phy: 54, pla: 56, pld: 184, plp: 57, plx: 58, ply: 59, rea: 185, rei: 186, rep: 153, rer: 187, rha: 80, rhi: 85, rhx: 38, rhy: 77, rla: 90, rli: 89, rlx: 32, rly: 81, rol: 63, ror: 64, rti: 65, rts: 121, sbc: 188, sea: 189, sec: 68, sed: 69, sei: 71, sep: 155, sta: 190, stp: 55, stx: 132, sty: 133, stz: 76, tad: 191, tax: 78, tay: 79, tda: 192, tix: 193, trb: 82, trx: 152, tsb: 83, tsx: 84, txa: 86, txi: 46, txr: 151, txs: 87, txy: 157, tya: 88, tyx: 158, wai: 159, xba: 161, xce: 60, zea: 194 },
-    'r65c02': { adc: 162, and: 163, asl: 2, bbr: 5, bbs: 6, bcc: 97, bcs: 98, beq: 99, bit: 10, bmi: 101, bne: 102, bpl: 103, bra: 136, brk: 15, bvc: 104, bvs: 105, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 164, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, eor: 165, inc: 34, inx: 36, iny: 37, jmp: 39, jsr: 113, lda: 166, ldx: 42, ldy: 43, lsr: 45, nop: 195, ora: 167, pha: 50, php: 51, phx: 53, phy: 54, pla: 56, plp: 57, plx: 58, ply: 59, rmb: 62, rol: 63, ror: 64, rti: 65, rts: 121, sbc: 168, sec: 68, sed: 69, sei: 71, smb: 72, sta: 169, stx: 132, sty: 133, stz: 76, tax: 78, tay: 79, trb: 82, tsb: 83, tsx: 84, txa: 86, txs: 87, tya: 88 },
-    'w65c02': { adc: 162, and: 163, asl: 2, bbr: 5, bbs: 6, bcc: 97, bcs: 98, beq: 99, bit: 10, bmi: 101, bne: 102, bpl: 103, bra: 136, brk: 15, bvc: 104, bvs: 105, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 164, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, eor: 165, inc: 34, inx: 36, iny: 37, jmp: 39, jsr: 113, lda: 166, ldx: 42, ldy: 43, lsr: 45, nop: 195, ora: 167, pha: 50, php: 51, phx: 53, phy: 54, pla: 56, plp: 57, plx: 58, ply: 59, rmb: 62, rol: 63, ror: 64, rti: 65, rts: 121, sbc: 168, sec: 68, sed: 69, sei: 71, smb: 72, sta: 169, stp: 55, stx: 132, sty: 133, stz: 76, tax: 78, tay: 79, trb: 82, tsb: 83, tsx: 84, txa: 86, txs: 87, tya: 88, wai: 159 },
+    '65dtv02': { adc: 91, and: 92, ane: 144, arr: 145, asl: 2, asr: 146, bcc: 93, bcs: 94, beq: 95, bit: 96, bmi: 97, bne: 98, bpl: 99, bra: 170, brk: 15, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 102, cpx: 25, cpy: 26, dcp: 147, dec: 103, dex: 30, dey: 31, eor: 104, inc: 105, inx: 36, iny: 37, isb: 148, jmp: 106, jsr: 107, lax: 149, lda: 108, ldx: 42, ldy: 43, lsr: 45, nop: 48, ora: 109, pha: 50, php: 51, pla: 56, plp: 57, rla: 152, rol: 63, ror: 64, rra: 153, rti: 65, rts: 110, sac: 171, sax: 154, sbc: 111, sec: 68, sed: 69, sei: 71, sir: 141, slo: 160, sre: 161, sta: 112, stx: 113, sty: 114, tax: 78, tay: 79, tsx: 84, txa: 86, txs: 87, tya: 88 },
+    '65el02': { adc: 172, and: 173, asl: 2, bcc: 93, bcs: 94, beq: 95, bit: 10, bmi: 97, bne: 98, bpl: 99, bra: 117, brk: 15, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 174, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, div: 175, ent: 176, eor: 177, inc: 34, inx: 36, iny: 37, jmp: 39, jsr: 124, lda: 178, ldx: 42, ldy: 43, lsr: 45, mmu: 179, mul: 180, nop: 48, nxa: 181, nxt: 21, ora: 182, pea: 129, pei: 130, per: 131, pha: 50, phd: 183, php: 51, phx: 53, phy: 54, pla: 56, pld: 184, plp: 57, plx: 58, ply: 59, rea: 185, rei: 186, rep: 134, rer: 187, rha: 80, rhi: 85, rhx: 38, rhy: 77, rla: 90, rli: 89, rlx: 32, rly: 81, rol: 63, ror: 64, rti: 65, rts: 110, sbc: 188, sea: 189, sec: 68, sed: 69, sei: 71, sep: 136, sta: 190, stp: 55, stx: 113, sty: 114, stz: 76, tad: 191, tax: 78, tay: 79, tda: 192, tix: 193, trb: 82, trx: 133, tsb: 83, tsx: 84, txa: 86, txi: 46, txr: 132, txs: 87, txy: 138, tya: 88, tyx: 139, wai: 140, xba: 142, xce: 60, zea: 194 },
+    'r65c02': { adc: 162, and: 163, asl: 2, bbr: 5, bbs: 6, bcc: 93, bcs: 94, beq: 95, bit: 10, bmi: 97, bne: 98, bpl: 99, bra: 117, brk: 15, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 164, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, eor: 165, inc: 34, inx: 36, iny: 37, jmp: 39, jsr: 107, lda: 166, ldx: 42, ldy: 43, lsr: 45, nop: 195, ora: 167, pha: 50, php: 51, phx: 53, phy: 54, pla: 56, plp: 57, plx: 58, ply: 59, rmb: 62, rol: 63, ror: 64, rti: 65, rts: 110, sbc: 168, sec: 68, sed: 69, sei: 71, smb: 72, sta: 169, stx: 113, sty: 114, stz: 76, tax: 78, tay: 79, trb: 82, tsb: 83, tsx: 84, txa: 86, txs: 87, tya: 88 },
+    'w65c02': { adc: 162, and: 163, asl: 2, bbr: 5, bbs: 6, bcc: 93, bcs: 94, beq: 95, bit: 10, bmi: 97, bne: 98, bpl: 99, bra: 117, brk: 15, bvc: 100, bvs: 101, clc: 19, cld: 20, cli: 22, clv: 23, cmp: 164, cpx: 25, cpy: 26, dec: 28, dex: 30, dey: 31, eor: 165, inc: 34, inx: 36, iny: 37, jmp: 39, jsr: 107, lda: 166, ldx: 42, ldy: 43, lsr: 45, nop: 195, ora: 167, pha: 50, php: 51, phx: 53, phy: 54, pla: 56, plp: 57, plx: 58, ply: 59, rmb: 62, rol: 63, ror: 64, rti: 65, rts: 110, sbc: 168, sec: 68, sed: 69, sei: 71, smb: 72, sta: 169, stp: 55, stx: 113, sty: 114, stz: 76, tax: 78, tay: 79, trb: 82, tsb: 83, tsx: 84, txa: 86, txs: 87, tya: 88, wai: 140 },
     '45gs02': { adc: 0, and: 1, asl: 2, asr: 3, asw: 4, bbr: 5, bbs: 6, bcc: 7, bcs: 8, beq: 9, bit: 10, bmi: 11, bne: 12, bpl: 13, bra: 14, brk: 15, bsr: 16, bvc: 17, bvs: 18, clc: 19, cld: 20, cle: 21, cli: 22, clv: 23, cmp: 24, cpx: 25, cpy: 26, cpz: 27, dec: 28, dew: 29, dex: 30, dey: 31, dez: 32, eor: 33, inc: 34, inw: 35, inx: 36, iny: 37, inz: 38, jmp: 39, jsr: 40, lda: 41, ldx: 42, ldy: 43, ldz: 44, lsr: 45, map: 46, neg: 47, nop: 48, ora: 49, pha: 50, php: 51, phw: 52, phx: 53, phy: 54, phz: 55, pla: 56, plp: 57, plx: 58, ply: 59, plz: 60, rlw: 61, rmb: 62, rol: 63, ror: 64, rti: 65, rts: 66, sbc: 67, sec: 68, sed: 69, see: 70, sei: 71, smb: 72, sta: 73, stx: 74, sty: 75, stz: 76, tad: 77, tax: 78, tay: 79, taz: 80, tda: 81, trb: 82, tsb: 83, tsx: 84, tsy: 85, txa: 86, txs: 87, tya: 88, tys: 89, tza: 90 },
 };
 
@@ -237,6 +242,6 @@ const MODES_BY_CPU: Record<string, Record<string, number>> = {
  * the mnemonic does not exist there, or takes no operand form we probe.
  */
 export function addressingModesFor(cpu: string, mnemonic: string): readonly AddressingMode[] {
-    const index = MODES_BY_CPU[cpu]?.[mnemonic.toLowerCase()];
+    const index = MODES_BY_CPU[cpu.toLowerCase()]?.[mnemonic.toLowerCase()];
     return index === undefined ? [] : MODE_LISTS[index];
 }

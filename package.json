@@ -59,6 +59,7 @@
           "enum": [
             "default",
             "6502",
+            "6502i",
             "65c02",
             "65ce02",
             "65dtv02",
@@ -70,7 +71,7 @@
             "45gs02"
           ],
           "default": "6502",
-          "markdownDescription": "Target CPU, deciding which opcodes and register addressing modes are recognised. Mirrors 64tass's CPU selection flags. A `.cpu \"...\"` directive or a `; 64tass-langserv: cpu <name>` pragma in a file overrides this for that file and everything it `.include`s. Note there is no `6510`: the C64 CPU is `6502`, the NMOS set that includes the undocumented opcodes."
+          "markdownDescription": "Target CPU, deciding which opcodes and register addressing modes are recognised. Mirrors 64tass's CPU selection flags. A `.cpu \"...\"` directive or a `; 64tass-langserv: cpu <name>` pragma in a file overrides this for that file and everything it `.include`s. Note there is no `6510`: the C64's CPU is `6502i`, the NMOS set that includes the undocumented opcodes. Plain `6502` is the documented set only, and is the same target as `default`."
         },
         "64tass.includePaths": {
           "type": "array",

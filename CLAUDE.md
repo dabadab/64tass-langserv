@@ -77,13 +77,17 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   `.cpu` or a command-line flag the server cannot see. `opcodesForCpu()` exposes the
   per-CPU breakdown for a future narrowing. Label detection gates on `OPCODES.has()`,
   so a missing mnemonic means a file indexes to *no labels at all*.
-- **CPU target**: `DocumentIndex.cpu`, defaulting to `6502` (the 6502/6510 NMOS set,
-  which includes the undocumented opcodes - 64tass's own default target is the
-  narrower `default`/--m65xx). Set by `64tass.cpu`, overridden by a `.cpu "..."`
+- **CPU target**: `DocumentIndex.cpu`, defaulting to `6502`, which is 64tass's own
+  default target. Set by `64tass.cpu`, overridden by a `.cpu "..."`
   directive or a `; 64tass-langserv: cpu <name>` pragma, which cascade into the
   `.include` tree exactly like case sensitivity (`detectCpu` in `utils.ts`).
   Decides `opcodesForCpu()` and `registerModesForCpu()`. Only the FIRST `.cpu` in a
   file is used: 64tass allows switching mid-file, which the index does not model.
+  The name -> flag mapping is NOT mechanical, and getting it wrong is the bug the
+  all-opcodes fixtures caught: `--m6502` is "NMOS 65xx", which `.cpu` spells
+  `6502i`, while `.cpu "6502"` is the documented set selected by `--m65xx` - the
+  same target as `default`. `CPU_FLAG` in `test/helpers/compiler.ts` is the one
+  authoritative copy of that mapping; generators and comparison tests use it.
 - **Register operands**: `REGISTER_MODES`/`INDEX_REGISTERS` in `constants.ts`. 64tass
   accepts a register where an address would go and assembles the matching
   instruction - `lda x` is TXA, `ldx s` is TSX, `asl a` is accumulator mode,
@@ -183,7 +187,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 883 tests); compiles first
+yarn test          # Run all tests (currently 922 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
@@ -206,6 +210,12 @@ building one literally.
   `TABLES_PROBED_FROM` (the version the tables were probed from), because another
   version may legitimately differ.
 - **Fixtures:** `test/fixtures/` — `.asm` files used by integration tests.
+  `test/fixtures/all-opcodes/` holds one file per `.cpu` target exercising every
+  mnemonic and addressing form, all assembling with zero errors AND zero warnings.
+  Anything the extension reports on them is a false positive, and any line indexed
+  as a *label* means a mnemonic went unrecognised - which is what
+  `all-opcodes.test.ts` asserts. `test/fixtures/64tass-examples/` holds real
+  sources from the 64tass distribution.
   `test/fixtures/corpus/` holds 20 files that BOTH assemble cleanly under real
   64tass and must produce zero error diagnostics here, so a false positive fails
   the build. Add one whenever a new construct is supported; verify it assembles

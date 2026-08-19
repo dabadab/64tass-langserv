@@ -61,6 +61,29 @@ if (TASS_EXISTS && !TABLES_MATCH_TASS) {
     );
 }
 
+/**
+ * The command-line flag that selects each `.cpu` target.
+ *
+ * Not a mechanical `--m<name>`: `--m6502` is "NMOS 65xx", which `.cpu` spells
+ * `6502i`, while `.cpu "6502"` is the standard set selected by `--m65xx` - the
+ * same target as `default`. Verified by comparing the accepted mnemonic set of
+ * every name against every flag.
+ */
+export const CPU_FLAG: Record<string, string> = {
+    'default': '--m65xx',
+    '6502': '--m65xx',
+    '6502i': '--m6502',
+    '65c02': '--m65c02',
+    '65ce02': '--m65ce02',
+    '65dtv02': '--m65dtv02',
+    '65el02': '--m65el02',
+    '65816': '--m65816',
+    'r65c02': '--mr65c02',
+    'w65c02': '--mw65c02',
+    '4510': '--m4510',
+    '45gs02': '--m45gs02',
+};
+
 export interface CompilerResult {
     exitCode: number;
     stderr: string;
