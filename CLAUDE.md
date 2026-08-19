@@ -183,7 +183,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 877 tests); compiles first
+yarn test          # Run all tests (currently 883 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
@@ -205,7 +205,12 @@ building one literally.
   back against the assembler; those two additionally skip unless the assembler is
   `TABLES_PROBED_FROM` (the version the tables were probed from), because another
   version may legitimately differ.
-- **Fixtures:** `test/fixtures/` — `.asm` files used by integration tests
+- **Fixtures:** `test/fixtures/` — `.asm` files used by integration tests.
+  `test/fixtures/corpus/` holds 20 files that BOTH assemble cleanly under real
+  64tass and must produce zero error diagnostics here, so a false positive fails
+  the build. Add one whenever a new construct is supported; verify it assembles
+  before committing (a construct that does not assemble proves nothing), and add
+  any flags it needs to `COMPILE_FLAGS` in `corpus.test.ts`.
 - **Helpers:** `test/helpers/` — `createDoc`, `buildIndex`, `compile`
   - `buildIndex()` accepts `caseSensitive` per source object (falling back to the first entry), so a single index can mix case-sensitive and case-insensitive documents
 

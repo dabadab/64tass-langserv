@@ -15,6 +15,7 @@ const CORPUS = path.join(__dirname, '..', 'fixtures', 'corpus');
 /** Extra 64tass flags a fixture needs to assemble (mirrors its define pragmas). */
 const COMPILE_FLAGS: Record<string, string[]> = {
     'conditionals.asm': ['-D', 'linking=0'],
+    'switch-blocks.asm': ['-D', 'mode=2'],
 };
 
 const files = fs.readdirSync(CORPUS).filter(f => f.endsWith('.asm')).sort();
