@@ -4,9 +4,20 @@ import { findSymbolInfo } from './symbols';
 import { opcodesForCpu, DEFAULT_CPU } from './constants';
 import { addressingModesFor } from './addressing';
 import { opcodeDoc } from './opcodeDocs';
+import { cyclesFor, hasCycleData, CycleVariance } from './cycles';
 import { parseNumericValue, formatNumericValue } from './utils';
 
 const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
+
+/** Cycle count with the classic markers for the conditional extras. */
+function formatCycles(cycles: number, variance: CycleVariance): string {
+    switch (variance) {
+        case 'page': return `${cycles}*`;
+        case 'branch': return `${cycles}**`;
+        case 'jam': return '--';
+        default: return String(cycles);
+    }
+}
 
 /**
  * Hover for a mnemonic: what it does, and the addressing modes it has on the CPU
@@ -28,10 +39,28 @@ export function opcodeHover(word: string, cpu: string): Hover | null {
     if (doc?.flags) lines.push('', `Flags: \`${doc.flags.split('').join(' ')}\``);
 
     if (modes.length > 0) {
-        lines.push('', `Addressing modes on \`${cpu}\`:`, '', '| Operand | Opcode | Bytes |', '| --- | --- | --- |');
+        // Cycles are the interesting number, but they are only known for the NMOS
+        // targets; elsewhere the instruction length is shown instead so the column
+        // is never empty.
+        const timed = hasCycleData(cpu);
+        const seen = new Set<CycleVariance>();
+
+        lines.push('', `Addressing modes on \`${cpu}\`:`, '',
+            `| Operand | Opcode | ${timed ? 'Cycles' : 'Bytes'} |`, '| --- | --- | --- |');
         for (const [pattern, opcode, length] of modes) {
-            lines.push(`| \`${pattern || '(implied)'}\` | \`$${hex(opcode)}\` | ${length} |`);
+            let cell = String(length);
+            if (timed) {
+                const timing = cyclesFor(cpu, opcode);
+                cell = timing ? formatCycles(timing.cycles, timing.variance) : '?';
+                if (timing) seen.add(timing.variance);
+            }
+            lines.push(`| \`${pattern || '(implied)'}\` | \`$${hex(opcode)}\` | ${cell} |`);
         }
+
+        // Only explain the markers actually used above.
+        if (seen.has('page')) lines.push('', '`*` +1 cycle if the indexed address crosses a page boundary');
+        if (seen.has('branch')) lines.push('', '`**` +1 cycle if the branch is taken, +2 if it also crosses a page');
+        if (seen.has('jam')) lines.push('', '`--` locks the processor up');
     }
 
     return { contents: { kind: MarkupKind.Markdown, value: lines.join('\n') } };

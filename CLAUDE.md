@@ -21,6 +21,7 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │       ├── codeActions.ts        # Quick fixes for spelling and unclosed blocks
 │       ├── addressing.ts         # GENERATED addressing modes per CPU (probed from 64tass)
 │       ├── opcodeDocs.ts         # Hand-written mnemonic descriptions and flags
+│       ├── cycles.ts             # NMOS cycle counts (transcribed, not probed)
 │       ├── indexing.ts           # indexDocument — include tree + case-sensitivity cascade
 │       ├── includes.ts           # IncludeGraph — which roots pull in which .include files
 │       ├── workspace.ts          # collectSourceFiles, findFilePathAt — workspace scan, file paths
@@ -180,7 +181,18 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   lookup at 20k labels, and diagnostics calls it once per symbol occurrence).
   `performance.test.ts` guards the scaling property rather than a wall-clock
   ceiling, which would be flaky on CI.
-- **Opcode hover**: `hover.ts` merges two sources. `addressing.ts` is GENERATED -
+- **Cycle counts**: `cycles.ts`, keyed by opcode byte, for the NMOS family only
+  (`6502`/`6502i`/`default`). The ONE table here that cannot be probed - 64tass
+  is an assembler and has no timing information at all (no listing column, no
+  directive, no flag, nothing in the manual), so it is transcribed from two
+  published references that agree on every shared entry. It is cross-checked
+  against the probed addressing table: all 221 forms the assembler accepts for
+  the 6502i map to the mnemonic the reference gives that opcode byte, which
+  cannot verify the counts but does catch a table lined up against the wrong
+  opcodes. CMOS and 16-bit targets are deliberately absent - the 65816's timing
+  depends on register widths and direct-page alignment - and hover falls back to
+  instruction length for them.
+- **Opcode hover**: `hover.ts` merges three sources. `addressing.ts` is GENERATED -
   every addressing mode was probed from 64tass, with the mode read back from the
   listing's monitor column (the assembler's own disassembly) rather than assumed
   from the syntax fed in, which is what separates `lda $34,y` (encodes absolute,y)
@@ -219,7 +231,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1080 tests); compiles first
+yarn test          # Run all tests (currently 1120 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

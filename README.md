@@ -31,8 +31,11 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Hover** showing a symbol's scope, its documentation comment, and its value in
   binary, decimal and hexadecimal — or, on a mnemonic, what the instruction does,
   the flags it writes, and every addressing mode it has *on this file's CPU*, with
-  each form's opcode byte and length. A label always wins over a mnemonic of the
-  same name.
+  each form's opcode byte and cycle count — `4*` marking the forms that cost an
+  extra cycle when indexing crosses a page, `2**` a branch. Cycles are shown for
+  the NMOS targets (`6502`, `6502i`, `default`, so the C64's 6510); other targets
+  show instruction length instead, since their timing is not modelled. A label
+  always wins over a mnemonic of the same name.
 - **Document links** on the quoted paths of `.include`, `.binclude` and
   `.binary` — ctrl-click to open. Only paths that actually resolve become links,
   so a broken one is visible as plain text.

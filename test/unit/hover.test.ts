@@ -51,6 +51,51 @@ describe('opcodeHover', () => {
         expect(t).toContain('Addressing modes');
     });
 
+    it('shows cycle counts on an NMOS target', () => {
+        const t = text(opcodeHover('lda', '6502i'));
+        expect(t).toContain('| Operand | Opcode | Cycles |');
+        expect(t).toContain('| `#$hh` | `$A9` | 2 |');
+        expect(t).toContain('| `$hhhh` | `$AD` | 4 |');
+    });
+
+    it('marks the forms that pay an extra cycle on a page cross', () => {
+        const t = text(opcodeHover('lda', '6502i'));
+        expect(t).toContain('| `$hhhh,x` | `$BD` | 4* |');
+        expect(t).toContain('+1 cycle if the indexed address crosses a page boundary');
+    });
+
+    it('does not mark an indexed store, which always pays it', () => {
+        const t = text(opcodeHover('sta', '6502i'));
+        expect(t).toContain('| `$hhhh,x` | `$9D` | 5 |');
+        expect(t).not.toContain('5*');
+    });
+
+    it('marks a branch with its own penalty', () => {
+        const t = text(opcodeHover('bne', '6502i'));
+        expect(t).toContain('| `<label>` | `$D0` | 2** |');
+        expect(t).toContain('+1 cycle if the branch is taken, +2 if it also crosses a page');
+    });
+
+    it('shows a jamming opcode as having no count', () => {
+        const t = text(opcodeHover('jam', '6502i'));
+        expect(t).toContain('| `(implied)` | `$02` | -- |');
+        expect(t).toContain('locks the processor up');
+    });
+
+    it('explains only the markers it actually used', () => {
+        // jsr has no conditional timing at all, so neither footnote belongs.
+        const t = text(opcodeHover('jsr', '6502i'));
+        expect(t).not.toContain('page boundary');
+        expect(t).not.toContain('branch is taken');
+    });
+
+    it('falls back to instruction length where timing is not modelled', () => {
+        const t = text(opcodeHover('lda', '65816'));
+        expect(t).toContain('| Operand | Opcode | Bytes |');
+        expect(t).toContain('| `$hhhhhh` | `$AF` | 4 |');
+        expect(t).not.toContain('Cycles');
+    });
+
     it('names the CPU the modes belong to', () => {
         expect(text(opcodeHover('lda', '65816'))).toContain('`65816`');
     });
