@@ -107,10 +107,12 @@ export function compile(filePath: string, extraFlags: string[] = []): CompilerRe
             '--quiet', '-o', '/dev/null', ...extraFlags, filePath
         ], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
         return { exitCode: 0, stderr: '' };
-    } catch (err: any) {
+    } catch (err) {
+        // execFileSync throws an Error carrying the exit status and captured output.
+        const failure = err as { status?: number; stderr?: string };
         return {
-            exitCode: err.status ?? 1,
-            stderr: err.stderr ?? ''
+            exitCode: failure.status ?? 1,
+            stderr: failure.stderr ?? ''
         };
     }
 }

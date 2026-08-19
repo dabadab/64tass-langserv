@@ -112,13 +112,19 @@ interface Settings {
 // Default settings
 let globalSettings: Settings = { caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [] };
 
-/** Read the `64tass` configuration section, falling back to defaults per field. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function readSettings(config: any): Settings {
+/**
+ * Read the `64tass` configuration section, falling back to defaults per field.
+ *
+ * Takes `unknown` rather than a settings shape: this is whatever the client sent,
+ * so every field is checked here instead of being assumed.
+ */
+function readSettings(config: unknown): Settings {
+    const raw = (config ?? {}) as Record<string, unknown>;
+    const cpu = String(raw.cpu ?? '');
     return {
-        caseSensitive: config?.caseSensitive ?? false,
-        cpu: isCpuName(String(config?.cpu ?? '')) ? String(config.cpu).toLowerCase() : DEFAULT_CPU,
-        includePaths: Array.isArray(config?.includePaths) ? config.includePaths.map(String) : [],
+        caseSensitive: Boolean(raw.caseSensitive ?? false),
+        cpu: isCpuName(cpu) ? cpu.toLowerCase() : DEFAULT_CPU,
+        includePaths: Array.isArray(raw.includePaths) ? raw.includePaths.map(String) : [],
     };
 }
 
@@ -323,7 +329,7 @@ connection.onInitialized(() => {
 
     if (hasConfigurationCapability) {
         configReady = connection.workspace.getConfiguration('64tass').then(
-            (config: any) => {
+            (config: unknown) => {
                 globalSettings = readSettings(config);
             },
             (error) => {
@@ -344,7 +350,7 @@ connection.onDidChangeConfiguration(() => {
     if (!hasConfigurationCapability) return;
 
     configReady = connection.workspace.getConfiguration('64tass').then(
-        (config: any) => {
+        (config: unknown) => {
             globalSettings = readSettings(config);
         },
         (error) => {

@@ -417,9 +417,12 @@ describe('escapeRegex', () => {
     });
 
     it('throws TypeError for non-string input', () => {
-        expect(() => escapeRegex(null as any)).toThrow(TypeError);
-        expect(() => escapeRegex(undefined as any)).toThrow(TypeError);
-        expect(() => escapeRegex(123 as any)).toThrow(TypeError);
+        // Deliberately wrong types: the guard exists for callers that are not
+        // type-checked, so the casts go through unknown rather than any.
+        const notAString = (value: unknown) => value as unknown as string;
+        expect(() => escapeRegex(notAString(null))).toThrow(TypeError);
+        expect(() => escapeRegex(notAString(undefined))).toThrow(TypeError);
+        expect(() => escapeRegex(notAString(123))).toThrow(TypeError);
     });
 
     it('handles empty string', () => {

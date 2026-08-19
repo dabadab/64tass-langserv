@@ -1,7 +1,7 @@
 export interface PerformanceMetrics {
     operation: string;
     durationMs: number;
-    details?: Record<string, any>;
+    details?: Record<string, unknown>;
 }
 
 export class PerformanceMonitor {
@@ -17,7 +17,7 @@ export class PerformanceMonitor {
         this.enabled = false;
     }
 
-    measure<T>(operation: string, fn: () => T, details?: Record<string, any>): T {
+    measure<T>(operation: string, fn: () => T, details?: Record<string, unknown>): T {
         if (!this.enabled) {
             return fn();
         }
@@ -30,7 +30,7 @@ export class PerformanceMonitor {
         return result;
     }
 
-    async measureAsync<T>(operation: string, fn: () => Promise<T>, details?: Record<string, any>): Promise<T> {
+    async measureAsync<T>(operation: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
         if (!this.enabled) {
             return await fn();
         }
