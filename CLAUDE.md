@@ -136,6 +136,16 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   (`detectDefinePragmas` in `utils.ts`) mirrors 64tass's `-D` flag and is indexed by
   `parseDocument` as a normal `kind: 'var'` label, so it resolves like any other
   symbol. Mainly exists so `-D`-supplied flags can decide `.if` branches.
+- **Compilation units**: a workspace holds many independent programs, so symbols
+  from a file that is not assembled together with the current one must not be
+  offered. `IncludeGraph.compilationUnit(uri)` is that set: the file's own
+  include tree plus the trees of any roots that pull it in, since files included
+  side by side under one root do see each other (verified). A file no root
+  includes is a unit of one. Passed to `collectVisibleLabels` as `visibleUris`
+  by completion and by the spelling quick fix. Deliberately NOT applied to
+  `findSymbolInfo`: an incomplete include graph would there turn into false
+  "undefined symbol" reports, where the worst it can cost completion is a
+  missing suggestion.
 - **Dynamic members**: `DocumentIndex.labelDefinedByMacro` maps a label to the
   scope its members come from - the macro of a `label #macro` / `label .macro`
   call, or the function of a `label = fn(...)` assignment where the function
@@ -198,7 +208,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1045 tests); compiles first
+yarn test          # Run all tests (currently 1056 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

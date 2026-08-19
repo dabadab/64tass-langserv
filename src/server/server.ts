@@ -444,7 +444,8 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     const document = documents.get(params.textDocument.uri);
     if (!document) return [];
 
-    return getCompletions(document, params.position, documentIndex);
+    return getCompletions(document, params.position, documentIndex,
+        { visibleUris: includeGraph.compilationUnit(params.textDocument.uri) });
 });
 
 connection.onHover((params: HoverParams): Hover | null => {
@@ -477,7 +478,8 @@ connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
     // Only the diagnostics the client sends for the current range, so a fix is
     // never offered for a problem the user cannot see.
     return buildCodeActions(document, params.context.diagnostics, documentIndex,
-        effectiveCaseSensitive(params.textDocument.uri));
+        effectiveCaseSensitive(params.textDocument.uri),
+        includeGraph.compilationUnit(params.textDocument.uri));
 });
 
 connection.onReferences((params: ReferenceParams): Location[] => {

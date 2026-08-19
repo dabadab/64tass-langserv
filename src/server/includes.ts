@@ -54,4 +54,27 @@ export class IncludeGraph {
     affectedRoots(uri: string): string[] {
         return [...new Set([uri, ...this.rootsFor(uri)])];
     }
+
+    /**
+     * Every document assembled together with `uri` - its own include tree, and
+     * the trees of any roots that pull it in, so files included side by side
+     * under one root can see each other (verified: a sibling's symbols resolve
+     * across an `.include`, since the assembler splices them into one source).
+     *
+     * A file no root includes is a unit of one: symbols from an unrelated file
+     * elsewhere in the workspace are not in scope, and offering them is wrong.
+     */
+    compilationUnit(uri: string): Set<string> {
+        const roots = new Set(this.affectedRoots(uri));
+        const unit = new Set(roots);
+        for (const [includeUri, includeRoots] of this.refs) {
+            for (const root of includeRoots) {
+                if (roots.has(root)) {
+                    unit.add(includeUri);
+                    break;
+                }
+            }
+        }
+        return unit;
+    }
 }

@@ -19,14 +19,17 @@ export function buildCodeActions(
     document: TextDocument,
     diagnostics: Diagnostic[],
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive: boolean
+    caseSensitive: boolean,
+    // Documents assembled together with this one; a spelling suggestion from a
+    // different compilation unit would not resolve if applied.
+    visibleUris?: ReadonlySet<string>
 ): CodeAction[] {
     const actions: CodeAction[] = [];
     const lines = document.getText().split('\n');
 
     for (const diagnostic of diagnostics) {
         if (diagnostic.code === 'undefined-symbol' || diagnostic.code === 'undefined-macro') {
-            actions.push(...spellingFixes(document, diagnostic, documentIndex, caseSensitive, lines));
+            actions.push(...spellingFixes(document, diagnostic, documentIndex, caseSensitive, lines, visibleUris));
         } else if (diagnostic.code === 'unclosed-block') {
             const fix = closeBlockFix(document, diagnostic, lines);
             if (fix) actions.push(fix);
@@ -40,7 +43,8 @@ function spellingFixes(
     diagnostic: Diagnostic,
     documentIndex: Map<string, DocumentIndex>,
     caseSensitive: boolean,
-    lines: string[]
+    lines: string[],
+    visibleUris?: ReadonlySet<string>
 ): CodeAction[] {
     const line = lines[diagnostic.range.start.line] ?? '';
     const written = line.slice(diagnostic.range.start.character, diagnostic.range.end.character);
@@ -52,7 +56,7 @@ function spellingFixes(
     const target = caseSensitive ? written : written.toLowerCase();
 
     const candidates = new Map<string, number>();
-    for (const label of collectVisibleLabels(document.uri, diagnostic.range.start.line, documentIndex)) {
+    for (const label of collectVisibleLabels(document.uri, diagnostic.range.start.line, documentIndex, visibleUris)) {
         if (isMacro && label.kind !== 'macro') continue;
         const distance = editDistance(target, label.name);
         if (distance === 0 || distance > Math.max(1, Math.floor(target.length * MAX_DISTANCE_RATIO))) continue;

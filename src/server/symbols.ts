@@ -269,7 +269,11 @@ export function findSymbolInfo(
 export function collectVisibleLabels(
     fromUri: string,
     fromLine: number,
-    documentIndex: Map<string, DocumentIndex>
+    documentIndex: Map<string, DocumentIndex>,
+    // Documents assembled together with fromUri. Anything outside is a separate
+    // compilation unit whose symbols are not in scope here - see
+    // IncludeGraph.compilationUnit. Omitted means "no restriction".
+    visibleUris?: ReadonlySet<string>
 ): LabelDefinition[] {
     const fromIndex = documentIndex.get(fromUri);
     if (!fromIndex) return [];
@@ -295,7 +299,8 @@ export function collectVisibleLabels(
     // Non-local symbols, nearest scope first so closer definitions shadow farther ones.
     // Anonymous labels are excluded: "+"/"-" are never completed by name.
     for (const scopeToTry of getScopeChain(currentScopePath)) {
-        for (const [, index] of documentIndex) {
+        for (const [uri, index] of documentIndex) {
+            if (visibleUris && !visibleUris.has(uri)) continue;
             for (const label of index.labels) {
                 if (!label.isLocal && !label.isAnonymous && label.scopePath === scopeToTry && !seen.has(label.name)) {
                     seen.add(label.name);

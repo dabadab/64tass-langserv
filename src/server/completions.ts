@@ -123,9 +123,10 @@ function getSymbolCompletions(
     document: TextDocument,
     position: Position,
     documentIndex: Map<string, DocumentIndex>,
-    onlyOperandKinds = false
+    onlyOperandKinds = false,
+    visibleUris?: ReadonlySet<string>
 ): CompletionItem[] {
-    const labels = collectVisibleLabels(document.uri, position.line, documentIndex)
+    const labels = collectVisibleLabels(document.uri, position.line, documentIndex, visibleUris)
         .filter(label => !onlyOperandKinds || OPERAND_KINDS.has(label.kind));
     const items: CompletionItem[] = labels.map(label => ({
         label: label.originalName,
@@ -154,11 +155,22 @@ function splitAtCursor(document: TextDocument, position: Position): { before: st
     return { before: line.slice(0, line.length - prefix.length), prefix };
 }
 
+export interface CompletionOptions {
+    /**
+     * Documents assembled together with this one. Symbols from anywhere else are
+     * a different compilation unit and are not offered. Omitted means the whole
+     * index, which is only right when the include graph is unknown.
+     */
+    visibleUris?: ReadonlySet<string>;
+}
+
 export function getCompletions(
     document: TextDocument,
     position: Position,
-    documentIndex: Map<string, DocumentIndex>
+    documentIndex: Map<string, DocumentIndex>,
+    options: CompletionOptions = {}
 ): CompletionItem[] {
+    const { visibleUris } = options;
     // File-path completion takes priority: it fires from inside a quoted string,
     // a context none of the other modes should also try to complete in.
     const fileCompletions = getFilePathCompletions(document, position);
@@ -199,7 +211,7 @@ export function getCompletions(
         if (NON_SYMBOL_ARG_DIRECTIVES.has(firstToken.slice(1))) {
             return [];
         }
-        return getSymbolCompletions(document, position, documentIndex);
+        return getSymbolCompletions(document, position, documentIndex, false, visibleUris);
     }
 
     // Second token, with the first not a recognized opcode: that first token is
@@ -211,5 +223,5 @@ export function getCompletions(
     // Operand position after a real opcode: only addressable kinds make sense
     // (macro/function names are never referenced as a bare operand).
     const afterOpcode = OPCODES.has(firstToken) || (tokens.length > 1 && OPCODES.has(tokens[1].toLowerCase()));
-    return getSymbolCompletions(document, position, documentIndex, afterOpcode);
+    return getSymbolCompletions(document, position, documentIndex, afterOpcode, visibleUris);
 }

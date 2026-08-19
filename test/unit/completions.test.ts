@@ -167,3 +167,43 @@ describe('getCompletions - .include file paths', () => {
         expect(items).toHaveLength(0);
     });
 });
+
+describe('completion across compilation units', () => {
+    const OTHER = 'file:///other/the_forest.asm';
+    const MINE = 'file:///mine/main.asm';
+
+    function setup() {
+        return buildIndex(
+            { source: 'start\n        lda ', uri: MINE },
+            { source: 'stop_X  = 1\nstop_Y  = 2', uri: OTHER },
+        );
+    }
+
+    it('does not offer symbols from an unrelated file', () => {
+        const { documentIndex, docs } = setup();
+        const items = getCompletions(docs[0], Position.create(1, 12), documentIndex,
+            { visibleUris: new Set([MINE]) });
+        expect(items.map(i => i.label)).not.toContain('stop_X');
+    });
+
+    it('still offers symbols from the same file', () => {
+        const { documentIndex, docs } = setup();
+        const items = getCompletions(docs[0], Position.create(1, 12), documentIndex,
+            { visibleUris: new Set([MINE]) });
+        expect(items.map(i => i.label)).toContain('start');
+    });
+
+    it('offers symbols from a file in the same unit', () => {
+        const { documentIndex, docs } = setup();
+        const items = getCompletions(docs[0], Position.create(1, 12), documentIndex,
+            { visibleUris: new Set([MINE, OTHER]) });
+        expect(items.map(i => i.label)).toContain('stop_X');
+    });
+
+    it('falls back to the whole index when no unit is given', () => {
+        // Keeps the old behaviour for callers that have no include graph.
+        const { documentIndex, docs } = setup();
+        expect(getCompletions(docs[0], Position.create(1, 12), documentIndex).map(i => i.label))
+            .toContain('stop_X');
+    });
+});

@@ -76,3 +76,52 @@ describe('IncludeGraph', () => {
         expect(g.affectedRoots('a')).toEqual(['a']);
     });
 });
+
+describe('compilationUnit', () => {
+    it('is just the file itself when nothing includes it', () => {
+        // The bug this fixes: symbols from an unrelated file elsewhere in the
+        // workspace were offered as completions.
+        const graph = new IncludeGraph();
+        graph.addRef('file:///dep.asm', 'file:///other.asm');
+        expect([...graph.compilationUnit('file:///lone.asm')]).toEqual(['file:///lone.asm']);
+    });
+
+    it('includes the files a root pulls in', () => {
+        const graph = new IncludeGraph();
+        graph.addRef('file:///a.asm', 'file:///main.asm');
+        graph.addRef('file:///b.asm', 'file:///main.asm');
+        expect([...graph.compilationUnit('file:///main.asm')].sort())
+            .toEqual(['file:///a.asm', 'file:///b.asm', 'file:///main.asm']);
+    });
+
+    it('lets siblings under one root see each other', () => {
+        // Verified against the assembler: an .include'd file resolves symbols
+        // from another file included alongside it.
+        const graph = new IncludeGraph();
+        graph.addRef('file:///a.asm', 'file:///main.asm');
+        graph.addRef('file:///b.asm', 'file:///main.asm');
+        expect(graph.compilationUnit('file:///a.asm').has('file:///b.asm')).toBe(true);
+        expect(graph.compilationUnit('file:///a.asm').has('file:///main.asm')).toBe(true);
+    });
+
+    it('excludes a tree belonging to a different root', () => {
+        const graph = new IncludeGraph();
+        graph.addRef('file:///a.asm', 'file:///main.asm');
+        graph.addRef('file:///forest.asm', 'file:///the_forest.asm');
+        const unit = graph.compilationUnit('file:///a.asm');
+        expect(unit.has('file:///forest.asm')).toBe(false);
+        expect(unit.has('file:///the_forest.asm')).toBe(false);
+    });
+
+    it('spans both trees when two roots share a file', () => {
+        // A shared header really is assembled into both, so from inside it both
+        // are in scope.
+        const graph = new IncludeGraph();
+        graph.addRef('file:///common.asm', 'file:///one.asm');
+        graph.addRef('file:///common.asm', 'file:///two.asm');
+        graph.addRef('file:///only1.asm', 'file:///one.asm');
+        expect([...graph.compilationUnit('file:///common.asm')].sort()).toEqual([
+            'file:///common.asm', 'file:///one.asm', 'file:///only1.asm', 'file:///two.asm',
+        ]);
+    });
+});
