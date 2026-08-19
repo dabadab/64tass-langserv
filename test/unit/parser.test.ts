@@ -12,7 +12,7 @@ describe('parseDocument - caseSensitive field', () => {
     });
 
     it('records true when passed', () => {
-        const index = parseDocument(createDoc('start\n        lda #1'), true);
+        const index = parseDocument(createDoc('start\n        lda #1'), { caseSensitive: true });
         expect(index.caseSensitive).toBe(true);
     });
 });

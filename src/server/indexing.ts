@@ -25,6 +25,11 @@ export interface IndexContext {
     defaultCaseSensitive: boolean;
     /** Workspace CPU target, used when no directive or pragma overrides it. */
     defaultCpu: string;
+    /**
+     * Absolute directories searched for includes that are not next to the
+     * includer, mirroring 64tass's `-I` flag (`64tass.includePaths`).
+     */
+    includePaths: readonly string[];
     log?: (message: string) => void;
 }
 
@@ -71,7 +76,13 @@ export function indexDocument(
     // it again further down.
     const effectiveCpu = detectCpu(text) ?? inheritedCpu;
 
-    const index = parseDocument(document, effectiveCaseSensitive, context.log, effectiveCpu, baseScope);
+    const index = parseDocument(document, {
+        caseSensitive: effectiveCaseSensitive,
+        log: context.log,
+        cpu: effectiveCpu,
+        baseScope,
+        includePaths: context.includePaths,
+    });
     context.documentIndex.set(document.uri, index);
 
     for (const includeUri of index.includes) {

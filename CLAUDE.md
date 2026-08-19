@@ -14,6 +14,7 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │       ├── constants.ts          # Opcode tables (all 11 CPU targets), directives, builtins
 │       ├── utils.ts              # String/comment/numeric helpers, pragma detection
 │       ├── parser.ts             # parseDocument — label/scope/macro extraction
+│       ├── paths.ts              # .include/.binclude path resolution (-I search paths)
 │       ├── indexing.ts           # indexDocument — include tree + case-sensitivity cascade
 │       ├── includes.ts           # IncludeGraph — which roots pull in which .include files
 │       ├── workspace.ts          # collectSourceFiles, findFilePathAt — workspace scan, file paths
@@ -117,6 +118,11 @@ cannot be imported from a test.
   type's member. A member the type does not declare is still reported, matching the
   assembler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
+- **Include resolution**: `resolveIncludePath` in `paths.ts`. 64tass tries the
+  including file's own directory first, then each `-I` directory in order
+  (verified). The `-I` list is the `64tass.includePaths` setting, made absolute
+  against the workspace root by `absoluteSearchPaths` and passed down through
+  `IndexContext.includePaths`.
 - **`.binclude` scoping**: `label .binclude "f"` wraps f in a block scope, so f's
   `sym` is reachable only as `label.sym`, unlike the textual `.include`. The parser
   records the full scope path in `DocumentIndex.includeScopes` and `indexDocument`
@@ -141,7 +147,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 777 tests)
+yarn test          # Run all tests (currently 794 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```

@@ -51,6 +51,21 @@ navigation entirely.
 A `.cpu "..."` directive in a file is honoured automatically, and overrides the
 setting for that file and everything it `.include`s.
 
+### `64tass.includePaths`
+
+Extra directories to search for `.include` and `.binclude` files, mirroring
+64tass's `-I` flag. The including file's own directory is always tried first;
+these are searched after it, in order. Relative paths are taken against the
+workspace root.
+
+```json
+"64tass.includePaths": ["libs", "../shared/asm"]
+```
+
+Without this, an include that only resolves through `-I` on the real build
+command line is invisible to the extension, and every symbol it defines reads as
+undefined.
+
 ## Pragmas
 
 **They are ordinary comments to 64tass** — they change only how

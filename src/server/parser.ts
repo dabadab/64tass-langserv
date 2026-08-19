@@ -1,24 +1,33 @@
 import { Range, Position } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import * as fs from 'fs';
-import * as path from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { SCOPE_OPENERS, opcodesForCpu, DEFAULT_CPU } from './constants';
+import { resolveIncludePath } from './paths';
 import { stripComment, getBlockComment, detectDefinePragmas, detectCpu } from './utils';
 
 export type LogFunction = (message: string) => void;
 
+export interface ParseOptions {
+    /** Effective case sensitivity for this document (pragma may have overridden the setting). */
+    caseSensitive?: boolean;
+    log?: LogFunction;
+    /** Effective CPU target; a `.cpu` directive in the text still wins over it. */
+    cpu?: string;
+    /**
+     * Scope this whole file sits inside, set when it was reached through a
+     * `.binclude`. Prefixed onto every scope path the file produces.
+     */
+    baseScope?: string | null;
+    /** Extra directories to search for includes, mirroring 64tass's `-I` flag. */
+    includePaths?: readonly string[];
+}
+
 export function parseDocument(
     document: TextDocument,
-    caseSensitive = false,
-    log?: LogFunction,
-    cpu: string = DEFAULT_CPU,
-    // Scope this whole file sits inside, set when it was reached through a
-    // `.binclude`. Prefixed onto every scope path the file produces.
-    baseScope: string | null = null
+    options: ParseOptions = {}
 ): DocumentIndex {
+    const { caseSensitive = false, log, cpu = DEFAULT_CPU, baseScope = null, includePaths = [] } = options;
 
     const text = document.getText();
     // A `.cpu` directive or cpu pragma in the file always wins over the value
@@ -105,25 +114,21 @@ export function parseDocument(
             const isBinclude = directive.toLowerCase() === 'binclude';
             const enclosing = getCurrentScopePath();
 
-            // Resolve relative to current document
-            try {
-                const currentPath = fileURLToPath(document.uri);
-                const currentDir = path.dirname(currentPath);
-                const resolvedPath = path.resolve(currentDir, includePath);
-                if (fs.existsSync(resolvedPath)) {
-                    const includeUri = pathToFileURL(resolvedPath).toString();
-                    includes.push(includeUri);
-                    if (isBinclude) {
-                        // An unlabelled .binclude still opens a scope, just an
-                        // unnameable one - its symbols are unreachable from outside
-                        // (verified). A synthetic name reproduces that: it keeps them
-                        // out of the global namespace while still indexing the file.
-                        const scopeName = includeLabel ? normalizeName(includeLabel) : `.binclude@${lineNum}`;
-                        includeScopes.set(includeUri, enclosing ? `${enclosing}.${scopeName}` : scopeName);
-                    }
+            // 64tass looks next to the includer first, then along the search
+            // paths, so resolveIncludePath does both.
+            const includeUri = resolveIncludePath(document.uri, includePath, includePaths);
+            if (includeUri) {
+                includes.push(includeUri);
+                if (isBinclude) {
+                    // An unlabelled .binclude still opens a scope, just an
+                    // unnameable one - its symbols are unreachable from outside
+                    // (verified). A synthetic name reproduces that: it keeps them
+                    // out of the global namespace while still indexing the file.
+                    const scopeName = includeLabel ? normalizeName(includeLabel) : `.binclude@${lineNum}`;
+                    includeScopes.set(includeUri, enclosing ? `${enclosing}.${scopeName}` : scopeName);
                 }
-            } catch (e) {
-                log?.(`Failed to resolve .${directive} path '${includePath}': ${e}`);
+            } else {
+                log?.(`Could not resolve .${directive} path '${includePath}'`);
             }
 
             if (isBinclude) {

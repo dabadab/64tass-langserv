@@ -13,7 +13,7 @@ export function createDoc(source: string, uri?: string): TextDocument {
 /** Parse a source string and return {doc, index}. */
 export function createAndParse(source: string, uri?: string, caseSensitive = false) {
     const doc = createDoc(source, uri);
-    const index = parseDocument(doc, caseSensitive);
+    const index = parseDocument(doc, { caseSensitive });
     return { doc, index };
 }
 

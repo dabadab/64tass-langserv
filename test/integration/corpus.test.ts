@@ -24,7 +24,7 @@ function indexTree(doc: TextDocument, index: Map<string, DocumentIndex>, seen: S
     if (seen.has(doc.uri)) return;
     seen.add(doc.uri);
     const effective = detectCaseSensitivityPragma(doc.getText()) ?? inherited;
-    const parsed = parseDocument(doc, effective, undefined, undefined, baseScope);
+    const parsed = parseDocument(doc, { caseSensitive: effective, baseScope });
     index.set(doc.uri, parsed);
     for (const includeUri of parsed.includes) {
         if (seen.has(includeUri)) continue;

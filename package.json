@@ -71,6 +71,14 @@
           ],
           "default": "6502",
           "markdownDescription": "Target CPU, deciding which opcodes and register addressing modes are recognised. Mirrors 64tass's CPU selection flags. A `.cpu \"...\"` directive or a `; 64tass-langserv: cpu <name>` pragma in a file overrides this for that file and everything it `.include`s. Note there is no `6510`: the C64 CPU is `6502`, the NMOS set that includes the undocumented opcodes."
+        },
+        "64tass.includePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Extra directories to search for `.include` and `.binclude` files, mirroring 64tass's `-I` flag. The directory of the including file is always tried first; these are searched afterwards, in order. Relative paths are taken against the workspace root."
         }
       }
     }

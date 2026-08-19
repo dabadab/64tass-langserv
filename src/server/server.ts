@@ -44,6 +44,7 @@ import * as fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
+import { absoluteSearchPaths } from './paths';
 import { parseNumericValue, formatNumericValue, detectCaseSensitivityPragma, detectCpu } from './utils';
 import { parseDocument } from './parser';
 import {
@@ -94,10 +95,27 @@ function effectiveCaseSensitive(uri: string): boolean {
 interface Settings {
     caseSensitive: boolean;
     cpu: string;
+    /** As configured: relative entries are taken against the first workspace root. */
+    includePaths: string[];
 }
 
 // Default settings
-let globalSettings: Settings = { caseSensitive: false, cpu: DEFAULT_CPU };
+let globalSettings: Settings = { caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [] };
+
+/** Read the `64tass` configuration section, falling back to defaults per field. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function readSettings(config: any): Settings {
+    return {
+        caseSensitive: config?.caseSensitive ?? false,
+        cpu: isCpuName(String(config?.cpu ?? '')) ? String(config.cpu).toLowerCase() : DEFAULT_CPU,
+        includePaths: Array.isArray(config?.includePaths) ? config.includePaths.map(String) : [],
+    };
+}
+
+/** Configured include search paths, made absolute against the workspace root. */
+function searchPaths(): string[] {
+    return absoluteSearchPaths(globalSettings.includePaths, workspaceRoots[0] ?? null);
+}
 let hasConfigurationCapability = false;
 // Whether the client accepts a dynamic registration for didChangeConfiguration.
 // Distinct from hasConfigurationCapability (workspace/configuration *requests*):
@@ -128,6 +146,7 @@ const indexContext: IndexContext = {
     getOpenDocument: (uri) => documents.get(uri),
     get defaultCaseSensitive() { return globalSettings.caseSensitive; },
     get defaultCpu() { return globalSettings.cpu; },
+    get includePaths() { return searchPaths(); },
     log: (message) => connection.console.warn(message)
 };
 
@@ -251,8 +270,11 @@ async function scanWorkspace(): Promise<void> {
         const cpu = detectCpu(content) ?? globalSettings.cpu;
         documentIndex.set(
             uri,
-            parseDocument(TextDocument.create(uri, '64tass', 1, content), caseSensitive,
-                msg => connection.console.warn(msg), cpu)
+            parseDocument(TextDocument.create(uri, '64tass', 1, content), {
+                caseSensitive, cpu,
+                log: msg => connection.console.warn(msg),
+                includePaths: searchPaths(),
+            })
         );
         indexed++;
 
@@ -289,10 +311,7 @@ connection.onInitialized(() => {
     if (hasConfigurationCapability) {
         configReady = connection.workspace.getConfiguration('64tass').then(
             (config: any) => {
-                globalSettings = {
-                    caseSensitive: config.caseSensitive ?? false,
-                    cpu: isCpuName(String(config.cpu ?? '')) ? String(config.cpu).toLowerCase() : DEFAULT_CPU
-                };
+                globalSettings = readSettings(config);
             },
             (error) => {
                 connection.console.warn(`Failed to get configuration: ${error}`);
@@ -313,10 +332,7 @@ connection.onDidChangeConfiguration(() => {
 
     configReady = connection.workspace.getConfiguration('64tass').then(
         (config: any) => {
-            globalSettings = {
-                caseSensitive: config.caseSensitive ?? false,
-                cpu: isCpuName(String(config.cpu ?? '')) ? String(config.cpu).toLowerCase() : DEFAULT_CPU
-            };
+            globalSettings = readSettings(config);
         },
         (error) => {
             connection.console.warn(`Failed to get configuration: ${error}`);

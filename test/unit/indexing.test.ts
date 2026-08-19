@@ -7,17 +7,20 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { indexDocument, clearIncludeRefs, IndexContext } from '../../src/server/indexing';
 import { IncludeGraph } from '../../src/server/includes';
 import { DocumentIndex } from '../../src/server/types';
+import { DEFAULT_CPU } from '../../src/server/constants';
 
 /**
  * A fake workspace: files on disk plus a set of "open" documents whose buffers
  * may differ from disk, mirroring what the editor gives the server.
  */
-function makeContext(disk: Record<string, string>, open: Record<string, string> = {}, defaultCaseSensitive = false) {
+function makeContext(disk: Record<string, string>, open: Record<string, string> = {}, defaultCaseSensitive = false, includeDirs: string[] = []) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), '64tass-idx-'));
     const uriOf = (name: string) => pathToFileURL(path.join(dir, name)).toString();
 
     for (const [name, content] of Object.entries(disk)) {
-        fs.writeFileSync(path.join(dir, name), content);
+        const full = path.join(dir, name);
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, content);
     }
     const openDocs = new Map<string, TextDocument>();
     for (const [name, content] of Object.entries(open)) {
@@ -34,6 +37,8 @@ function makeContext(disk: Record<string, string>, open: Record<string, string> 
             try { return fs.readFileSync(new URL(uri), 'utf-8'); } catch { return null; }
         },
         defaultCaseSensitive,
+        defaultCpu: DEFAULT_CPU,
+        includePaths: includeDirs.map(d => path.join(dir, d)),
     };
 
     return {
@@ -321,6 +326,71 @@ describe('indexDocument - text access', () => {
 
             expect(spied.documentIndex.get(w.uriOf('dep.asm'))!.labels.map(l => l.name)).toEqual(['inbuffer']);
             expect(textAccessorCalls).toBe(0); // the open document was used directly
+        } finally { w.cleanup(); }
+    });
+});
+
+describe('include search paths', () => {
+    it('does not resolve an include that is not next to the includer', () => {
+        const w = makeContext({
+            'main.asm': '        .include "thing.asm"',
+            'libs/thing.asm': 'libsym = 1',
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            expect(w.context.documentIndex.has(w.uriOf('libs/thing.asm'))).toBe(false);
+        } finally { w.cleanup(); }
+    });
+
+    it('resolves it once the directory is a search path', () => {
+        const w = makeContext({
+            'main.asm': '        .include "thing.asm"',
+            'libs/thing.asm': 'libsym = 1',
+        }, {}, false, ['libs']);
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const dep = w.context.documentIndex.get(w.uriOf('libs/thing.asm'));
+            expect(dep?.labels.map(l => l.name)).toContain('libsym');
+        } finally { w.cleanup(); }
+    });
+
+    it('searches the includer\'s own directory before the search paths', () => {
+        // 64tass tries the includer's directory first (verified), so a local file
+        // wins over a same-named one on the search path.
+        const w = makeContext({
+            'main.asm': '        .include "thing.asm"',
+            'thing.asm': 'local_wins = 1',
+            'libs/thing.asm': 'search_path_wins = 1',
+        }, {}, false, ['libs']);
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            expect(w.context.documentIndex.has(w.uriOf('thing.asm'))).toBe(true);
+            expect(w.context.documentIndex.has(w.uriOf('libs/thing.asm'))).toBe(false);
+        } finally { w.cleanup(); }
+    });
+
+    it('tries search paths in order', () => {
+        const w = makeContext({
+            'main.asm': '        .include "thing.asm"',
+            'a/thing.asm': 'first = 1',
+            'b/thing.asm': 'second = 1',
+        }, {}, false, ['a', 'b']);
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            expect(w.context.documentIndex.has(w.uriOf('a/thing.asm'))).toBe(true);
+            expect(w.context.documentIndex.has(w.uriOf('b/thing.asm'))).toBe(false);
+        } finally { w.cleanup(); }
+    });
+
+    it('applies to .binclude as well, keeping its scope', () => {
+        const w = makeContext({
+            'main.asm': 'lib     .binclude "thing.asm"',
+            'libs/thing.asm': 'inner   .byte 1',
+        }, {}, false, ['libs']);
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const dep = w.context.documentIndex.get(w.uriOf('libs/thing.asm'))!;
+            expect(dep.labels.find(l => l.name === 'inner')?.scopePath).toBe('lib');
         } finally { w.cleanup(); }
     });
 });
