@@ -477,3 +477,38 @@ export function findCommentBlockLines(lines: string[]): Set<number> {
     }
     return inside;
 }
+
+/**
+ * Blank out dict-literal keys, preserving offsets so reported columns stay right.
+ *
+ * `{.MAP: last == 0, .TILE: last == 1}` names its keys with a leading dot, which
+ * otherwise reads as a macro call, and their bare form as a symbol reference -
+ * neither of which they are. Only `.name` immediately before a `:` and inside
+ * braces is blanked, so a real macro call elsewhere on the line is untouched.
+ */
+export function stripDictKeys(code: string): string {
+    let result = code;
+    let depth = 0;
+    let quote: string | null = null;
+    for (let i = 0; i < code.length; i++) {
+        const c = code[i];
+        if (quote) {
+            if (c === quote) {
+                if (code[i + 1] === quote) i++;
+                else quote = null;
+            }
+            continue;
+        }
+        if (c === '"' || c === "'") { quote = c; continue; }
+        if (c === '{') { depth++; continue; }
+        if (c === '}') { depth = Math.max(0, depth - 1); continue; }
+        if (depth === 0 || c !== '.') continue;
+
+        const key = code.slice(i).match(/^\.[a-zA-Z_][a-zA-Z0-9_]*(?=\s*:)/);
+        if (key) {
+            result = result.slice(0, i) + ' '.repeat(key[0].length) + result.slice(i + key[0].length);
+            i += key[0].length - 1;
+        }
+    }
+    return result;
+}

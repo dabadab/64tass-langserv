@@ -17,7 +17,7 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN
 } from './constants';
-import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines } from './utils';
+import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
@@ -216,9 +216,10 @@ export function validateDocument(
         // ":" / "=" / ":=", keeping the line length so reported columns stay right.
         const defPrefix = code.match(/^(\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(?::=|=|:))/);
         const assignmentRhs = defPrefix && /[:=]=?$/.test(defPrefix[1]) && defPrefix[1].trimEnd().endsWith('=');
-        const codeForRefs = defPrefix
+        // Dict-literal keys are blanked too: "{.MAP: 1}" names a key, not a macro.
+        const codeForRefs = stripDictKeys(defPrefix
             ? ' '.repeat(defPrefix[1].length) + code.slice(defPrefix[1].length)
-            : code;
+            : code);
 
         // Nothing after the definition (e.g. a bare "loop:") - nothing to validate
         if (codeForRefs.trim() === '') continue;

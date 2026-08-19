@@ -845,3 +845,20 @@ describe('.comment blocks', () => {
         expect(reported[0].range.start.line).toBe(3);
     });
 });
+
+describe('dict literals', () => {
+    it('does not report dict keys as undefined macros or symbols', () => {
+        // "{.MAP: last == 0}" names a key; it is neither a macro call nor a
+        // reference to a symbol called MAP.
+        expect(getDiagnostics('last = 1\nCOLORING = {.MAP: last == 0, .TILE: last == 1}')).toEqual([]);
+    });
+
+    it('still reports an undefined symbol used as a dict value', () => {
+        const reported = warnings('d = {.A: nosuchthing}');
+        expect(reported.map(d => d.message)).toEqual(["Undefined symbol 'nosuchthing'"]);
+    });
+
+    it('still reports an undefined macro outside a dict', () => {
+        expect(warnings('        .nosuchmacro').map(d => d.code)).toContain('undefined-macro');
+    });
+});

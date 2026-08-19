@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    stripDictKeys,
     findCommentBlockLines,
     splitTopLevel,
     parameterName,
@@ -665,5 +666,43 @@ describe('findCommentBlockLines', () => {
 
     it('is not fooled by a directive-looking word inside a string', () => {
         expect(inside('        .text "not a .comment here"\n        nop')).toEqual([]);
+    });
+});
+
+describe('stripDictKeys', () => {
+    it('blanks a dotted key inside braces', () => {
+        expect(stripDictKeys('d = {.MAP: 1}')).toBe('d = {    : 1}');
+    });
+
+    it('preserves length so columns stay right', () => {
+        const source = 'COLORING = {.MAP: last == 0, .TILE: last == 1}';
+        expect(stripDictKeys(source)).toHaveLength(source.length);
+    });
+
+    it('blanks every key of a multi-entry literal', () => {
+        expect(stripDictKeys('{.A: 1, .B: 2}')).toBe('{  : 1,   : 2}');
+    });
+
+    it('leaves a macro call outside braces alone', () => {
+        expect(stripDictKeys('        #setup 1, 2')).toBe('        #setup 1, 2');
+        expect(stripDictKeys('        .mymacro 1')).toBe('        .mymacro 1');
+    });
+
+    it('leaves a dotted reference that is not a key alone', () => {
+        expect(stripDictKeys('        lda tbl.lo')).toBe('        lda tbl.lo');
+        expect(stripDictKeys('{.A: tbl.lo}')).toBe('{  : tbl.lo}');
+    });
+
+    it('ignores braces inside a string', () => {
+        const source = '        .text "{.A: 1}"';
+        expect(stripDictKeys(source)).toBe(source);
+    });
+
+    it('handles nested braces', () => {
+        expect(stripDictKeys('{.A: {.B: 1}}')).toBe('{  : {  : 1}}');
+    });
+
+    it('leaves a string key alone', () => {
+        expect(stripDictKeys('{"a": 1}')).toBe('{"a": 1}');
     });
 });
