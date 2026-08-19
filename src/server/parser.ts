@@ -601,5 +601,12 @@ export function parseDocument(
         }
     }
 
-    return { labels, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu };
+    const labelsByName = new Map<string, LabelDefinition[]>();
+    for (const label of labels) {
+        const existing = labelsByName.get(label.name);
+        if (existing) existing.push(label);
+        else labelsByName.set(label.name, [label]);
+    }
+
+    return { labels, labelsByName, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu };
 }

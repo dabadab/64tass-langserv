@@ -90,7 +90,7 @@
     "compile": "node esbuild.js",
     "compile:prod": "node esbuild.js --production",
     "watch": "node esbuild.js --watch",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -b --noEmit && tsc -p tsconfig.test.json",
     "lint": "eslint .",
     "version-from-tag": "node -e \"const v = require('child_process').execSync('git describe --tags --abbrev=0').toString().trim().replace(/^v/, ''); const pkg = require('./package.json'); pkg.version = v; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');\"",
     "vscode:prepublish": "yarn version-from-tag && yarn compile:prod",

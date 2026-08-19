@@ -1,0 +1,12 @@
+{
+  // Type-checks the tests, which the build config deliberately does not compile.
+  // Without this a hand-built DocumentIndex can silently go stale when the
+  // interface gains a field, since vitest transpiles without checking types.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

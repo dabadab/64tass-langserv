@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Position } from 'vscode-languageserver/node';
 import { getWordAtPosition, findSymbolInfo, findDefinition, isParameter, findAnonymousLabel } from '../../src/server/symbols';
 import { DocumentIndex } from '../../src/server/types';
-import { createDoc, buildIndex } from '../helpers/doc';
+import { createDoc, buildIndex, emptyIndex } from '../helpers/doc';
 
 describe('getWordAtPosition', () => {
     it('returns word at start of line', () => {
@@ -164,72 +164,27 @@ describe('findDefinition', () => {
 
 describe('isParameter', () => {
     it('returns true for direct parameter match', () => {
-        const index: DocumentIndex = {
-            labels: [],
-            scopeAtLine: new Map(),
-            parametersAtScope: new Map([['m', ['p1', 'p2']]]),
-            macroSubLabels: new Map(),
-            labelDefinedByMacro: new Map(),
-            structInstances: new Map(),
-            includes: [],
-            caseSensitive: false
-        };
+        const index: DocumentIndex = emptyIndex({ parametersAtScope: new Map([['m', ['p1', 'p2']]]) });
         expect(isParameter('p1', 'm', index)).toBe(true);
     });
 
     it('returns true for parent scope parameter', () => {
-        const index: DocumentIndex = {
-            labels: [],
-            scopeAtLine: new Map(),
-            parametersAtScope: new Map([['outer', ['p1']]]),
-            macroSubLabels: new Map(),
-            labelDefinedByMacro: new Map(),
-            structInstances: new Map(),
-            includes: [],
-            caseSensitive: false
-        };
+        const index: DocumentIndex = emptyIndex({ parametersAtScope: new Map([['outer', ['p1']]]) });
         expect(isParameter('p1', 'outer.inner', index)).toBe(true);
     });
 
     it('returns false for non-parameter', () => {
-        const index: DocumentIndex = {
-            labels: [],
-            scopeAtLine: new Map(),
-            parametersAtScope: new Map([['m', ['p1']]]),
-            macroSubLabels: new Map(),
-            labelDefinedByMacro: new Map(),
-            structInstances: new Map(),
-            includes: [],
-            caseSensitive: false
-        };
+        const index: DocumentIndex = emptyIndex({ parametersAtScope: new Map([['m', ['p1']]]) });
         expect(isParameter('other', 'm', index)).toBe(false);
     });
 
     it('returns false with null scopePath', () => {
-        const index: DocumentIndex = {
-            labels: [],
-            scopeAtLine: new Map(),
-            parametersAtScope: new Map([['m', ['p1']]]),
-            macroSubLabels: new Map(),
-            labelDefinedByMacro: new Map(),
-            structInstances: new Map(),
-            includes: [],
-            caseSensitive: false
-        };
+        const index: DocumentIndex = emptyIndex({ parametersAtScope: new Map([['m', ['p1']]]) });
         expect(isParameter('p1', null, index)).toBe(false);
     });
 
     it('matches case-insensitively', () => {
-        const index: DocumentIndex = {
-            labels: [],
-            scopeAtLine: new Map(),
-            parametersAtScope: new Map([['m', ['param']]]),
-            macroSubLabels: new Map(),
-            labelDefinedByMacro: new Map(),
-            structInstances: new Map(),
-            includes: [],
-            caseSensitive: false
-        };
+        const index: DocumentIndex = emptyIndex({ parametersAtScope: new Map([['m', ['param']]]) });
         expect(isParameter('PARAM', 'm', index)).toBe(true);
     });
 });

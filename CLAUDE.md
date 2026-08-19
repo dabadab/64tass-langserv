@@ -121,6 +121,12 @@ cannot be imported from a test.
   type's member. A member the type does not declare is still reported, matching the
   assembler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
+- **Symbol lookup cost**: `findSymbolInfo` filters by name first via
+  `DocumentIndex.labelsByName`, then by scope. It used to scan every label of
+  every document per call, so cost grew with the whole workspace (~0.1 ms per
+  lookup at 20k labels, and diagnostics calls it once per symbol occurrence).
+  `performance.test.ts` guards the scaling property rather than a wall-clock
+  ceiling, which would be flaky on CI.
 - **Opcode hover**: `hover.ts` merges two sources. `addressing.ts` is GENERATED -
   every addressing mode was probed from 64tass, with the mode read back from the
   listing's monitor column (the assembler's own disassembly) rather than assumed
@@ -160,10 +166,16 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 822 tests)
+yarn test          # Run all tests (currently 823 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
+yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
 ```
+
+`tsconfig.test.json` exists because the build config compiles only `src/`, so a
+hand-built `DocumentIndex` in a test would silently go stale whenever the
+interface gains a field. Use `emptyIndex()` from `test/helpers/doc.ts` instead of
+building one literally.
 
 - **Framework:** Vitest
 - **Unit tests:** `test/unit/` — one file per module

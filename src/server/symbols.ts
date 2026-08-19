@@ -203,13 +203,11 @@ export function findSymbolInfo(
         }
 
         for (const [, index] of documentIndex) {
-            for (const label of index.labels) {
-                if (label.name === targetName) {
-                    // Check if scope path matches or ends with the target path
-                    if (label.scopePath === targetPath ||
-                        label.scopePath?.endsWith('.' + targetPath)) {
-                        return label;
-                    }
+            for (const label of index.labelsByName.get(targetName) ?? []) {
+                // Check if scope path matches or ends with the target path
+                if (label.scopePath === targetPath ||
+                    label.scopePath?.endsWith('.' + targetPath)) {
+                    return label;
                 }
             }
         }
@@ -218,8 +216,8 @@ export function findSymbolInfo(
 
     // Local symbol lookup: must match same document, same scopePath, same localScope
     if (isLocalSymbol) {
-        for (const label of fromIndex.labels) {
-            if (label.name === lookupWord && label.isLocal &&
+        for (const label of fromIndex.labelsByName.get(lookupWord) ?? []) {
+            if (label.isLocal &&
                 label.scopePath === currentScopePath &&
                 label.localScope === currentLocalScope) {
                 return label;
@@ -231,8 +229,8 @@ export function findSymbolInfo(
     // Regular symbol lookup: search current scope, then parent scopes, out to global
     for (const scopeToTry of getScopeChain(currentScopePath)) {
         for (const [, index] of documentIndex) {
-            for (const label of index.labels) {
-                if (label.name === lookupWord && !label.isLocal && label.scopePath === scopeToTry) {
+            for (const label of index.labelsByName.get(lookupWord) ?? []) {
+                if (!label.isLocal && label.scopePath === scopeToTry) {
                     return label;
                 }
             }

@@ -1,6 +1,7 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseDocument } from '../../src/server/parser';
 import { DocumentIndex } from '../../src/server/types';
+import { DEFAULT_CPU } from '../../src/server/constants';
 
 let docCounter = 0;
 
@@ -44,4 +45,26 @@ export function buildIndex(...args: BuildIndexSource[]): {
         docs.push(doc);
     }
     return { documentIndex, docs };
+}
+
+/**
+ * An empty DocumentIndex, for tests that need one field set and do not care
+ * about the rest. Building these by hand goes stale silently whenever the
+ * interface grows, so go through here instead.
+ */
+export function emptyIndex(overrides: Partial<DocumentIndex> = {}): DocumentIndex {
+    return {
+        labels: [],
+        labelsByName: new Map(),
+        scopeAtLine: new Map(),
+        parametersAtScope: new Map(),
+        macroSubLabels: new Map(),
+        labelDefinedByMacro: new Map(),
+        structInstances: new Map(),
+        includes: [],
+        includeScopes: new Map(),
+        caseSensitive: false,
+        cpu: DEFAULT_CPU,
+        ...overrides,
+    };
 }

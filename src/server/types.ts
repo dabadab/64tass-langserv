@@ -37,6 +37,11 @@ export interface LabelDefinition {
 
 export interface DocumentIndex {
     labels: LabelDefinition[];
+    // The same labels grouped by canonical name. Lookups are by name and then
+    // filtered by scope, so without this every query scans every label in every
+    // document - which is the whole workspace, and shows up on large ones.
+    // Built once by parseDocument; labels are never appended to afterwards.
+    labelsByName: Map<string, LabelDefinition[]>;
     // Maps line number to { scopePath, localScope }
     // Per line: the enclosing scope, the code label local symbols belong to, and
     // any scopes imported by an enclosing `.with` (innermost last). `.with` makes a

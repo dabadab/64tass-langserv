@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from 'vitest';
+import { describe, it, beforeEach, expect } from 'vitest';
 import { perfMonitor } from '../../src/server/performance';
 import { buildIndex } from '../helpers/doc';
 import { findSymbolInfo } from '../../src/server/symbols';
@@ -77,5 +77,42 @@ describe('Performance benchmarks', () => {
         if (summary['findSymbolInfo']) {
             console.log('PerfMonitor stats:', summary['findSymbolInfo']);
         }
+    });
+
+    /**
+     * findSymbolInfo used to scan every label of every document on each call, so
+     * lookup cost grew with the size of the whole workspace. It now looks names up
+     * in each document's labelsByName map, which makes the cost depend on the
+     * number of documents but not on how many labels they hold.
+     *
+     * Asserting a wall-clock ceiling would be flaky on a shared runner, so this
+     * measures the scaling property instead: same document count, twenty times the
+     * labels, and compares against a baseline taken in the same run.
+     */
+    it('lookup cost does not grow with labels per document', () => {
+        const measure = (labelsPerDoc: number) => {
+            const sources = Array.from({ length: 10 }, (_, d) => ({
+                source: Array.from({ length: labelsPerDoc }, (_, i) => `sym_${d}_${i} = ${i}`).join('\n'),
+                uri: `file:///scale${d}.asm`,
+            }));
+            const { documentIndex, docs } = buildIndex(...sources);
+            const iterations = 2000;
+            // A miss is the worst case and the one diagnostics hits most: it has to
+            // rule out every scope in every document before reporting the symbol.
+            const start = performance.now();
+            for (let i = 0; i < iterations; i++) {
+                findSymbolInfo('no_such_symbol', docs[0].uri, 0, documentIndex);
+            }
+            return (performance.now() - start) / iterations;
+        };
+
+        const small = measure(100);
+        const large = measure(2000);
+        const ratio = large / Math.max(small, 1e-6);
+        console.log(`scaling: ${small.toFixed(5)}ms @100 labels/doc, ${large.toFixed(5)}ms @2000 -> ${ratio.toFixed(2)}x`);
+
+        // 20x the labels. Linear scanning would be about 20x slower; the name index
+        // should be flat, so anything under 4x means the index is doing its job.
+        expect(ratio).toBeLessThan(4);
     });
 });
