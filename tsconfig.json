@@ -1,9 +1,18 @@
 {
+  // Type-checking only: every build goes through esbuild (see esbuild.js), which
+  // bundles with `vscode` as the sole external, so tsc never emits anything.
+  // That is why the module settings describe a bundler rather than Node's own
+  // resolution - "preserve" leaves import syntax alone for esbuild to transform,
+  // and "bundler" resolves the way esbuild does. The output esbuild produces is
+  // still CommonJS, as a VS Code extension needs.
+  //
+  // Replaces moduleResolution "node" (node10), which TypeScript deprecated and
+  // removes in 7.0.
   "compilerOptions": {
     "target": "ES2020",
     "lib": ["ES2020"],
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "preserve",
+    "moduleResolution": "bundler",
     "outDir": "./out",
     "rootDir": "./src",
     "strict": true,
