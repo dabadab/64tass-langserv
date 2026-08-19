@@ -5,7 +5,7 @@ import * as fs from 'fs';
  * Path to the real assembler. Override with TASS_PATH to run the integration
  * tests on a machine where 64tass lives somewhere else.
  */
-const TASS_PATH = process.env.TASS_PATH ?? '/home/db/bin/64tass';
+export const TASS_PATH = process.env.TASS_PATH ?? '/home/db/bin/64tass';
 
 export const TASS_EXISTS = fs.existsSync(TASS_PATH);
 

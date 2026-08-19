@@ -13,7 +13,6 @@ import {
     FoldingRange,
     HoverParams,
     Hover,
-    MarkupKind,
     ReferenceParams,
     RenameParams,
     WorkspaceEdit,
@@ -45,7 +44,8 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 import { DocumentIndex } from './types';
 import { absoluteSearchPaths } from './paths';
-import { parseNumericValue, formatNumericValue, detectCaseSensitivityPragma, detectCpu } from './utils';
+import { buildHover } from './hover';
+import { detectCaseSensitivityPragma, detectCpu } from './utils';
 import { parseDocument } from './parser';
 import {
     getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits,
@@ -441,32 +441,9 @@ connection.onHover((params: HoverParams): Hover | null => {
     const word = getWordAtPosition(document, params.position);
     if (!word) return null;
 
-    const symbol = findSymbolInfo(word, params.textDocument.uri, params.position.line, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
-    if (!symbol) return null;
-
-    let content = `**${symbol.originalName}**`;
-    if (symbol.scopePath) {
-        content += ` *(in ${symbol.scopePath})*`;
-    }
-    if (symbol.comment) {
-        content += `\n\n\`\`\`text\n${symbol.comment}\n\`\`\``;
-    }
-    if (symbol.value) {
-        const numValue = parseNumericValue(symbol.value);
-        if (numValue !== null) {
-            content += `\n\n\`= ${formatNumericValue(numValue)}\``;
-        } else {
-            // Not a simple numeric value, show as-is
-            content += `\n\n\`= ${symbol.value}\``;
-        }
-    }
-
-    return {
-        contents: {
-            kind: MarkupKind.Markdown,
-            value: content
-        }
-    };
+    const uri = params.textDocument.uri;
+    return buildHover(word, uri, params.position.line, documentIndex,
+        effectiveCaseSensitive(uri), documentIndex.get(uri)?.cpu ?? globalSettings.cpu);
 });
 
 connection.onReferences((params: ReferenceParams): Location[] => {

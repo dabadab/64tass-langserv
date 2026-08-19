@@ -15,6 +15,9 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │       ├── utils.ts              # String/comment/numeric helpers, pragma detection
 │       ├── parser.ts             # parseDocument — label/scope/macro extraction
 │       ├── paths.ts              # .include/.binclude path resolution (-I search paths)
+│       ├── hover.ts              # Symbol and opcode hover
+│       ├── addressing.ts         # GENERATED addressing modes per CPU (probed from 64tass)
+│       ├── opcodeDocs.ts         # Hand-written mnemonic descriptions and flags
 │       ├── indexing.ts           # indexDocument — include tree + case-sensitivity cascade
 │       ├── includes.ts           # IncludeGraph — which roots pull in which .include files
 │       ├── workspace.ts          # collectSourceFiles, findFilePathAt — workspace scan, file paths
@@ -118,6 +121,16 @@ cannot be imported from a test.
   type's member. A member the type does not declare is still reported, matching the
   assembler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
+- **Opcode hover**: `hover.ts` merges two sources. `addressing.ts` is GENERATED -
+  every addressing mode was probed from 64tass, with the mode read back from the
+  listing's monitor column (the assembler's own disassembly) rather than assumed
+  from the syntax fed in, which is what separates `lda $34,y` (encodes absolute,y)
+  from a real zeropage,y form and a relative branch from an absolute jump.
+  `test/integration/addressing.test.ts` re-runs that probe and compares, so the
+  table cannot go stale. `opcodeDocs.ts` is hand-written and deliberately partial:
+  semantics cannot be probed, so mnemonics outside the sets whose meaning is
+  unambiguous are left undescribed rather than guessed at, and hover degrades to
+  showing just their (verified) modes.
 - **Include resolution**: `resolveIncludePath` in `paths.ts`. 64tass tries the
   including file's own directory first, then each `-I` directory in order
   (verified). The `-I` list is the `64tass.includePaths` setting, made absolute
@@ -147,7 +160,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 794 tests)
+yarn test          # Run all tests (currently 822 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 ```

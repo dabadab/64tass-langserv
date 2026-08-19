@@ -24,7 +24,10 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Signature help** while typing a macro or function call — `#mac a, b`,
   `.mac a, b` and `fn(a, b)`.
 - **Hover** showing a symbol's scope, its documentation comment, and its value in
-  binary, decimal and hexadecimal.
+  binary, decimal and hexadecimal — or, on a mnemonic, what the instruction does,
+  the flags it writes, and every addressing mode it has *on this file's CPU*, with
+  each form's opcode byte and length. A label always wins over a mnemonic of the
+  same name.
 - **Folding** for `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif` and friends.
 - **Diagnostics**: duplicate labels, unclosed or unmatched blocks, undefined
   symbols and macros, unresolvable anonymous label references, and missing
