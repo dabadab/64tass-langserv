@@ -90,10 +90,12 @@ describe('BUILTINS', () => {
         }
     });
 
-    it('does not overlap with OPCODES', () => {
-        for (const b of BUILTINS) {
-            expect(OPCODES.has(b), `'${b}' is in both BUILTINS and OPCODES`).toBe(false);
-        }
+    it('overlaps OPCODES only where the assembler genuinely has both', () => {
+        // `str` is both a reserved mnemonic and the string type - verified: a line
+        // `str $10` is read as an instruction, while `.warn str` prints
+        // <type 'str'>. Context decides, so both memberships are correct and this
+        // is the one name allowed in both sets.
+        expect([...BUILTINS].filter(b => OPCODES.has(b))).toEqual(['str']);
     });
 });
 
@@ -249,5 +251,33 @@ describe('CPU targets', () => {
     it('falls back to the default for an unknown CPU name', () => {
         expect(registerModesForCpu('nonsense')).toEqual(registerModesForCpu(DEFAULT_CPU));
         expect(opcodesForCpu('nonsense').has('lda')).toBe(true);
+    });
+});
+
+describe('BUILTINS', () => {
+    it('includes the type objects real sources use as conversions', () => {
+        // These were all missing from the hand-written list, so every use of one
+        // was reported as an undefined symbol.
+        for (const name of ['int', 'bool', 'str', 'bytes', 'list', 'dict', 'tuple', 'float', 'bits', 'code', 'gap', 'type', 'address', 'register', 'symbol', 'namespace']) {
+            expect(BUILTINS.has(name), name).toBe(true);
+        }
+    });
+
+    it('includes pi', () => {
+        expect(BUILTINS.has('pi')).toBe(true);
+    });
+
+    it('keeps the numeric and list functions', () => {
+        for (const name of ['abs', 'len', 'range', 'random', 'sort', 'format', 'sqrt', 'round']) {
+            expect(BUILTINS.has(name), name).toBe(true);
+        }
+    });
+
+    it('does not contain names the assembler rejects', () => {
+        // Verified against the assembler: these do not resolve, so treating them
+        // as built-ins would silence a real undefined-symbol report.
+        for (const name of ['none', 'label', 'anonymous', 'struct', 'union', 'macro', 'function']) {
+            expect(BUILTINS.has(name), name).toBe(false);
+        }
     });
 });

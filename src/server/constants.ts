@@ -480,18 +480,32 @@ for (const [open, closers] of Object.entries(OPENER_TO_CLOSERS)) {
     FOLDING_PAIRS[open] = closers[0];
 }
 
-// Built-in names to ignore when checking for undefined symbols
+/**
+ * Built-in names to ignore when checking for undefined symbols.
+ *
+ * Probed from the assembler rather than listed by hand: every candidate was fed
+ * to `.warn`, which forces evaluation, and kept if it resolved. The candidates
+ * came from a system wordlist plus the abbreviated function names, which is how
+ * `pi`, `gap`, `code`, `symbol` and `register` turned up - none of them were in
+ * the hand-written list this replaced, so every use of them was reported.
+ *
+ * Includes the type objects (`int`, `bool`, `str`, `bytes`, `list`, `dict`,
+ * `tuple`, `float`, `bits`, `code`, `gap`, `type`, `address`, `register`,
+ * `symbol`, `namespace`), which appear in real sources as conversions.
+ */
 export const BUILTINS = new Set([
     // Registers
     'a', 'x', 'y',
-    // Boolean/null literals
-    'true', 'false',
-    // Built-in functions (can be shadowed by user definitions)
-    'abs', 'acos', 'addr', 'all', 'any', 'asin', 'atan', 'atan2', 'binary',
-    'byte', 'cbrt', 'ceil', 'char', 'cos', 'cosh', 'deg', 'dint', 'dword',
-    'exp', 'floor', 'format', 'frac', 'hypot', 'len', 'lint', 'log', 'log10',
-    'long', 'pow', 'rad', 'random', 'range', 'repr', 'round', 'rta', 'sign',
-    'sin', 'sinh', 'sint', 'size', 'sort', 'sqrt', 'tan', 'tanh', 'trunc', 'word',
+    // Literals
+    'true', 'false', 'pi',
+    // Functions and type objects (all shadowable by user definitions)
+    'abs', 'acos', 'addr', 'address', 'all', 'any', 'asin', 'atan', 'atan2',
+    'binary', 'bits', 'bool', 'byte', 'bytes', 'cbrt', 'ceil', 'char', 'code',
+    'cos', 'cosh', 'deg', 'dict', 'dint', 'dword', 'exp', 'float', 'floor',
+    'format', 'frac', 'gap', 'hypot', 'int', 'len', 'lint', 'list', 'log',
+    'log10', 'long', 'namespace', 'pow', 'rad', 'random', 'range', 'register',
+    'repr', 'round', 'rta', 'sign', 'sin', 'sinh', 'sint', 'size', 'sort',
+    'sqrt', 'str', 'symbol', 'tan', 'tanh', 'trunc', 'tuple', 'type', 'word',
 ]);
 
 // Built-in directives regex pattern for validation
