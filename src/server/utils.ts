@@ -478,16 +478,24 @@ export function findCommentBlockLines(lines: string[]): Set<number> {
     return inside;
 }
 
+/** A `.name` key of a dict literal, with its offset in the text it was found in. */
+export interface DictKey {
+    name: string;
+    /** Offset of the leading dot. */
+    start: number;
+    /** Length including the leading dot. */
+    length: number;
+}
+
 /**
- * Blank out dict-literal keys, preserving offsets so reported columns stay right.
+ * The `.name` keys of dict literals in a line.
  *
- * `{.MAP: last == 0, .TILE: last == 1}` names its keys with a leading dot, which
- * otherwise reads as a macro call, and their bare form as a symbol reference -
- * neither of which they are. Only `.name` immediately before a `:` and inside
- * braces is blanked, so a real macro call elsewhere on the line is untouched.
+ * `{.MAP: last == 0, .TILE: last == 1}` names its keys with a leading dot. Only
+ * `.name` immediately before a `:` and inside braces counts, so a real macro call
+ * elsewhere on the line is not mistaken for one.
  */
-export function stripDictKeys(code: string): string {
-    let result = code;
+export function findDictKeys(code: string): DictKey[] {
+    const keys: DictKey[] = [];
     let depth = 0;
     let quote: string | null = null;
     for (let i = 0; i < code.length; i++) {
@@ -504,11 +512,26 @@ export function stripDictKeys(code: string): string {
         if (c === '}') { depth = Math.max(0, depth - 1); continue; }
         if (depth === 0 || c !== '.') continue;
 
-        const key = code.slice(i).match(/^\.[a-zA-Z_][a-zA-Z0-9_]*(?=\s*:)/);
+        const key = code.slice(i).match(/^\.([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*:)/);
         if (key) {
-            result = result.slice(0, i) + ' '.repeat(key[0].length) + result.slice(i + key[0].length);
+            keys.push({ name: key[1], start: i, length: key[0].length });
             i += key[0].length - 1;
         }
     }
+    return keys;
+}
+
+/**
+ * Blank out dict-literal keys, preserving offsets so reported columns stay right.
+ *
+ * Their leading dot otherwise reads as a macro call and their bare name as a
+ * symbol reference, neither of which they are.
+ */
+export function stripDictKeys(code: string): string {
+    let result = code;
+    for (const key of findDictKeys(code)) {
+        result = result.slice(0, key.start) + ' '.repeat(key.length) + result.slice(key.start + key.length);
+    }
     return result;
 }
+

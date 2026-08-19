@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    findDictKeys,
     stripDictKeys,
     findCommentBlockLines,
     splitTopLevel,
@@ -704,5 +705,25 @@ describe('stripDictKeys', () => {
 
     it('leaves a string key alone', () => {
         expect(stripDictKeys('{"a": 1}')).toBe('{"a": 1}');
+    });
+});
+
+describe('findDictKeys', () => {
+    it('finds the keys of a dict literal', () => {
+        expect(findDictKeys('{.MAP: 1, .CHAR: 2}').map(k => k.name)).toEqual(['MAP', 'CHAR']);
+    });
+
+    it('reports where each key starts', () => {
+        const source = 'D = {.MAP: 1}';
+        const [key] = findDictKeys(source);
+        expect(source.slice(key.start, key.start + key.length)).toBe('.MAP');
+    });
+
+    it('finds none outside braces', () => {
+        expect(findDictKeys('        .mymacro 1')).toEqual([]);
+    });
+
+    it('ignores braces inside a string', () => {
+        expect(findDictKeys('        .text "{.A: 1}"')).toEqual([]);
     });
 });

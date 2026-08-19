@@ -895,3 +895,26 @@ describe('labels on macro calls', () => {
         expect(index.labelDefinedByMacro.has('start')).toBe(false);
     });
 });
+
+describe('dict literal members', () => {
+    it('indexes each key as a member of the assigned label', () => {
+        const index = parse('COLORING = {.MAP: 1, .TILE: 2, .CHAR: 3}');
+        const members = index.labels.filter(l => l.scopePath === 'coloring').map(l => l.name);
+        expect(members.sort()).toEqual(['char', 'map', 'tile']);
+    });
+
+    it('nests the member scope inside the enclosing one', () => {
+        const index = parse('outer   .namespace\nD       = {.A: 1}\n        .endn');
+        expect(index.labels.find(l => l.name === 'a')?.scopePath).toBe('outer.d');
+    });
+
+    it('points the range at the key name, not the leading dot', () => {
+        const source = 'D       = {.MAP: 1}';
+        const label = parse(source).labels.find(l => l.name === 'map')!;
+        expect(source.slice(label.range.start.character, label.range.end.character)).toBe('MAP');
+    });
+
+    it('records nothing for a value that is not a dict', () => {
+        expect(parse('D       = 5').labels.map(l => l.name)).toEqual(['d']);
+    });
+});

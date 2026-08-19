@@ -4,7 +4,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { SCOPE_OPENERS, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { resolveIncludePath } from './paths';
-import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines } from './utils';
+import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys } from './utils';
 
 export type LogFunction = (message: string) => void;
 
@@ -668,6 +668,31 @@ export function parseDocument(
             const callMatch = value?.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
             if (callMatch) {
                 labelDefinedByMacro.set(normalizeName(labelName), normalizeName(callMatch[1]));
+            }
+
+            // "COLORING = {.MAP: a, .CHAR: c}" makes the keys reachable as
+            // COLORING.CHAR, and not as a bare CHAR (verified), so each key is
+            // indexed as a member of the label being assigned.
+            const rawValue = constMatch[4] ?? '';
+            const valueStart = constMatch[0].length - rawValue.length;
+            const ownPath = getCurrentScopePath();
+            const memberScope = ownPath ? `${ownPath}.${normalizeName(labelName)}` : normalizeName(labelName);
+            for (const key of findDictKeys(rawValue)) {
+                // +1 to point at the name rather than the leading dot
+                const keyStart = valueStart + key.start + 1;
+                labels.push({
+                    name: normalizeName(key.name),
+                    originalName: key.name,
+                    uri: document.uri,
+                    range: Range.create(
+                        Position.create(lineNum, keyStart),
+                        Position.create(lineNum, keyStart + key.name.length)
+                    ),
+                    scopePath: memberScope,
+                    localScope: null,
+                    isLocal: false,
+                    kind: 'const'
+                });
             }
             continue;
         }

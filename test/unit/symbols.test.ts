@@ -692,3 +692,16 @@ describe('members of a label assigned from a function call', () => {
         expect(findSymbolInfo('MAPDATA.COLORS', docs[0].uri, 7, documentIndex, false)?.name).toBe('colors');
     });
 });
+
+describe('dict literal member lookup', () => {
+    it('resolves a key as a member of the dict', () => {
+        // Verified: D.CHAR resolves, a bare CHAR does not.
+        const { documentIndex, docs } = buildIndex({ source: 'D       = {.MAP: 1, .CHAR: 2}\n        * = $1000\n        lda #D.CHAR' });
+        expect(findSymbolInfo('D.CHAR', docs[0].uri, 2, documentIndex, false)?.name).toBe('char');
+    });
+
+    it('does not resolve a key the dict does not have', () => {
+        const { documentIndex, docs } = buildIndex({ source: 'D       = {.MAP: 1}\n        * = $1000\n        lda #D.NOSUCH' });
+        expect(findSymbolInfo('D.NOSUCH', docs[0].uri, 2, documentIndex, false)).toBeNull();
+    });
+});

@@ -133,6 +133,14 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   (`detectDefinePragmas` in `utils.ts`) mirrors 64tass's `-D` flag and is indexed by
   `parseDocument` as a normal `kind: 'var'` label, so it resolves like any other
   symbol. Mainly exists so `-D`-supplied flags can decide `.if` branches.
+- **Dynamic members**: `DocumentIndex.labelDefinedByMacro` maps a label to the
+  scope its members come from - the macro of a `label #macro` / `label .macro`
+  call, or the function of a `label = fn(...)` assignment where the function
+  returns `namespace(*)`. Dict literals (`D = {.MAP: 1}`) instead index each key
+  as a real label scoped under `D`. All three make members reachable ONLY as
+  `label.member`, never bare (verified). `findSymbolInfo` tries the path as
+  written FIRST and these substitutions after, so a scope that genuinely carries
+  that name still wins.
 - **Struct instances**: `name .dstruct type, ...` (and `.dunion`) records
   `DocumentIndex.structInstances[name] = type`, so `name.member` resolves to that
   type's member. A member the type does not declare is still reported, matching the
@@ -187,7 +195,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 922 tests); compiles first
+yarn test          # Run all tests (currently 1045 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
