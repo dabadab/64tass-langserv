@@ -659,6 +659,16 @@ export function parseDocument(
                 kind: isReassignable ? 'var' : 'const',
                 value: value || undefined
             });
+
+            // "PIC = mk(5)" where mk is a .function returning namespace(*) makes
+            // the function's own labels reachable as PIC.BITMAP, and not as a bare
+            // BITMAP (verified). Same shape as a label on a macro call, so the
+            // callee is recorded the same way and resolved at query time - a call
+            // to something that is not a scope simply resolves to nothing.
+            const callMatch = value?.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
+            if (callMatch) {
+                labelDefinedByMacro.set(normalizeName(labelName), normalizeName(callMatch[1]));
+            }
             continue;
         }
     }

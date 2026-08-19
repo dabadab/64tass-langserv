@@ -52,7 +52,10 @@ export interface DocumentIndex {
     parametersAtScope: Map<string, string[]>;
     // Maps macro name to list of sub-labels it defines in its body
     macroSubLabels: Map<string, string[]>;
-    // Maps label name to the macro used to define it (for labels defined via macro calls)
+    // Maps a label to the scope its members come from: the macro of a
+    // "label #macro" / "label .macro" call, or the function of a "label = fn(...)"
+    // assignment. Both make that scope's labels reachable as "label.member" and
+    // not as a bare "member" (verified), so the mapping is resolved at query time.
     labelDefinedByMacro: Map<string, string>;
     // Maps a .dstruct/.dunion instance name to the .struct/.union it instantiates,
     // so "instance.member" can be resolved to that type's member.

@@ -190,35 +190,33 @@ export function findSymbolInfo(
     if (lookupWord.includes('.')) {
         const parts = lookupWord.split('.');
         const targetName = parts[parts.length - 1];
-        let targetPath = parts.slice(0, -1).join('.');
+        const targetPath = parts.slice(0, -1).join('.');
 
-        // A .dstruct/.dunion instance exposes the members of the type it
-        // instantiates, so "p1.posx" is resolved as if it were "pt.posx".
+        // A name in front of the dot may stand for another scope entirely:
+        //   - a .dstruct/.dunion instance exposes its type's members, so
+        //     "p1.posx" resolves as "pt.posx"
+        //   - a label on a macro call, or assigned from a function returning
+        //     namespace(*), exposes that macro's or function's own labels
+        // The written path is tried FIRST and the substitutes after it: a scope
+        // really called `targetPath` is the better answer when one exists, and the
+        // suffix match below already reaches it however deeply it is nested.
+        const candidatePaths = [targetPath];
         for (const [, index] of documentIndex) {
             const declaredType = index.structInstances.get(targetPath);
-            if (declaredType) {
-                targetPath = declaredType;
-                break;
-            }
+            if (declaredType) { candidatePaths.push(declaredType); break; }
+        }
+        for (const [, index] of documentIndex) {
+            const memberSource = index.labelDefinedByMacro.get(targetPath);
+            if (memberSource) { candidatePaths.push(memberSource); break; }
         }
 
-        // A label on a macro call does the same for the macro's own labels:
-        // "virt #drv" makes drv's `patchme` reachable as `virt.patchme`
-        // (verified), so the lookup is retargeted at the macro's scope.
-        for (const [, index] of documentIndex) {
-            const definingMacro = index.labelDefinedByMacro.get(targetPath);
-            if (definingMacro) {
-                targetPath = definingMacro;
-                break;
-            }
-        }
-
-        for (const [, index] of documentIndex) {
-            for (const label of index.labelsByName.get(targetName) ?? []) {
-                // Check if scope path matches or ends with the target path
-                if (label.scopePath === targetPath ||
-                    label.scopePath?.endsWith('.' + targetPath)) {
-                    return label;
+        for (const candidate of candidatePaths) {
+            for (const [, index] of documentIndex) {
+                for (const label of index.labelsByName.get(targetName) ?? []) {
+                    // Match the scope exactly, or as the tail of a nested path.
+                    if (label.scopePath === candidate || label.scopePath?.endsWith('.' + candidate)) {
+                        return label;
+                    }
                 }
             }
         }

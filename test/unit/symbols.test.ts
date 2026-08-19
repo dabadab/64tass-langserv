@@ -651,3 +651,44 @@ describe('members of a label on a macro call', () => {
         expect(findSymbolInfo('virt.nosuch', docs[0].uri, 6, documentIndex, false)).toBeNull();
     });
 });
+
+describe('members of a label assigned from a function call', () => {
+    const SOURCE = [
+        'mk      .function _v',
+        'BITMAP  = _v + 1',
+        'SCREEN  = _v + 2',
+        '        .endf namespace(*)',
+        'PIC     = mk(5)',
+        '        * = $1000',
+        '        lda #PIC.BITMAP',
+    ].join('\n');
+
+    it('resolves a member through the function that produced it', () => {
+        // Verified: a .function returning namespace(*) exposes its own labels as
+        // members of whatever the call is assigned to.
+        const { documentIndex, docs } = buildIndex({ source: SOURCE });
+        expect(findSymbolInfo('PIC.BITMAP', docs[0].uri, 6, documentIndex, false)?.name).toBe('bitmap');
+    });
+
+    it('returns nothing for a member the function does not define', () => {
+        const { documentIndex, docs } = buildIndex({ source: SOURCE });
+        expect(findSymbolInfo('PIC.NOSUCH', docs[0].uri, 6, documentIndex, false)).toBeNull();
+    });
+
+    it('still prefers a real scope of that name over the substitution', () => {
+        // MAPDATA is assigned from ctm7(), but its members live in a namespace
+        // literally called mapdata - the written path has to win.
+        const source = [
+            'ctm7    .function _f',
+            'mapdata .namespace',
+            'COLORS  = 5',
+            '        .endn',
+            '        .endf mapdata',
+            'MAPDATA = ctm7("x")',
+            '        * = $1000',
+            '        lda #MAPDATA.COLORS',
+        ].join('\n');
+        const { documentIndex, docs } = buildIndex({ source });
+        expect(findSymbolInfo('MAPDATA.COLORS', docs[0].uri, 7, documentIndex, false)?.name).toBe('colors');
+    });
+});
