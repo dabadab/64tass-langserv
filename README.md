@@ -28,6 +28,9 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
   the flags it writes, and every addressing mode it has *on this file's CPU*, with
   each form's opcode byte and length. A label always wins over a mnemonic of the
   same name.
+- **Document links** on the quoted paths of `.include`, `.binclude` and
+  `.binary` — ctrl-click to open. Only paths that actually resolve become links,
+  so a broken one is visible as plain text.
 - **Folding** for `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif` and friends.
 - **Diagnostics**: duplicate labels, unclosed or unmatched blocks, undefined
   symbols and macros, unresolvable anonymous label references, and missing

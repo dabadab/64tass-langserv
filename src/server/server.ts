@@ -12,6 +12,8 @@ import {
     FoldingRangeParams,
     FoldingRange,
     HoverParams,
+    DocumentLink,
+    DocumentLinkParams,
     Hover,
     ReferenceParams,
     RenameParams,
@@ -45,6 +47,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { DocumentIndex } from './types';
 import { absoluteSearchPaths } from './paths';
 import { buildHover } from './hover';
+import { buildDocumentLinks } from './documentLinks';
 import { detectCaseSensitivityPragma, detectCpu } from './utils';
 import { parseDocument } from './parser';
 import {
@@ -205,6 +208,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             // prompting for the new name (used to refuse anonymous labels)
             renameProvider: { prepareProvider: true },
             foldingRangeProvider: true,
+            documentLinkProvider: { resolveProvider: false },
             hoverProvider: true,
             documentSymbolProvider: true,
             documentHighlightProvider: true,
@@ -360,7 +364,7 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     const line = document.getText().split('\n')[params.position.line];
     if (line) {
         try {
-            const reference = findFilePathAt(line, params.position.character, fileURLToPath(document.uri));
+            const reference = findFilePathAt(line, params.position.character, fileURLToPath(document.uri), searchPaths());
             if (reference?.resolved) {
                 return Location.create(
                     pathToFileURL(reference.resolved).toString(),
@@ -444,6 +448,12 @@ connection.onHover((params: HoverParams): Hover | null => {
     const uri = params.textDocument.uri;
     return buildHover(word, uri, params.position.line, documentIndex,
         effectiveCaseSensitive(uri), documentIndex.get(uri)?.cpu ?? globalSettings.cpu);
+});
+
+connection.onDocumentLinks((params: DocumentLinkParams): DocumentLink[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+    return buildDocumentLinks(document, searchPaths());
 });
 
 connection.onReferences((params: ReferenceParams): Location[] => {

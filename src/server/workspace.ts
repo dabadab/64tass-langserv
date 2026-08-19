@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { resolveIncludePath } from './paths';
 
 /** File extensions this extension handles. */
 export const SOURCE_EXTENSIONS = ['.asm', '.s', '.inc', '.src'];
@@ -83,8 +85,10 @@ export interface FilePathReference {
  *
  * @param fromFile absolute path of the file containing the line, used to resolve
  *                 the reference relative to it
+ * @param searchPaths extra directories to try, mirroring 64tass's -I flag. It
+ *                 applies to .binary as well as the include directives (verified).
  */
-export function findFilePathAt(line: string, character: number, fromFile: string): FilePathReference | null {
+export function findFilePathAt(line: string, character: number, fromFile: string, searchPaths: readonly string[] = []): FilePathReference | null {
     const match = line.match(FILE_PATH_DIRECTIVE);
     if (!match || match.index === undefined) return null;
 
@@ -96,11 +100,9 @@ export function findFilePathAt(line: string, character: number, fromFile: string
 
     let resolved: string | null = null;
     if (pathText !== '') {
-        try {
-            const candidate = path.resolve(path.dirname(fromFile), pathText);
-            if (fs.existsSync(candidate)) resolved = candidate;
-        } catch {
-            resolved = null;
+        const uri = resolveIncludePath(pathToFileURL(fromFile).toString(), pathText, searchPaths);
+        if (uri) {
+            try { resolved = fileURLToPath(uri); } catch { resolved = null; }
         }
     }
 

@@ -16,6 +16,7 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │       ├── parser.ts             # parseDocument — label/scope/macro extraction
 │       ├── paths.ts              # .include/.binclude path resolution (-I search paths)
 │       ├── hover.ts              # Symbol and opcode hover
+│       ├── documentLinks.ts      # Clickable .include/.binclude/.binary paths
 │       ├── addressing.ts         # GENERATED addressing modes per CPU (probed from 64tass)
 │       ├── opcodeDocs.ts         # Hand-written mnemonic descriptions and flags
 │       ├── indexing.ts           # indexDocument — include tree + case-sensitivity cascade
@@ -166,7 +167,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 823 tests)
+yarn test          # Run all tests (currently 833 tests)
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
