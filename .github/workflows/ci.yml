@@ -29,8 +29,18 @@ jobs:
       - name: Typecheck
         run: yarn typecheck
 
+      # The integration suites compare this extension's behaviour against the real
+      # assembler. Without it they skip silently, so a green CI run would be
+      # verifying nothing about 64tass compatibility - REQUIRE_TASS makes a missing
+      # binary a hard failure instead.
+      - name: Install 64tass
+        run: sudo apt-get update && sudo apt-get install -y 64tass
+
       - name: Test
         run: yarn test
+        env:
+          TASS_PATH: /usr/bin/64tass
+          REQUIRE_TASS: '1'
 
       - name: Build
         run: yarn compile

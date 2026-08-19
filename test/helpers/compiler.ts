@@ -31,6 +31,36 @@ if (!TASS_EXISTS) {
     );
 }
 
+/**
+ * The 64tass version the generated tables in `addressing.ts` and the register
+ * modes in `constants.ts` were probed from. Those tables describe one specific
+ * assembler build, so the tests that compare them back are only meaningful
+ * against the same version - a different one may legitimately differ.
+ */
+export const TABLES_PROBED_FROM = '1.60.3243';
+
+/** The version string of the assembler in use, or null if it cannot be read. */
+export const TASS_VERSION: string | null = (() => {
+    if (!TASS_EXISTS) return null;
+    try {
+        const out = execFileSync(TASS_PATH, ['--version'], { encoding: 'utf-8' });
+        return out.match(/V([0-9.]+)/)?.[1] ?? null;
+    } catch {
+        return null;
+    }
+})();
+
+/** True when the assembler present is the one the generated tables came from. */
+export const TABLES_MATCH_TASS = TASS_VERSION === TABLES_PROBED_FROM;
+
+if (TASS_EXISTS && !TABLES_MATCH_TASS) {
+    console.warn(
+        `[integration] 64tass is V${TASS_VERSION}, but the generated opcode tables were ` +
+        `probed from V${TABLES_PROBED_FROM} - the table-comparison tests will be SKIPPED. ` +
+        `Everything else still runs against this assembler.`
+    );
+}
+
 export interface CompilerResult {
     exitCode: number;
     stderr: string;

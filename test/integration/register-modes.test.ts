@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { TASS_EXISTS, compile } from '../helpers/compiler';
+import { TASS_EXISTS, TABLES_MATCH_TASS, compile } from '../helpers/compiler';
 import { registerModesForCpu, opcodesForCpu } from '../../src/server/constants';
 
 /**
@@ -25,7 +25,7 @@ function assembles(cpu: string, source: string): boolean {
     }
 }
 
-describe.skipIf(!TASS_EXISTS)('register modes match the assembler', () => {
+describe.skipIf(!TASS_EXISTS || !TABLES_MATCH_TASS)('register modes match the assembler', () => {
     it.each(Object.keys(CPU_FLAG))('every pair the table lists is accepted on %s', (cpu) => {
         const rejected: string[] = [];
         for (const [opcode, registers] of Object.entries(registerModesForCpu(cpu))) {

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as cp from 'child_process';
-import { TASS_PATH, TASS_EXISTS } from '../helpers/compiler';
+import { TASS_PATH, TASS_EXISTS, TABLES_MATCH_TASS } from '../helpers/compiler';
 import { addressingModesFor } from '../../src/server/addressing';
 import { opcodesForCpu } from '../../src/server/constants';
 
@@ -88,7 +88,7 @@ function probe(cpu: string, mnemonic: string, dir: string): Probe[] {
     return found.sort((a, b) => a.opcode - b.opcode);
 }
 
-describe.skipIf(!TASS_EXISTS)('addressing modes match the assembler', () => {
+describe.skipIf(!TASS_EXISTS || !TABLES_MATCH_TASS)('addressing modes match the assembler', () => {
     it.each(PROBED_CPUS)('%s', (cpu) => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), '64tass-addr-'));
         try {

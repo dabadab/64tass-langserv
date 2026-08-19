@@ -186,7 +186,15 @@ building one literally.
 
 - **Framework:** Vitest
 - **Unit tests:** `test/unit/` — one file per module
-- **Integration tests:** `test/integration/` — compiler reference tests (require `/home/db/bin/64tass`)
+- **Integration tests:** `test/integration/` — compiler reference tests. They need
+  a real 64tass (`TASS_PATH`, default `/home/db/bin/64tass`) and SKIP silently
+  without one, so `REQUIRE_TASS=1` turns a missing binary into a hard failure. CI
+  installs the Debian/Ubuntu `64tass` package and sets both, since a green run
+  that skipped every compiler test verifies nothing.
+  `addressing.test.ts` and `register-modes.test.ts` compare the GENERATED tables
+  back against the assembler; those two additionally skip unless the assembler is
+  `TABLES_PROBED_FROM` (the version the tables were probed from), because another
+  version may legitimately differ.
 - **Fixtures:** `test/fixtures/` — `.asm` files used by integration tests
 - **Helpers:** `test/helpers/` — `createDoc`, `buildIndex`, `compile`
   - `buildIndex()` accepts `caseSensitive` per source object (falling back to the first entry), so a single index can mix case-sensitive and case-insensitive documents

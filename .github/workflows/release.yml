@@ -28,9 +28,16 @@ jobs:
       - name: Typecheck
         run: yarn typecheck
 
-      # Gate the release on the suite: a tag should not publish a broken build
+      - name: Install 64tass
+        run: sudo apt-get update && sudo apt-get install -y 64tass
+
+      # Gate the release on the suite: a tag should not publish a broken build.
+      # REQUIRE_TASS so the integration suites cannot silently skip here either.
       - name: Test
         run: yarn test
+        env:
+          TASS_PATH: /usr/bin/64tass
+          REQUIRE_TASS: '1'
 
       - name: Build (production)
         run: yarn compile:prod
