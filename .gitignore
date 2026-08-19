@@ -7,3 +7,4 @@ example/
 .claude
 .env
 coverage/
+tsconfig.tsbuildinfo

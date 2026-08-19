@@ -8,7 +8,7 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Syntax highlighting** for opcodes (documented and undocumented), directives,
   numbers, strings and labels.
 - **Semantic highlighting** on top of it, for what the grammar alone cannot tell
-  apart, like a constant from a label
+  apart, like a constant from a label.
 - **Go to definition** (F12) — labels and symbols, scope-aware and across `.include`
   files. Also opens the file under the cursor in an `.include`, `.binclude` or
   `.binary` path.
@@ -19,23 +19,10 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
   symbols grouped under the code label they belong to.
 - **Workspace symbol search** (Ctrl+T) by fuzzy name, including files you have
   not opened.
-- **Completion** for directives, opcodes, in-scope symbols, macro and function
-  parameters, and filenames for `.include` / `.binclude` / `.binary`. Symbols come
-  only from files assembled together with the current one, so an unrelated
-  program elsewhere in the workspace does not pollute the list. After a comma in
-  an operand only the index registers valid *for that instruction on that CPU*
-  are offered — `ldx $10,` gives Y alone, `lda ($10),` gives Y, and the 65816
-  adds S where it applies.
+- **Completion** for mostly everything.
 - **Signature help** while typing a macro or function call — `#mac a, b`,
   `.mac a, b` and `fn(a, b)`.
-- **Hover** showing a symbol's scope, its documentation comment, and its value in
-  binary, decimal and hexadecimal — or, on a mnemonic, what the instruction does,
-  the flags it writes, and every addressing mode it has *on this file's CPU*, with
-  each form's opcode byte and cycle count — `4*` marking the forms that cost an
-  extra cycle when indexing crosses a page, `2**` a branch. Cycles are shown for
-  the NMOS targets (`6502`, `6502i`, `default`, so the C64's 6510); other targets
-  show instruction length instead, since their timing is not modelled. A label
-  always wins over a mnemonic of the same name.
+- **Hover** on symbols and mnemonics
 - **Document links** on the quoted paths of `.include`, `.binclude` and
   `.binary` — ctrl-click to open. Only paths that actually resolve become links,
   so a broken one is visible as plain text.
@@ -44,9 +31,7 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Expand selection** (<kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>→</kbd>) stepping
   out through word, operand, operand list, line, each enclosing block, document.
 - **Folding** for `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif` and friends.
-- **Diagnostics**: duplicate labels, unclosed or unmatched blocks, undefined
-  symbols and macros, unresolvable anonymous label references, and missing
-  operators between values.
+- **Diagnostics** for various problems.
 
 ## Settings
 
@@ -56,20 +41,13 @@ Default `false`. Mirrors 64tass's `-C` flag: when `true`, `MyLabel` and `mylabel
 
 ### `64tass.cpu`
 
-Default `6502i`. Decides which opcodes and register addressing modes are
+The default is `6502i` that includes all the "illegal" opcodes.
+
+Decides which opcodes and register addressing modes are
 recognised, mirroring 64tass's CPU selection flags. Accepts the same names as the
 `.cpu` directive: `default`, `6502`, `6502i`, `65c02`, `65ce02`, `65dtv02`,
 `65el02`, `65816`, `r65c02`, `w65c02`, `4510`, `45gs02`.
 
-There is no `6510`: the C64's CPU is `6502i`, the NMOS set that *includes* the
-undocumented opcodes. Plain `6502` is the documented set only and is the same
-target as `default`.
-
-The default is deliberately wider than 64tass's own (`--m65xx`, i.e. `6502`).
-Label detection keys off the opcode table, so on too narrow a target a line like
-`start lax $10` indexes to *no label at all* and navigation silently disappears.
-Being too wide only risks reading a label named after an undocumented mnemonic as
-an instruction.
 
 A `.cpu "..."` directive in a file is honoured automatically, and overrides the
 setting for that file and everything it `.include`s.
@@ -84,10 +62,6 @@ workspace root.
 ```json
 "64tass.includePaths": ["libs", "../shared/asm"]
 ```
-
-Without this, an include that only resolves through `-I` on the real build
-command line is invisible to the extension, and every symbol it defines reads as
-undefined.
 
 ## Pragmas
 
@@ -135,11 +109,45 @@ Symbols used in a `.if` branch that provably cannot be taken are not reported as
 ; 64tass-langserv: define include_music = 0
 
         .if include_music = 1
-        jsr play_music    ; not reported: this branch is inactive
+        jsr music.play    ; not reported: this branch is inactive
         .endif
 ```
 
 ## Known issues
+
+**A function that returns a label with members attached to it loses those
+members.** A `.function` can hand back a namespace in two ways, and only one of
+them is tracked.
+
+This one works — `namespace(*)` returns the function's *own* scope, so its
+top-level labels become the members:
+
+```asm
+split   .function _v
+LOW     = _v & $ff              ; a label of the function itself
+HIGH    = _v >> 8
+        .endf namespace(*)      ; hand back this scope
+
+addr    = split($1234)
+        lda #addr.LOW           ; resolves, completes, go-to-definition works
+```
+
+This one does not — the members are hung on a label inside the function, and
+that label is returned instead:
+
+```asm
+split   .function _v
+_r      .text ""                ; a label...
+_r.LOW  = _v & $ff              ; ...with a member attached to it
+        .endf _r                ; hand back the label
+
+addr    = split($1234)
+        lda #addr.LOW           ; reported as undefined, though it assembles
+```
+
+Both assemble. The second is what 64tass's own `loading_a_sid_file` example does,
+which is why `music.init` reads as undefined there. Dotted assignments onto a
+label are not yet indexed as members of it.
 
 **A color picker box may appear on values like `cpx #250`.** VS Code's own color
 decorator mistakes a hex-looking immediate operand for a CSS color. This is

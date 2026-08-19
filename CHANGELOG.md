@@ -2,6 +2,60 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [0.10.0] - 2026-08-19
+
+### Added
+- **CPU Targets** - Support for all CPU types 64tass does support. Defaults to `6502i`, 65xx with undocumented opcodes
+- **Include Search Paths** - New `64tass.includePaths` setting mirroring 64tass's `-I`
+  flag, so an include that only resolves through the build command line is no longer
+  invisible
+- **Opcode Hover** - Hovering a mnemonic shows info about the instruction
+- **Document Links** - Ctrl-click the quoted path of an `.include`, `.binclude` or
+  `.binary`. Only paths that actually resolve become links, so a broken one stands out
+- **Quick Fixes** - Suggests the closest visible label for a misspelled symbol or macro
+  name, and offers to close a block that was never closed
+- **Expand Selection** - Shift+Alt+Right steps out through word, operand, operand list,
+  line, each enclosing block, then the document
+- **`.binclude` Scoping** - A `label .binclude "f"` now indexes f into the block scope the
+  label opens, so its symbols resolve as `label.sym`
+
+### Improved
+- **Completion** - Symbols are offered only from files assembled together with the current
+  one, so an unrelated program elsewhere in the workspace no longer pollutes the list.
+  After a comma in an operand only the index registers valid for that instruction on that
+  CPU are offered, never labels
+- **Performance** - Symbol lookup no longer scans every label in the workspace on each
+  call, which made it roughly ten times faster on a large project
+- **Dynamic Members** - Members now resolve through a label attached to a macro call
+  (`virt #drv`), a label assigned from a function returning a namespace (`PIC = mk(5)`),
+  and the keys of a dict literal (`D = {.MAP: 1}`)
+
+### Fixed
+- **Undocumented Opcodes** - `.cpu "6502"` is the documented set only; the undocumented
+  opcodes belong to `6502i`. They were previously attributed to the wrong target
+- **Built-in Names** - The list of built-ins was missing every type object (`int`, `bool`,
+  `str`, `bytes`, `list`, `dict`, `tuple`, `float`, `bits`, `code`, `gap`, `type`,
+  `address`, `register`, `symbol`, `namespace`) and `pi`
+- **`.comment` Blocks** - Their contents are no longer indexed or checked; the assembler
+  discards them, so a label in there is not defined at all
+- **Expressions** - Slices (`d[:2000:2]`), the ternary `?:`, `..`, `==`, `!=`, `<=`, `>=`,
+  `&&`, `||`, `**`, `%`, `!` and `~` no longer produce a spurious "operator is expected"
+- **`.for` Loops** - The variable of a `.for x in list` loop is now indexed, including the
+  multi-variable form and loops sharing a line with an anonymous label
+- **Function Parameters** - A parameter written `_data : binary` or `count = 5` now
+  resolves inside the function body
+- **Compound Assignment** - `_v ..= [x]` is a modification, not a redefinition, so building
+  a list up no longer reports duplicate labels
+- **Dict Keys** - `{.MAP: 1}` no longer reports its keys as an undefined macro and symbol
+- **Register Operands** - `lda x`, `ldx s`, `asl a` and friends are no longer reported as
+  undefined symbols; 45GS02's `q` and 65EL02's `i` were missing
+- **Unclosed `.logical`** - Now reported; `.here` closes `.logical` only, not `.virtual`
+- **`.with` Blocks** - Symbols imported by a `.with` now resolve
+- **Struct Instances** - `name .dstruct type` resolves `name.member` against that type
+- **Conditional Branches** - Two definitions in mutually exclusive `.if` branches no longer
+  count as duplicates
+- **Comments** - A semicolon inside a string is no longer treated as starting a comment
+
 ## [0.9.2] - 2026-08-18
 
 ### Added
