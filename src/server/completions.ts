@@ -11,7 +11,8 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { DocumentIndex, LabelKind } from './types';
-import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES } from './constants';
+import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES, DEFAULT_CPU } from './constants';
+import { addressingModesFor } from './addressing';
 import { collectVisibleLabels, collectVisibleParameters } from './symbols';
 
 // Label kinds that represent something addressable, i.e. valid as a bare opcode
@@ -111,6 +112,74 @@ function getOpcodeCompletions(prefix: string): CompletionItem[] {
         }
     }
     return items;
+}
+
+/**
+ * Where a comma sits in an operand. The three positions take different
+ * registers, so they must not be lumped together:
+ *   plain        `lda $1234,x`    - no brackets involved
+ *   inside       `lda ($10,x)`    - within an unclosed bracket
+ *   after-close  `lda ($10),y`    - after the bracket has closed
+ */
+export type CommaContext = 'plain' | 'inside' | 'after-close';
+
+/**
+ * The registers valid immediately after a comma in this mnemonic's operand.
+ *
+ * Read out of the addressing table rather than from a blanket list, so it is
+ * exact per opcode, per CPU and per position: `ldx $10,` takes only Y, `inc $10,`
+ * only X, `lda $10,` takes X or Y - plus S on the 65816 and Z on the
+ * 4510/45GS02 - while `lda ($10),` takes only Y.
+ *
+ * Empty when the mnemonic has no such form at all: `jmp $1234,` and
+ * `bbr 3,$10,` take an address there, and the caller falls back to symbols.
+ */
+export function indexRegistersFor(cpu: string, mnemonic: string, context: CommaContext): string[] {
+    const registers = new Set<string>();
+    for (const [pattern] of addressingModesFor(cpu, mnemonic)) {
+        let depth = 0;
+        let closed = false;
+        for (let i = 0; i < pattern.length; i++) {
+            const char = pattern[i];
+            if (char === '(' || char === '[') {
+                depth++;
+            } else if (char === ')' || char === ']') {
+                depth--;
+                closed = true;
+            } else if (char === ',') {
+                const at: CommaContext = depth > 0 ? 'inside' : closed ? 'after-close' : 'plain';
+                const register = pattern.slice(i + 1).match(/^\s*([a-z]+)/);
+                if (register && at === context) registers.add(register[1]);
+            }
+        }
+    }
+    return [...registers].sort();
+}
+
+/**
+ * Classify the comma the cursor sits after, ignoring brackets inside strings.
+ */
+function commaContextAt(text: string): CommaContext {
+    let depth = 0;
+    let closed = false;
+    let quote: string | null = null;
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (quote) {
+            if (char === quote) {
+                if (text[i + 1] === quote) i++;
+                else quote = null;
+            }
+        } else if (char === '"' || char === "'") {
+            quote = char;
+        } else if (char === '(' || char === '[') {
+            depth++;
+        } else if (char === ')' || char === ']') {
+            depth = Math.max(0, depth - 1);
+            closed = true;
+        }
+    }
+    return depth > 0 ? 'inside' : closed ? 'after-close' : 'plain';
 }
 
 /**
@@ -223,5 +292,24 @@ export function getCompletions(
     // Operand position after a real opcode: only addressable kinds make sense
     // (macro/function names are never referenced as a bare operand).
     const afterOpcode = OPCODES.has(firstToken) || (tokens.length > 1 && OPCODES.has(tokens[1].toLowerCase()));
+
+    // Directly after a comma in an operand, the only thing that can follow is an
+    // index register - a label there would never assemble. Which registers is
+    // fixed by the mnemonic and the CPU, so the addressing table decides.
+    if (afterOpcode && /,\s*$/.test(before)) {
+        const mnemonic = OPCODES.has(firstToken) ? firstToken : tokens[1]?.toLowerCase();
+        const cpu = documentIndex.get(document.uri)?.cpu ?? DEFAULT_CPU;
+        const registers = mnemonic ? indexRegistersFor(cpu, mnemonic, commaContextAt(before)) : [];
+        if (registers.length > 0) {
+            return registers
+                .filter(register => register.startsWith(prefix.toLowerCase()))
+                .map(register => ({
+                    label: register,
+                    kind: CompletionItemKind.Keyword,
+                    detail: 'index register'
+                }));
+        }
+    }
+
     return getSymbolCompletions(document, position, documentIndex, afterOpcode, visibleUris);
 }

@@ -20,7 +20,12 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Workspace symbol search** (Ctrl+T) by fuzzy name, including files you have
   not opened.
 - **Completion** for directives, opcodes, in-scope symbols, macro and function
-  parameters, and filenames for `.include` / `.binclude` / `.binary`.
+  parameters, and filenames for `.include` / `.binclude` / `.binary`. Symbols come
+  only from files assembled together with the current one, so an unrelated
+  program elsewhere in the workspace does not pollute the list. After a comma in
+  an operand only the index registers valid *for that instruction on that CPU*
+  are offered — `ldx $10,` gives Y alone, `lda ($10),` gives Y, and the 65816
+  adds S where it applies.
 - **Signature help** while typing a macro or function call — `#mac a, b`,
   `.mac a, b` and `fn(a, b)`.
 - **Hover** showing a symbol's scope, its documentation comment, and its value in
