@@ -422,3 +422,13 @@ describe('completion after a dot', () => {
         expect(at(source, 9, 24)).toEqual([]);
     });
 });
+
+describe('completion carries documentation', () => {
+    it('attaches a plain constant\'s comment as documentation', () => {
+        const source = 'counter = $10   ; how many trees\nstart\n        lda #';
+        const { documentIndex, docs } = buildIndex({ source });
+        const item = getCompletions(docs[0], Position.create(2, 13), documentIndex)
+            .find(i => i.label === 'counter');
+        expect(item?.documentation).toBe('how many trees');
+    });
+});

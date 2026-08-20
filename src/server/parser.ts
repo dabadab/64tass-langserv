@@ -73,6 +73,8 @@ export function parseDocument(
         return parts.length > 0 ? parts.join('.') : null;
     }
 
+    // No documentation comment on these three: a pragma's own line IS the comment,
+    // so it would document itself with its own syntax.
     // Symbols supplied by "; 64tass-langserv: define NAME = VALUE" pragmas, which
     // stand in for the -D flags a real build passes on the command line. Indexed as
     // ordinary re-assignable variables so they resolve like any other symbol.
@@ -333,7 +335,8 @@ export function parseDocument(
                 scopePath: getCurrentScopePath(),
                 localScope: null,
                 isLocal: false,
-                kind: 'code'
+                kind: 'code',
+                comment: getBlockComment(lines, lineNum)
             });
             continue;
         }
@@ -364,7 +367,8 @@ export function parseDocument(
                 scopePath: getCurrentScopePath(),
                 localScope: null,
                 isLocal: false,
-                kind: 'code'
+                kind: 'code',
+                comment: getBlockComment(lines, lineNum)
             });
             continue;
         }
@@ -422,7 +426,8 @@ export function parseDocument(
                         scopePath: getCurrentScopePath(),
                         localScope: null,
                         isLocal: false,
-                        kind: 'data'
+                        kind: 'data',
+                        comment: getBlockComment(lines, lineNum)
                     });
                 }
 
@@ -440,7 +445,8 @@ export function parseDocument(
                         scopePath: getCurrentScopePath(),
                         localScope: isLocal ? currentLocalScope : null,
                         isLocal,
-                        kind: 'var'
+                        kind: 'var',
+                        comment: getBlockComment(lines, lineNum)
                     });
                 }
                 // An anonymous label on this line still has to be registered, so
@@ -473,7 +479,8 @@ export function parseDocument(
                 localScope: isLocal ? currentLocalScope : null,
                 isLocal,
                 kind: 'var',
-                value: value || undefined
+                value: value || undefined,
+                comment: getBlockComment(lines, lineNum)
             });
             continue;
         }
@@ -505,7 +512,8 @@ export function parseDocument(
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope,
                 isLocal: true,
-                kind: operator === ':=' ? 'var' : 'const'
+                kind: operator === ':=' ? 'var' : 'const',
+                comment: getBlockComment(lines, lineNum)
             });
             continue;
         }
@@ -521,7 +529,8 @@ export function parseDocument(
 
             // Validate that all symbols are the same (no mixing + and -)
             if (symbols.split('').every(c => c === direction)) {
-                // Create a separate label for each + or - symbol
+                // Create a separate label for each + or - symbol. No documentation
+                // comment: these are never hovered or completed by name.
                 for (let i = 0; i < symbols.length; i++) {
                     labels.push({
                         name: direction, // '+' or '-'
@@ -564,7 +573,8 @@ export function parseDocument(
                 scopePath: getCurrentScopePath(),
                 localScope: null,
                 isLocal: false,
-                kind: 'data'
+                kind: 'data',
+                comment: getBlockComment(lines, lineNum)
             });
             continue;
         }
@@ -591,7 +601,8 @@ export function parseDocument(
                 scopePath: getCurrentScopePath(),
                 localScope: null,
                 isLocal: false,
-                kind: 'data'
+                kind: 'data',
+                comment: getBlockComment(lines, lineNum)
             });
             structInstances.set(normalizeName(labelName), structName);
             continue;
@@ -626,7 +637,8 @@ export function parseDocument(
                     scopePath: getCurrentScopePath(),
                     localScope: null,
                     isLocal: false,
-                    kind: 'data'
+                    kind: 'data',
+                    comment: getBlockComment(lines, lineNum)
                 });
                 // Track the macro used to define this label (for sub-label validation)
                 labelDefinedByMacro.set(normalizeName(labelName), macroCalled);
@@ -657,7 +669,8 @@ export function parseDocument(
                 localScope: isLocal ? currentLocalScope : null,
                 isLocal,
                 kind: isReassignable ? 'var' : 'const',
-                value: value || undefined
+                value: value || undefined,
+                comment: getBlockComment(lines, lineNum)
             });
 
             // "PIC = mk(5)" where mk is a .function returning namespace(*) makes
@@ -672,7 +685,9 @@ export function parseDocument(
 
             // "COLORING = {.MAP: a, .CHAR: c}" makes the keys reachable as
             // COLORING.CHAR, and not as a bare CHAR (verified), so each key is
-            // indexed as a member of the label being assigned.
+            // indexed as a member of the label being assigned. The line's comment
+            // documents that assignment as a whole, so it is not copied onto every
+            // key as well.
             const rawValue = constMatch[4] ?? '';
             const valueStart = constMatch[0].length - rawValue.length;
             const ownPath = getCurrentScopePath();

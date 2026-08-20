@@ -480,6 +480,67 @@ describe('parseDocument - comment association', () => {
         const index = parse('; Documentation for myproc\nmyproc .proc\n.pend');
         expect(index.labels[0].comment).toBe('Documentation for myproc');
     });
+
+    // Documentation used to reach only scope openers and .binclude labels, so
+    // "counter = $10 ; how many" showed nothing at all on hover or in completion.
+    const commentOf = (source: string, name: string) =>
+        parse(source).labels.find(l => l.name === name)?.comment;
+
+    it.each([
+        ['a constant', 'counter = $10   ; how many trees', 'counter', 'how many trees'],
+        ['a code label', 'start           ; entry point\n        rts', 'start', 'entry point'],
+        ['a code label with an opcode', 'start   lda #1  ; entry point', 'start', 'entry point'],
+        ['a data label', 'tbl     .byte 0 ; the table', 'tbl', 'the table'],
+        ['a := variable', 'v := 1          ; a counter', 'v', 'a counter'],
+        ['a .var variable', 'v .var 1        ; a counter', 'v', 'a counter'],
+        ['a .for loop variable', '        .for i = 0, i < 3, i = i + 1 ; loop\n        .next', 'i', 'loop'],
+    ])('documents %s from the same line', (_name, source, label, expected) => {
+        expect(commentOf(source, label)).toBe(expected);
+    });
+
+    it('documents a local symbol', () => {
+        expect(commentOf('lbl\n_tmp = 1        ; scratch', '_tmp')).toBe('scratch');
+    });
+
+    it('documents a label on a macro call', () => {
+        expect(commentOf('m .macro\n.endm\nx #m            ; made by m', 'x')).toBe('made by m');
+    });
+
+    it('documents a .dstruct instance', () => {
+        const source = 'pt .struct\na .byte 0\n.endstruct\np1 .dstruct pt  ; a point';
+        expect(commentOf(source, 'p1')).toBe('a point');
+    });
+
+    it.each([
+        ['above', '; how many trees\ncounter = $10'],
+        ['below', 'counter = $10\n; how many trees'],
+    ])('takes a comment from the line %s a constant', (_where, source) => {
+        expect(commentOf(source, 'counter')).toBe('how many trees');
+    });
+
+    it('joins a run of comment lines above', () => {
+        const comment = commentOf('; first\n; second\ncounter = $10', 'counter');
+        expect(comment).toContain('first');
+        expect(comment).toContain('second');
+    });
+
+    it('prefers the same line over the lines around it', () => {
+        expect(commentOf('; above\ncounter = $10 ; beside\n; below', 'counter')).toBe('beside');
+    });
+
+    it.each([
+        ['an anonymous label', '-               ; a marker\n        rts', '-'],
+        ['a define pragma symbol', '; 64tass-langserv: define FOO = 1', 'foo'],
+    ])('leaves %s undocumented', (_name, source, label) => {
+        expect(commentOf(source, label)).toBeUndefined();
+    });
+
+    it('documents a dict assignment but not its keys', () => {
+        // The comment describes the whole literal, not each individual key.
+        const source = 'D = {.MAP: 1}   ; the modes';
+        expect(commentOf(source, 'd')).toBe('the modes');
+        expect(commentOf(source, 'map')).toBeUndefined();
+    });
 });
 
 describe('parseDocument - anonymous labels', () => {

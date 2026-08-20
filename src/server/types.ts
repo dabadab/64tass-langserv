@@ -31,7 +31,11 @@ export interface LabelDefinition {
     // For anonymous labels: count of symbols in definition (+++  = 3)
     anonymousCount?: number;
     value?: string;
-    // Documentation comment from same line, line above, or line below
+    // Documentation comment, shown on hover and in completion. Taken from the
+    // same line, else a run of comment-only lines directly above, else one
+    // directly below (see getBlockComment). Every symbol a user writes carries
+    // one; the exceptions are anonymous labels, define-pragma symbols and
+    // dict-literal keys, for the reasons given at those branches in parser.ts.
     comment?: string;
 }
 

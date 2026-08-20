@@ -110,6 +110,12 @@ describe('symbolHover', () => {
         expect(t).toContain('$FF');
     });
 
+    it('shows the documentation comment of a plain constant', () => {
+        // Not just scopes: this is what a user actually writes most of the time.
+        const { documentIndex, docs } = buildIndex({ source: 'counter = $10   ; how many trees\n        lda #counter' });
+        expect(text(symbolHover('counter', docs[0].uri, 1, documentIndex, false))).toContain('how many trees');
+    });
+
     it('returns nothing for an unknown symbol', () => {
         const { documentIndex, docs } = buildIndex({ source: 'start\n        rts' });
         expect(symbolHover('nope', docs[0].uri, 1, documentIndex, false)).toBeNull();

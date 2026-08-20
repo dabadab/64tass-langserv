@@ -190,6 +190,14 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   type's member. A member the type does not declare is still reported, matching the
   assembler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
+- **Documentation comments**: `getBlockComment` (`utils.ts`) takes the same-line
+  comment, else a run of comment-only lines directly above, else one directly
+  below, and `LabelDefinition.comment` carries it to hover and completion. It
+  applies to EVERY symbol a user writes - it used to reach only scope openers and
+  `.binclude` labels, so `counter = $10 ; how many` documented nothing. Three
+  branches deliberately opt out, each said so at the branch: anonymous labels
+  (never named), define-pragma symbols (the pragma line is itself the comment) and
+  dict-literal keys (the comment describes the assignment, not each key).
 - **Symbol name characters**: the manual's rule is "starting with a letter and
   containing letters, numbers and underscores", and anything else ENDS the name -
   `CODE_£ = $30` defines `CODE_` and then fails, so ten such lines in a row all
@@ -260,7 +268,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1157 tests); compiles first
+yarn test          # Run all tests (currently 1176 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
