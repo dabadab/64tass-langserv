@@ -2,6 +2,11 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [0.10.3] - 2026-08-20
+
+### Improved
+- **Hover and completion info** - comments shown for various things, scope open location for scope closers
+
 ## [0.10.2] - 2026-08-20
 
 ### Added

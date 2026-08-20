@@ -102,18 +102,6 @@ Acts as `-D label=value` for 64tass, for symbols your build supplies on the comm
 Defining them stops false "undefined symbol" / "duplicate symbol" reports, and lets the extension decide which
 `.if` branches are inactive.
 
-## Conditional blocks
-
-Symbols used in a `.if` branch that provably cannot be taken are not reported as undefined:
-
-```asm
-; 64tass-langserv: define include_music = 0
-
-        .if include_music = 1
-        jsr music.play    ; not reported: this branch is inactive
-        .endif
-```
-
 ## Known issues
 
 **A function that returns a label with members attached to it loses those
