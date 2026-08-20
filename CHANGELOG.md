@@ -2,6 +2,28 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [0.10.2] - 2026-08-20
+
+### Added
+- **Editor Defaults** - `.asm` files now get `editor.acceptSuggestionOnEnter: "smart"`,
+  so Enter accepts a suggestion only when that would actually change the text. Typing a
+  symbol in full and pressing Enter opens the next line instead of the completion popup
+  swallowing the keypress; Tab still accepts. Overridable in your own `settings.json`
+
+### Fixed
+- **Invalid Symbol Names Went Unreported** - a name may contain only letters, numbers and
+  underscores, and anything else ends it rather than belonging to it: `CODE_£ = $30`
+  defines `CODE_` and then fails, so a run of such lines silently redefines the same
+  truncated name. These are now reported, where before the file simply would not assemble
+  with no hint why
+- **Mnemonics From Other CPUs Were Suggested** - the completion list came from the union
+  of every target, so a `6502` file was offered `bra`, `brl`, `bbr` and other instructions
+  it cannot assemble. It now follows the file's CPU
+- **Completion After a Dot** - typing `scope.` listed the symbols visible at the cursor,
+  none of which can follow a dot. It now offers that scope's members, resolving the scope
+  the same way go-to-definition does - so a `.dstruct` instance, and a label standing in
+  for a macro's or a function's scope, offer the right members too
+
 ## [0.10.0] - 2026-08-19
 
 ### Added
