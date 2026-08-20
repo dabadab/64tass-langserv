@@ -43,7 +43,8 @@
     ],
     "configurationDefaults": {
       "[64tass]": {
-        "editor.colorDecorators": false
+        "editor.colorDecorators": false,
+        "editor.acceptSuggestionOnEnter": "smart"
       }
     },
     "configuration": {

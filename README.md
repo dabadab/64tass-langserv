@@ -149,16 +149,25 @@ Both assemble. The second is what 64tass's own `loading_a_sid_file` example does
 which is why `music.init` reads as undefined there. Dotted assignments onto a
 label are not yet indexed as members of it.
 
-**A color picker box may appear on values like `cpx #250`.** VS Code's own color
-decorator mistakes a hex-looking immediate operand for a CSS color. This is
-built into VS Code and cannot be suppressed by an extension; turn it off for this
-language in `settings.json`:
+## Editor defaults
+
+The extension ships two language-scoped defaults for `.asm` files. Both are
+ordinary settings, so anything in your own `settings.json` wins:
 
 ```json
 "[64tass]": {
-    "editor.colorDecorators": false
+    "editor.colorDecorators": false,
+    "editor.acceptSuggestionOnEnter": "smart"
 }
 ```
+
+`colorDecorators` is off because VS Code's built-in colour decorator mistakes a
+hex-looking immediate operand such as `cpx #250` for a CSS colour and paints a
+colour-picker box on it.
+
+`acceptSuggestionOnEnter` is `smart` so Enter only accepts a suggestion when that
+would actually change the text. Type a symbol in full and Enter opens the next
+line; type a prefix and Enter still completes it. Tab always accepts.
 
 ## Installation
 
