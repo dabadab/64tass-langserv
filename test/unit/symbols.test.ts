@@ -705,3 +705,67 @@ describe('dict literal member lookup', () => {
         expect(findSymbolInfo('D.NOSUCH', docs[0].uri, 2, documentIndex, false)).toBeNull();
     });
 });
+
+describe('a qualified name resolves through the scope chain', () => {
+    // All four verified against the assembler: from global, "keyboard.scan" does
+    // NOT find a keyboard nested inside qwe - only the full path does - while the
+    // same reference from inside qwe, or from a sibling scope within it, resolves.
+    const NESTED = ['qwe     .block', 'keyboard .proc', 'scan    rts', '        .pend', '        .bend'].join('\n');
+
+    it('does not reach a nested scope by its tail from outside', () => {
+        const { documentIndex, docs } = buildIndex({ source: '        jsr keyboard.scan\n' + NESTED });
+        expect(findSymbolInfo('keyboard.scan', docs[0].uri, 0, documentIndex)).toBeNull();
+    });
+
+    it('reaches it by its full path', () => {
+        const { documentIndex, docs } = buildIndex({ source: '        jsr qwe.keyboard.scan\n' + NESTED });
+        expect(findSymbolInfo('qwe.keyboard.scan', docs[0].uri, 0, documentIndex)?.name).toBe('scan');
+    });
+
+    it('reaches it from inside the enclosing scope', () => {
+        const source = ['qwe     .block', 'keyboard .proc', 'scan    rts', '        .pend',
+                        '        jsr keyboard.scan', '        .bend'].join('\n');
+        const { documentIndex, docs } = buildIndex({ source });
+        expect(findSymbolInfo('keyboard.scan', docs[0].uri, 4, documentIndex)?.name).toBe('scan');
+    });
+
+    it('reaches it from a sibling scope', () => {
+        const source = ['qwe     .block', 'keyboard .proc', 'scan    rts', '        .pend',
+                        'other   .proc', '        jsr keyboard.scan', '        .pend',
+                        '        .bend'].join('\n');
+        const { documentIndex, docs } = buildIndex({ source });
+        expect(findSymbolInfo('keyboard.scan', docs[0].uri, 5, documentIndex)?.name).toBe('scan');
+    });
+
+    it('still resolves a scope that really is at the top level', () => {
+        const source = ['keyboard .proc', 'scan    rts', '        .pend', '        jsr keyboard.scan'].join('\n');
+        const { documentIndex, docs } = buildIndex({ source });
+        expect(findSymbolInfo('keyboard.scan', docs[0].uri, 3, documentIndex)?.name).toBe('scan');
+    });
+});
+
+describe('a function that returns one of its own scopes', () => {
+    const SOURCE = [
+        'ctm7    .function d',
+        'mapdata .namespace',
+        'COLORS  = 5',
+        'CHARS   .namespace',
+        'DATA    = 6',
+        '        .endnamespace',
+        '        .endnamespace',
+        '        .endf mapdata',
+        'MAPDATA = ctm7("x")',
+        '        lda #MAPDATA.COLORS',
+    ].join('\n');
+
+    it('exposes the returned scope\'s members, not the function\'s own', () => {
+        const { documentIndex, docs } = buildIndex({ source: SOURCE });
+        expect(findSymbolInfo('MAPDATA.COLORS', docs[0].uri, 9, documentIndex)?.scopePath).toBe('ctm7.mapdata');
+    });
+
+    it('substitutes only the leading segment of a longer path', () => {
+        const { documentIndex, docs } = buildIndex({ source: SOURCE });
+        expect(findSymbolInfo('MAPDATA.CHARS.DATA', docs[0].uri, 9, documentIndex)?.scopePath)
+            .toBe('ctm7.mapdata.chars');
+    });
+});

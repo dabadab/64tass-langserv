@@ -2,7 +2,7 @@ import { Range, Position } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
-import { SCOPE_OPENERS, opcodesForCpu, DEFAULT_CPU } from './constants';
+import { SCOPE_OPENERS, OPENER_TO_CLOSERS, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { resolveIncludePath } from './paths';
 import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys } from './utils';
 
@@ -46,6 +46,7 @@ export function parseDocument(
     const parametersAtScope: Map<string, string[]> = new Map();
     const macroSubLabels: Map<string, string[]> = new Map();
     const labelDefinedByMacro: Map<string, string> = new Map();
+    const functionReturnScope: Map<string, string> = new Map();
     const structInstances: Map<string, string> = new Map();
     const includes: string[] = [];
     const includeScopes: Map<string, string> = new Map();
@@ -194,9 +195,14 @@ export function parseDocument(
 
         // Check for scope-closing directives first
         let closedScope = false;
-        for (const [open, close] of Object.entries(SCOPE_OPENERS)) {
-            // Safe: directive name from static constant (SCOPE_OPENERS)
-            const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
+        for (const open of Object.keys(SCOPE_OPENERS)) {
+            // Every closer the directive accepts, not just the primary one:
+            // `.endnamespace` is not matched by a pattern built from `.endn`,
+            // since \b needs a word boundary that "endnamespace" does not have.
+            // Missing the long forms left every scope after one of them open.
+            // Safe: directive names from the static OPENER_TO_CLOSERS table.
+            const closePattern = new RegExp(
+                `(?:^|\\s)(?:${OPENER_TO_CLOSERS[open].map(c => `\\${c}`).join('|')})\\b`, 'i');
             if (closePattern.test(lineLower)) {
                 // If closing a macro, extract sub-labels from its body (stored normalized)
                 if (open === '.macro' && currentMacroCapture) {
@@ -213,6 +219,18 @@ export function parseDocument(
                         macroSubLabels.set(currentMacroCapture.name, subLabels);
                     }
                     currentMacroCapture = null;
+                }
+
+                // "`.endf mapdata`" returns a scope defined inside the function, so
+                // the members of a call's result are that scope's, not the
+                // function's own. "`.endf namespace(*)`" returns the function scope
+                // itself and needs no entry - that is the default.
+                if (open === '.function') {
+                    const returned = line.match(/(?:^|\s)\.endf(?:unction)?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:;.*)?$/i);
+                    const functionPath = getCurrentScopePath();
+                    if (returned && functionPath) {
+                        functionReturnScope.set(functionPath, `${functionPath}.${normalizeName(returned[1])}`);
+                    }
                 }
 
                 // Pop matching scope from stack
@@ -720,5 +738,5 @@ export function parseDocument(
         else labelsByName.set(label.name, [label]);
     }
 
-    return { labels, labelsByName, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu };
+    return { labels, labelsByName, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu };
 }

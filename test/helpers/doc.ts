@@ -60,6 +60,7 @@ export function emptyIndex(overrides: Partial<DocumentIndex> = {}): DocumentInde
         parametersAtScope: new Map(),
         macroSubLabels: new Map(),
         labelDefinedByMacro: new Map(),
+        functionReturnScope: new Map(),
         structInstances: new Map(),
         includes: [],
         includeScopes: new Map(),

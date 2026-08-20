@@ -101,8 +101,25 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   of short names, so `lda i` is still reported.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`
 - **Local symbols**: Start with `_`, scoped to the nearest code label above them
+- **Qualified names**: `a.b` resolves `a` through the ordinary scope chain, so its
+  full path must be `<some enclosing scope>.a` (verified: from global,
+  `keyboard.scan` does NOT reach a `keyboard` nested inside `qwe`; from inside
+  `qwe`, or from a sibling scope within it, it does). `scopeCandidates` in
+  `symbols.ts` splits this into `reachable` (the written path, matched exactly
+  against the chain) and `substituted` (what the name STANDS FOR - a `.dstruct`
+  type, a macro-call label, a function's result - matched loosely, since the
+  substitution already pins the identity). Only the FIRST segment substitutes.
+  Loose matching everywhere used to hide two bugs: the parser not closing scopes
+  on long-form closers, and `keyboard.scan` resolving from anywhere.
+- **Function results**: `DocumentIndex.functionReturnScope` maps a `.function` to
+  the scope its `.endf <name>` hands back, so `X = fn(...)` exposes THAT scope's
+  members. `.endf namespace(*)` returns the function's own scope and needs no
+  entry.
 - **Scope resolution**: Searches from current scope up to global, then any scopes
-  imported by an enclosing `.with`. `.with X` makes X's members visible unqualified
+  imported by an enclosing `.with`. `.with` scopes accumulate - `.with b` inside
+  `.with a` searches `a.b` - and apply to qualified names too, so inside
+  `.with MAPDATA` the reference `CHARS.DATA` means `MAPDATA.CHARS.DATA`. The
+  expansion is applied once (`applyWith`), or it would recurse forever. `.with X` makes X's members visible unqualified
   but does NOT change where definitions land - a label defined inside a `.with` block
   belongs to the enclosing scope (verified). So it is recorded per line as
   `scopeAtLine[n].withScopes` (raw names, resolved at query time since the target may

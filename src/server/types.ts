@@ -61,6 +61,10 @@ export interface DocumentIndex {
     // assignment. Both make that scope's labels reachable as "label.member" and
     // not as a bare "member" (verified), so the mapping is resolved at query time.
     labelDefinedByMacro: Map<string, string>;
+    // A .function's scope path -> the scope its `.endf <name>` hands back, when
+    // that is a scope defined inside it. `.endf namespace(*)` returns the
+    // function's own scope and gets no entry.
+    functionReturnScope: Map<string, string>;
     // Maps a .dstruct/.dunion instance name to the .struct/.union it instantiates,
     // so "instance.member" can be resolved to that type's member.
     structInstances: Map<string, string>;

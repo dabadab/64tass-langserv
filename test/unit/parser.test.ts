@@ -979,3 +979,28 @@ describe('dict literal members', () => {
         expect(parse('D       = 5').labels.map(l => l.name)).toEqual(['d']);
     });
 });
+
+describe('long-form scope closers', () => {
+    // `.endnamespace` is not matched by a pattern built from `.endn`, so these
+    // used to leave the scope open and nest everything after them inside it.
+    it.each([
+        ['.proc', '.endproc'], ['.proc', '.pend'],
+        ['.block', '.endblock'], ['.block', '.bend'],
+        ['.namespace', '.endnamespace'], ['.namespace', '.endn'],
+        ['.macro', '.endmacro'], ['.macro', '.endm'],
+        ['.function', '.endfunction'], ['.function', '.endf'],
+        ['.struct', '.endstruct'], ['.struct', '.ends'],
+        ['.union', '.endunion'], ['.union', '.endu'],
+    ])('%s is closed by %s', (open, close) => {
+        const index = parse(`a ${open}\ninner = 1\n        ${close}\nafter = 2`);
+        expect(index.labels.find(l => l.name === 'after')?.scopePath).toBeNull();
+    });
+
+    it('does not nest sibling scopes that used a long-form closer', () => {
+        const index = parse([
+            'outer   .namespace', 'one     .namespace', 'a = 1', '        .endnamespace',
+            'two     .namespace', 'b = 2', '        .endnamespace', '        .endnamespace',
+        ].join('\n'));
+        expect(index.labels.find(l => l.name === 'b')?.scopePath).toBe('outer.two');
+    });
+});

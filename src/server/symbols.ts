@@ -154,30 +154,67 @@ export function findAnonymousLabel(
 }
 
 /**
- * Scope paths to try for the part before the dot of a qualified reference.
+ * How a qualified reference's scope may be reached, given where it is written.
  *
- * A name in front of the dot may stand for another scope entirely:
- *   - a .dstruct/.dunion instance exposes its type's members, so "p1.posx"
- *     resolves as "pt.posx"
- *   - a label on a macro call, or assigned from a function returning
- *     namespace(*), exposes that macro's or function's own labels
+ * `reachable` are full scope paths the WRITTEN path can name from this point.
+ * 64tass resolves it through the ordinary scope chain (verified): from global,
+ * `keyboard.scan` does not find a `keyboard` nested inside `qwe` - only
+ * `qwe.keyboard.scan` does - while the same reference from inside `qwe`, or from
+ * a sibling scope within it, resolves fine. So these are matched exactly.
  *
- * The written path comes FIRST and the substitutes after it: a scope really
- * called `targetPath` is the better answer when one exists, and callers match a
- * candidate as the tail of a nested path anyway, so it is reached however deeply
- * it is nested.
+ * `substituted` are scopes the name STANDS FOR rather than names:
+ *   - a .dstruct/.dunion instance exposes its type's members ("p1.posx" is
+ *     "pt.posx")
+ *   - a label on a macro call, or assigned from a function, exposes that
+ *     macro's or function's labels - and for `.endf <name>`, the scope the
+ *     function actually hands back
+ * The identity is already pinned by the substitution, so these are matched
+ * loosely, as the tail of a nested path.
  */
-function scopeCandidates(targetPath: string, documentIndex: Map<string, DocumentIndex>): string[] {
-    const candidates = [targetPath];
+function scopeCandidates(
+    targetPath: string,
+    fromScope: string | null,
+    documentIndex: Map<string, DocumentIndex>
+): { reachable: string[]; substituted: string[] } {
+    const reachable = getScopeChain(fromScope)
+        .map(scope => (scope ? `${scope}.${targetPath}` : targetPath));
+
+    // Only the FIRST segment can stand for something else - it is the name that
+    // was assigned or instantiated. The rest is a path within whatever that is,
+    // so "MAPDATA.CHARS" substitutes to "ctm7.mapdata" + ".chars".
+    const dot = targetPath.indexOf('.');
+    const head = dot < 0 ? targetPath : targetPath.slice(0, dot);
+    const rest = dot < 0 ? '' : targetPath.slice(dot);
+
+    const substituted: string[] = [];
     for (const [, index] of documentIndex) {
-        const declaredType = index.structInstances.get(targetPath);
-        if (declaredType) { candidates.push(declaredType); break; }
+        const declaredType = index.structInstances.get(head);
+        if (declaredType) { substituted.push(declaredType + rest); break; }
     }
     for (const [, index] of documentIndex) {
-        const memberSource = index.labelDefinedByMacro.get(targetPath);
-        if (memberSource) { candidates.push(memberSource); break; }
+        const memberSource = index.labelDefinedByMacro.get(head);
+        if (memberSource) {
+            // A function whose `.endf` hands back a scope of its own exposes that
+            // scope's members, not the function's top-level ones.
+            for (const [, other] of documentIndex) {
+                const returned = other.functionReturnScope.get(memberSource);
+                if (returned) { substituted.push(returned + rest); break; }
+            }
+            substituted.push(memberSource + rest);
+            break;
+        }
     }
-    return candidates;
+    return { reachable, substituted };
+}
+
+/** Does this label live in one of the scopes a reference may be naming? */
+function inCandidateScope(
+    scopePath: string | null | undefined,
+    candidates: { reachable: string[]; substituted: string[] }
+): boolean {
+    if (candidates.reachable.includes(scopePath ?? '')) return true;
+    return candidates.substituted.some(candidate =>
+        scopePath === candidate || scopePath?.endsWith(`.${candidate}`));
 }
 
 /**
@@ -192,25 +229,22 @@ function scopeCandidates(targetPath: string, documentIndex: Map<string, Document
 export function collectScopeMembers(
     scopePath: string,
     documentIndex: Map<string, DocumentIndex>,
-    visibleUris?: ReadonlySet<string>
+    visibleUris?: ReadonlySet<string>,
+    fromScope: string | null = null
 ): LabelDefinition[] {
-    for (const candidate of scopeCandidates(scopePath, documentIndex)) {
-        const seen = new Set<string>();
-        const members: LabelDefinition[] = [];
-        for (const [uri, index] of documentIndex) {
-            if (visibleUris && !visibleUris.has(uri)) continue;
-            for (const label of index.labels) {
-                if (label.isLocal || label.isAnonymous || seen.has(label.name)) continue;
-                // Match the scope exactly, or as the tail of a nested path.
-                if (label.scopePath !== candidate && !label.scopePath?.endsWith('.' + candidate)) continue;
-                seen.add(label.name);
-                members.push(label);
-            }
+    const candidates = scopeCandidates(scopePath, fromScope, documentIndex);
+    const seen = new Set<string>();
+    const members: LabelDefinition[] = [];
+    for (const [uri, index] of documentIndex) {
+        if (visibleUris && !visibleUris.has(uri)) continue;
+        for (const label of index.labels) {
+            if (label.isLocal || label.isAnonymous || seen.has(label.name)) continue;
+            if (!inCandidateScope(label.scopePath, candidates)) continue;
+            seen.add(label.name);
+            members.push(label);
         }
-        // First candidate that resolves to anything wins, as in findSymbolInfo.
-        if (members.length > 0) return members;
     }
-    return [];
+    return members;
 }
 
 export function findSymbolInfo(
@@ -218,7 +252,10 @@ export function findSymbolInfo(
     fromUri: string,
     fromLine: number,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive = false
+    caseSensitive = false,
+    // Set false when already resolving through a `.with`, so expanding a name
+    // against the imported scopes cannot expand it again and again.
+    applyWith = true
 ): LabelDefinition | null {
     // Check if word is an anonymous label reference
     if (/^[+-]+$/.test(word)) {
@@ -246,23 +283,37 @@ export function findSymbolInfo(
 
     const isLocalSymbol = word.startsWith('_'); // Use original word for this check
 
+    // Scopes imported by an enclosing `.with`, innermost first. They accumulate:
+    // `.with b` inside `.with a` searches a.b, so the whole run is joined rather
+    // than each tried alone (verified). Resolving the joined path reuses the
+    // qualified-reference handling below, which knows how to reach a nested scope.
+    const resolveViaWith = (): LabelDefinition | null => {
+        if (!applyWith) return null;
+        const imported = lineScope?.withScopes ?? [];
+        for (let i = imported.length - 1; i >= 0; i--) {
+            const path = imported.slice(0, i + 1).join('.');
+            const found = findSymbolInfo(
+                `${path}.${lookupWord}`, fromUri, fromLine, documentIndex, caseSensitive, false);
+            if (found) return found;
+        }
+        return null;
+    };
+
     // Handle dotted references like "scope.symbol"
     if (lookupWord.includes('.')) {
         const parts = lookupWord.split('.');
         const targetName = parts[parts.length - 1];
         const targetPath = parts.slice(0, -1).join('.');
 
-        for (const candidate of scopeCandidates(targetPath, documentIndex)) {
-            for (const [, index] of documentIndex) {
-                for (const label of index.labelsByName.get(targetName) ?? []) {
-                    // Match the scope exactly, or as the tail of a nested path.
-                    if (label.scopePath === candidate || label.scopePath?.endsWith('.' + candidate)) {
-                        return label;
-                    }
-                }
+        const candidates = scopeCandidates(targetPath, currentScopePath, documentIndex);
+        for (const [, index] of documentIndex) {
+            for (const label of index.labelsByName.get(targetName) ?? []) {
+                if (inCandidateScope(label.scopePath, candidates)) return label;
             }
         }
-        return null;
+        // A qualified name can also be relative to a `.with`: inside `.with MAPDATA`,
+        // "CHARS.DATA" means "MAPDATA.CHARS.DATA".
+        return resolveViaWith();
     }
 
     // Local symbol lookup: must match same document, same scopePath, same localScope
@@ -288,17 +339,8 @@ export function findSymbolInfo(
         }
     }
 
-    // Finally, scopes imported by an enclosing `.with`, innermost first. Resolving
-    // "with.name" reuses the qualified-reference path above, which already matches a
-    // scope by suffix - so `.with b` nested inside `.with a` finds a member of a.b.
-    const imported = lineScope?.withScopes ?? [];
-    for (let i = imported.length - 1; i >= 0; i--) {
-        const viaWith = findSymbolInfo(
-            `${imported[i]}.${lookupWord}`, fromUri, fromLine, documentIndex, caseSensitive);
-        if (viaWith) return viaWith;
-    }
-
-    return null;
+    // Finally, anything an enclosing `.with` brought into view.
+    return resolveViaWith();
 }
 
 /**
