@@ -4,6 +4,8 @@ import {
     Diagnostic,
     DiagnosticSeverity
 } from 'vscode-languageserver/node';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex } from './types';
@@ -145,6 +147,15 @@ function findInvalidSymbolChar(code: string): { character: string; column: numbe
     return { character: offending, column: indent.length + name.indexOf(offending) };
 }
 
+/** Where a colliding definition is, named relative to the file being checked. */
+function describeLocation(label: LabelDefinition, fromUri: string): string {
+    const line = label.range.start.line + 1;
+    if (label.uri === fromUri) return `also defined on line ${line}`;
+    let name = label.uri;
+    try { name = path.basename(fileURLToPath(label.uri)); } catch { /* not a file URI */ }
+    return `also defined in ${name} on line ${line}`;
+}
+
 export function validateDocument(
     document: TextDocument,
     documentIndex: Map<string, DocumentIndex>,
@@ -184,20 +195,30 @@ export function validateDocument(
         // Re-assignable variables (.var / :=) are meant to be redefined
         if (label.kind === 'var') continue;
 
+        // A definition the assembler never reaches cannot collide with anything,
+        // nor be collided with - `.if 0` around one of two same-named labels is
+        // the common case, and it is not a duplicate.
+        if (deadLines.has(label.range.start.line)) continue;
+
         const key = `${label.scopePath ?? 'global'}:${label.localScope ?? 'none'}:${label.name}`;
         const priorDefinitions = seenLabels.get(key);
 
         if (priorDefinitions) {
             const path = branchPaths.get(label.range.start.line);
-            const collides = priorDefinitions.some(prior =>
+            const collided = priorDefinitions.find(prior =>
                 !areMutuallyExclusive(path, branchPaths.get(prior.range.start.line)));
 
-            if (collides) {
+            if (collided) {
                 diagnostics.push({
                     severity: DiagnosticSeverity.Error,
                     range: label.range,
-                    message: `Duplicate label '${label.originalName}'`,
-                    source: '64tass'
+                    message: `Duplicate label '${label.originalName}', ${describeLocation(collided, document.uri)}`,
+                    source: '64tass',
+                    // Rendered by the client as a link to the other definition.
+                    relatedInformation: [{
+                        location: { uri: collided.uri, range: collided.range },
+                        message: 'first defined here'
+                    }]
                 });
             }
             priorDefinitions.push(label);

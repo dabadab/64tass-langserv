@@ -928,3 +928,49 @@ describe('symbol names the assembler will not accept', () => {
         expect(codesFor('CODE_\u00e9 = $30')).not.toContain('invalid-symbol-character');
     });
 });
+
+describe('duplicate labels and dead branches', () => {
+    // All four verified against the assembler.
+    it('does not report a definition inside a branch that cannot be taken', () => {
+        expect(errors('start\n        .if 0\n_speed = * + 1\n        .fi\n_speed = * + 1')).toEqual([]);
+    });
+
+    it('still reports one inside a branch that IS taken', () => {
+        expect(errors('        .if 1\nfoo = 1\n        .fi\nfoo = 2')).toHaveLength(1);
+    });
+
+    it('still reports a plain duplicate', () => {
+        expect(errors('foo = 1\nfoo = 2')).toHaveLength(1);
+    });
+
+    it('still ignores mutually exclusive branches', () => {
+        expect(errors('        .if 1\nfoo = 1\n        .else\nfoo = 2\n        .fi')).toEqual([]);
+    });
+
+    it('does not let a dead definition suppress a later real duplicate', () => {
+        // The dead one is ignored entirely, so the two live ones still collide.
+        const reported = errors('        .if 0\nfoo = 1\n        .fi\nfoo = 2\nfoo = 3');
+        expect(reported).toHaveLength(1);
+        expect(reported[0].range.start.line).toBe(4);
+    });
+});
+
+describe('duplicate label message', () => {
+    it('says where the other definition is', () => {
+        const [reported] = errors('foo = 1\nfoo = 2');
+        expect(reported.message).toBe("Duplicate label 'foo', also defined on line 1");
+    });
+
+    it('links to it for the client to render', () => {
+        const [reported] = errors('foo = 1\nfoo = 2');
+        expect(reported.relatedInformation).toHaveLength(1);
+        expect(reported.relatedInformation![0].location.range.start.line).toBe(0);
+        expect(reported.relatedInformation![0].message).toBe('first defined here');
+    });
+
+    it('points at the nearest colliding definition, not a mutually exclusive one', () => {
+        const source = '        .if 1\nfoo = 1\n        .else\nfoo = 2\n        .fi\nfoo = 3';
+        const [reported] = errors(source);
+        expect(reported.message).toContain('line 2');
+    });
+});

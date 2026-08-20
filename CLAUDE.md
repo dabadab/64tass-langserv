@@ -130,9 +130,15 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   index-resolved symbols, `!` `&&` `||`, `= == != < > <= >=`, arithmetic and parens;
   the program counter `*` and strings are undecidable.
   `computeBranchPaths`/`areMutuallyExclusive` (same module) record which branch of
-  which chain each line sits in. The duplicate-label check uses those rather than
-  `findDeadLines`: the assembler assembles at most one branch, so two definitions in
-  different branches never collide *even when the condition is undecidable*.
+  which chain each line sits in. The duplicate-label check needs BOTH: branch paths,
+  because two definitions in different branches of one chain never collide even when
+  the condition is undecidable; and `findDeadLines`, because a definition inside a
+  branch that provably cannot be taken (`.if 0`) is not there at all, and so neither
+  collides nor is collided with. Missing the second gave a false duplicate for a
+  label defined once inside `.if 0` and once outside it.
+  Cross-file duplicates are NOT detected: the check only looks at the current
+  document's labels, so a name defined in both a file and something it `.include`s
+  goes unreported even though the assembler rejects it.
 - **Build-time defines**: a `; 64tass-langserv: define NAME = VALUE` pragma
   (`detectDefinePragmas` in `utils.ts`) mirrors 64tass's `-D` flag and is indexed by
   `parseDocument` as a normal `kind: 'var'` label, so it resolves like any other
