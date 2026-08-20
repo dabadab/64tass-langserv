@@ -208,7 +208,7 @@ describe('completion across compilation units', () => {
     });
 });
 
-describe('index register completion after a comma', () => {
+describe('nothing is completed after a comma in an operand', () => {
     /** Complete at the end of `line`, with the document indexed for `cpu`. */
     function completeAtEnd(line: string, cpu = '6502', extra = '') {
         const source = `tbl     .byte 0\nstop_X  = 1\n${extra}${line}`;
@@ -223,55 +223,45 @@ describe('index register completion after a comma', () => {
             .map(i => i.label);
     }
 
-    it('offers only X and Y after "lda tbl,"', () => {
-        expect(completeAtEnd('        lda tbl,')).toEqual(['x', 'y']);
+    // Only an index register can follow the comma, and those are single letters -
+    // so a suggestion can only arrive after it would have been useful, where it
+    // just intercepts Enter. Nothing is offered instead.
+    it.each([
+        ['lda tbl,', '        lda tbl,'],
+        ['ldx tbl,', '        ldx tbl,'],
+        ['inc tbl,', '        inc tbl,'],
+        ['lda (tbl,', '        lda (tbl,'],
+        ['lda (tbl),', '        lda (tbl),'],
+    ])('offers nothing at "%s"', (_name, line) => {
+        expect(completeAtEnd(line)).toEqual([]);
     });
 
-    it('does not offer labels there', () => {
-        // The reported bug: any visible symbol was suggested as an index.
-        expect(completeAtEnd('        lda tbl,')).not.toContain('stop_X');
-        expect(completeAtEnd('        lda tbl,')).not.toContain('tbl');
+    it('offers nothing once a register has been typed either', () => {
+        // The reported bug: the popup appeared here, holding the Enter key.
+        expect(completeAtEnd('        lda tbl,y')).toEqual([]);
+        expect(completeAtEnd('        lda tbl,x')).toEqual([]);
     });
 
-    it('offers only Y for ldx, which has no X-indexed form', () => {
-        expect(completeAtEnd('        ldx tbl,')).toEqual(['y']);
-    });
-
-    it('offers only X for inc', () => {
-        expect(completeAtEnd('        inc tbl,')).toEqual(['x']);
-    });
-
-    it('offers X inside brackets and Y outside them', () => {
-        expect(completeAtEnd('        lda (tbl,')).toEqual(['x']);
-        expect(completeAtEnd('        lda (tbl),')).toEqual(['y']);
-    });
-
-    it('adds the stack register on the 65816', () => {
-        expect(completeAtEnd('        lda tbl,', '65816')).toEqual(['s', 'x', 'y']);
-    });
-
-    it('adds Z on the 4510, but only where it is valid', () => {
-        // Verified: "lda $10,z" is rejected, "lda ($10),z" is accepted - Z only
-        // indexes after a closing bracket.
-        expect(completeAtEnd('        lda tbl,', '4510')).toEqual(['x', 'y']);
-        expect(completeAtEnd('        lda (tbl),', '4510')).toEqual(['y', 'z']);
-    });
-
-    it('offers the stack register only inside brackets on the 65816', () => {
-        expect(completeAtEnd('        lda (tbl,', '65816')).toEqual(['s', 'x']);
-        expect(completeAtEnd('        lda (tbl),', '65816')).toEqual(['y']);
-    });
-
-    it('filters by what has been typed', () => {
-        expect(completeAtEnd('        lda tbl,y')).toEqual(['y']);
+    it('never offers a label where an index belongs', () => {
+        for (const line of ['        lda tbl,', '        lda tbl,y', '        lda (tbl),']) {
+            expect(completeAtEnd(line)).not.toContain('stop_X');
+            expect(completeAtEnd(line)).not.toContain('tbl');
+        }
     });
 
     it('tolerates a space after the comma', () => {
-        expect(completeAtEnd('        lda tbl, ')).toEqual(['x', 'y']);
+        expect(completeAtEnd('        lda tbl, ')).toEqual([]);
+    });
+
+    it('stays silent on targets with extra index registers', () => {
+        // The suppression is still decided per CPU and per bracket position.
+        expect(completeAtEnd('        lda tbl,', '65816')).toEqual([]);
+        expect(completeAtEnd('        lda (tbl,', '65816')).toEqual([]);
+        expect(completeAtEnd('        lda (tbl),', '4510')).toEqual([]);
     });
 
     it('falls back to symbols where the operand is an address, not an index', () => {
-        // "jmp $1234," has no register form; the third operand of bbr is a label.
+        // "jmp $1234," has no register form, so a label is genuinely valid there.
         expect(completeAtEnd('        jmp tbl,')).toContain('tbl');
     });
 
@@ -284,6 +274,6 @@ describe('index register completion after a comma', () => {
     });
 
     it('is not confused by a comma inside a string', () => {
-        expect(completeAtEnd('        .text "a,b" ')).not.toEqual(['x', 'y']);
+        expect(completeAtEnd('        .text "a,b" ')).toContain('tbl');
     });
 });

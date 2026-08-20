@@ -294,21 +294,21 @@ export function getCompletions(
     const afterOpcode = OPCODES.has(firstToken) || (tokens.length > 1 && OPCODES.has(tokens[1].toLowerCase()));
 
     // Directly after a comma in an operand, the only thing that can follow is an
-    // index register - a label there would never assemble. Which registers is
-    // fixed by the mnemonic and the CPU, so the addressing table decides.
+    // index register - a label there would never assemble - so nothing is offered
+    // and the editor stays out of the way.
+    //
+    // The register list is computed but deliberately NOT suggested. Every index
+    // register is a single letter, so a popup can only appear once the answer has
+    // already been typed, where it does nothing but swallow the Enter that should
+    // start the next line. What the list is for is telling an index position apart
+    // from an address one: `jmp $1234,` and the third operand of `bbr 3,$10,` come
+    // back empty and fall through to symbol completion below, because a label is
+    // genuinely valid there.
     if (afterOpcode && /,\s*$/.test(before)) {
         const mnemonic = OPCODES.has(firstToken) ? firstToken : tokens[1]?.toLowerCase();
         const cpu = documentIndex.get(document.uri)?.cpu ?? DEFAULT_CPU;
         const registers = mnemonic ? indexRegistersFor(cpu, mnemonic, commaContextAt(before)) : [];
-        if (registers.length > 0) {
-            return registers
-                .filter(register => register.startsWith(prefix.toLowerCase()))
-                .map(register => ({
-                    label: register,
-                    kind: CompletionItemKind.Keyword,
-                    detail: 'index register'
-                }));
-        }
+        if (registers.length > 0) return [];
     }
 
     return getSymbolCompletions(document, position, documentIndex, afterOpcode, visibleUris);

@@ -137,14 +137,19 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   (`detectDefinePragmas` in `utils.ts`) mirrors 64tass's `-D` flag and is indexed by
   `parseDocument` as a normal `kind: 'var'` label, so it resolves like any other
   symbol. Mainly exists so `-D`-supplied flags can decide `.if` branches.
-- **Index register completion**: after a comma in an opcode operand only index
-  registers are offered, never symbols. Which ones is derived from
-  `addressingModesFor` rather than a blanket list, so it is exact per opcode, per
-  CPU and per position - a comma is `plain` (`lda $1234,x`), `inside`
-  (`lda ($10,x)`) or `after-close` (`lda ($10),y`), and those take different
-  registers: `lda $10,z` is rejected on the 4510 while `lda ($10),z` is fine. An
-  empty result falls back to symbol completion, which is what `jmp $1234,` and
-  the third operand of `bbr` need. The `,b` `,d` `,k` `,r` suffixes are
+- **Index register completion**: after a comma in an opcode operand NOTHING is
+  completed - not symbols, and not the registers either. `indexRegistersFor`
+  (`completions.ts`) still decides that, but its list is used purely as a
+  predicate: index registers are single letters, so a popup can only appear once
+  the answer has already been typed, where it does nothing but swallow the Enter
+  that should open the next line. Offering the list was worse than silence.
+  The list is derived from `addressingModesFor` rather than a blanket set, so the
+  decision is exact per opcode, per CPU and per position - a comma is `plain`
+  (`lda $1234,x`), `inside` (`lda ($10,x)`) or `after-close` (`lda ($10),y`), and
+  those take different registers: `lda $10,z` is rejected on the 4510 while
+  `lda ($10),z` is fine. An EMPTY result is the load-bearing case: it means a
+  label is genuinely valid there, so `jmp $1234,` and the third operand of `bbr`
+  fall through to symbol completion. The `,b` `,d` `,k` `,r` suffixes are
   deliberately excluded: they assemble but are addressing-size and bank
   overrides, not indices (`lda $10,b` disassembles as a plain absolute
   `lda $0010`).
@@ -231,7 +236,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1120 tests); compiles first
+yarn test          # Run all tests (currently 1119 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
