@@ -868,3 +868,63 @@ describe('compound assignment', () => {
         expect(errors('_differences    := []\n_differences    ..= [1]')).toEqual([]);
     });
 });
+
+describe('symbol names the assembler will not accept', () => {
+    const codesFor = (source: string) => getDiagnostics(source).map(d => d.code);
+    const firstMessage = (source: string) => getDiagnostics(source)[0]?.message;
+
+    // The manual: "Regular symbol names are starting with a letter and containing
+    // letters, numbers and underscores." Anything else ends the name, so the rest
+    // of the line is a syntax error - and a run of them all redefine the same
+    // truncated name.
+    it.each([
+        ['pound', 'CODE_\u00a3 =  $30', '\u00a3'],
+        ['right bracket', 'CODE_] =  $32', ']'],
+        ['up arrow', 'CODE_\u2191 =  $36', '\u2191'],
+        ['question mark', 'CODE_? =  $37', '?'],
+        ['plus', 'CODE_+ =  $28', '+'],
+        ['at sign', 'CODE_@ =  $2E', '@'],
+        ['less than', 'CODE_< =  $2F', '<'],
+    ])('reports a %s in a symbol name', (_name, line, character) => {
+        expect(codesFor(line)).toContain('invalid-symbol-character');
+        expect(firstMessage(line)).toBe(`'${character}' is not allowed in a symbol name`);
+    });
+
+    it('points at the offending character', () => {
+        const source = '        CODE_] =  $32';
+        const [diagnostic] = getDiagnostics(source);
+        expect(source.slice(diagnostic.range.start.character, diagnostic.range.end.character)).toBe(']');
+    });
+
+    it('reports a name whose trailing character is the assignment operator', () => {
+        // "CODE_= = $35" - the name ends at CODE_, leaving an assignment with no
+        // expression, which is what the assembler complains about.
+        expect(codesFor('CODE_= =  $35')).toContain('expression-expected');
+    });
+
+    it.each(['foo =', 'foo = = 5', 'a == 1'])('reports "%s" as missing an expression', (line) => {
+        expect(codesFor(line)).toContain('expression-expected');
+    });
+
+    it.each([
+        ['a plain name', 'CODE_X = $30'],
+        ['digits in the name', 'CODE_5 = $10'],
+        ['a local', '_local = 1'],
+        ['a member assignment', '_sid.init = 1'],
+        ['the program counter', '* = $1000'],
+        ['a variable', 'v := 1'],
+        ['a compound assignment', '_v ..= [1]'],
+        ['a comparison in a condition', '        .if a == 1'],
+        ['an inequality', '        .cerror len(a) != 2, "no"'],
+    ])('accepts %s', (_name, line) => {
+        expect(codesFor(line)).not.toContain('invalid-symbol-character');
+        expect(codesFor(line)).not.toContain('expression-expected');
+    });
+
+    it('accepts a non-ASCII letter, which is valid under the -a flag', () => {
+        // The extension cannot see the command line, so it stays lenient here:
+        // a missed error without -a beats reporting good code with it. Verified:
+        // "CODE_\u00e9 = $30" assembles with -a and not without.
+        expect(codesFor('CODE_\u00e9 = $30')).not.toContain('invalid-symbol-character');
+    });
+});

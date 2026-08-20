@@ -190,8 +190,18 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   type's member. A member the type does not declare is still reported, matching the
   assembler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
+- **Symbol name characters**: the manual's rule is "starting with a letter and
+  containing letters, numbers and underscores", and anything else ENDS the name -
+  `CODE_£ = $30` defines `CODE_` and then fails, so ten such lines in a row all
+  redefine `CODE_`. `findInvalidSymbolChar` in `diagnostics.ts` reports the
+  offending character, and `findMissingValue` catches the `CODE_= = $35` variant,
+  where the truncated name leaves an assignment with no expression. Non-ASCII
+  LETTERS are deliberately allowed: the manual permits them under `-a`, a flag the
+  extension cannot see, so a missed error without it beats reporting good code
+  with it (`£` and `↑` are not letters and are still caught).
 - **Diagnostic codes**: diagnostics that a quick fix can act on carry a `code`
-  (`undefined-symbol`, `undefined-macro`, `unclosed-block`); `codeActions.ts`
+  (`undefined-symbol`, `undefined-macro`, `unclosed-block`, plus
+  `invalid-symbol-character` and `expression-expected`); `codeActions.ts`
   matches on that rather than on message text, so wording can change freely. An
   `unclosed-block` also carries the closer to insert in `data`.
 - **Symbol lookup cost**: `findSymbolInfo` filters by name first via
@@ -250,7 +260,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1135 tests); compiles first
+yarn test          # Run all tests (currently 1157 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

@@ -90,6 +90,61 @@ function findDeadLines(
     return dead;
 }
 
+/**
+ * Where an assignment's value should be, when there is none the assembler can
+ * use - it is missing entirely, or another `=` follows.
+ *
+ * `CODE_= = $35` is the shape that matters: the author wanted a symbol called
+ * `CODE_=`, but the name ends at `CODE_` and what is left reads as an assignment
+ * with no expression. Verified: `foo =`, `foo = = 5` and `a == 1` are all
+ * rejected with "an expression is expected".
+ *
+ * @returns the column the value should start at, or null if the line is fine
+ */
+function findMissingValue(code: string): number | null {
+    const assignment = code.match(/^(\s*)([^\s;=]+)\s*:?=/);
+    if (!assignment) return null;
+
+    const valueStart = assignment[0].length;
+    const value = code.slice(valueStart).trim();
+    if (value !== '' && !value.startsWith('=')) return null;
+    return valueStart + (code.slice(valueStart).length - code.slice(valueStart).trimStart().length);
+}
+
+/**
+ * The first character of a definition's name that 64tass will not accept.
+ *
+ * The manual is explicit: "Regular symbol names are starting with a letter and
+ * containing letters, numbers and underscores", and local names differ only in
+ * beginning with an underscore. Anything else ends the name, so `CODE_£ = $30`
+ * defines `CODE_` and then fails on the rest with "general syntax" - and ten such
+ * lines in a row all redefine `CODE_`, which is how this surfaces in practice.
+ *
+ * Non-ASCII LETTERS are deliberately accepted: the manual allows them under the
+ * `-a` flag, which this extension cannot see. Being lenient there costs a missed
+ * error on a build without `-a`; being strict would report perfectly good code on
+ * a build with it. `£` and `↑` are not letters, so they are still caught.
+ *
+ * @returns the offending character and its column, or null if the line is fine
+ */
+function findInvalidSymbolChar(code: string): { character: string; column: number } | null {
+    // Only assignment lines: "name = value" / "name := value". The name is
+    // everything before the '=', which is where an illegal character shows up.
+    const definition = code.match(/^(\s*)([^\s;=]+)\s*:?=(?!=)/);
+    if (!definition) return null;
+
+    const [, indent, name] = definition;
+    // A line that does not begin like a symbol is not a definition at all - `*`
+    // is the program counter, and an operator here means an expression.
+    if (!/^[\p{L}_]/u.test(name)) return null;
+    if (/^[\p{L}_][\p{L}0-9_]*(\.[\p{L}_][\p{L}0-9_]*)*$/u.test(name)) return null;
+
+    // Report the first character that cannot be part of the name.
+    const offending = [...name].find(char => !/^[\p{L}0-9_.]$/u.test(char));
+    if (offending === undefined) return null;
+    return { character: offending, column: indent.length + name.indexOf(offending) };
+}
+
 export function validateDocument(
     document: TextDocument,
     documentIndex: Map<string, DocumentIndex>,
@@ -164,6 +219,34 @@ export function validateDocument(
         // directive name inside a literal (.text "a .proc b") isn't counted as a
         // real one. stripStrings preserves offsets, so positions stay correct.
         const codeLower = stripStrings(code).toLowerCase();
+
+        const missingValue = findMissingValue(code);
+        if (missingValue !== null) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: Range.create(
+                    Position.create(lineNum, missingValue),
+                    Position.create(lineNum, Math.max(missingValue + 1, code.trimEnd().length))
+                ),
+                message: 'An expression is expected',
+                source: '64tass',
+                code: 'expression-expected'
+            });
+        }
+
+        const badChar = findInvalidSymbolChar(code);
+        if (badChar) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: Range.create(
+                    Position.create(lineNum, badChar.column),
+                    Position.create(lineNum, badChar.column + badChar.character.length)
+                ),
+                message: `'${badChar.character}' is not allowed in a symbol name`,
+                source: '64tass',
+                code: 'invalid-symbol-character'
+            });
+        }
 
         // Check for opening directives
         for (const open of Object.keys(FOLDING_PAIRS)) {
