@@ -169,13 +169,13 @@ describe('getCompletions - .include file paths', () => {
 });
 
 describe('completion across compilation units', () => {
-    const OTHER = 'file:///other/the_forest.asm';
+    const OTHER = 'file:///other/elsewhere.asm';
     const MINE = 'file:///mine/main.asm';
 
     function setup() {
         return buildIndex(
             { source: 'start\n        lda ', uri: MINE },
-            { source: 'stop_X  = 1\nstop_Y  = 2', uri: OTHER },
+            { source: 'far_symbol  = 1\nstop_Y  = 2', uri: OTHER },
         );
     }
 
@@ -183,7 +183,7 @@ describe('completion across compilation units', () => {
         const { documentIndex, docs } = setup();
         const items = getCompletions(docs[0], Position.create(1, 12), documentIndex,
             { visibleUris: new Set([MINE]) });
-        expect(items.map(i => i.label)).not.toContain('stop_X');
+        expect(items.map(i => i.label)).not.toContain('far_symbol');
     });
 
     it('still offers symbols from the same file', () => {
@@ -197,14 +197,14 @@ describe('completion across compilation units', () => {
         const { documentIndex, docs } = setup();
         const items = getCompletions(docs[0], Position.create(1, 12), documentIndex,
             { visibleUris: new Set([MINE, OTHER]) });
-        expect(items.map(i => i.label)).toContain('stop_X');
+        expect(items.map(i => i.label)).toContain('far_symbol');
     });
 
     it('falls back to the whole index when no unit is given', () => {
         // Keeps the old behaviour for callers that have no include graph.
         const { documentIndex, docs } = setup();
         expect(getCompletions(docs[0], Position.create(1, 12), documentIndex).map(i => i.label))
-            .toContain('stop_X');
+            .toContain('far_symbol');
     });
 });
 
@@ -229,7 +229,7 @@ describe('index register completion after a comma', () => {
 
     it('does not offer labels there', () => {
         // The reported bug: any visible symbol was suggested as an index.
-        expect(completeAtEnd('        lda tbl,')).not.toContain('stop_X');
+        expect(completeAtEnd('        lda tbl,')).not.toContain('far_symbol');
         expect(completeAtEnd('        lda tbl,')).not.toContain('tbl');
     });
 
@@ -325,8 +325,8 @@ describe('opcode completion follows the CPU', () => {
 
 describe('completion after a dot', () => {
     const SOURCE = [
-        'keyboard .proc',
-        'scan',
+        'panel   .proc',
+        'entry',
         '        rts',
         'matrix  .byte 0',
         '_hidden = 1',
@@ -334,45 +334,45 @@ describe('completion after a dot', () => {
         '        .endm',
         '        .pend',
         'toplevel = 1',
-        '        jsr keyboard.',
+        '        jsr panel.',
     ].join('\n');
 
-    const at = (source: string, line: number, character: number, caseSensitive = false) => {
-        const { documentIndex, docs } = buildIndex({ source, caseSensitive });
-        return getCompletions(docs[0], Position.create(line, character), documentIndex).map(i => i.label);
+    /** Complete at the END of the last line, so renaming a symbol cannot skew it. */
+    const atEnd = (source: string) => {
+        const { documentIndex, docs } = buildIndex({ source });
+        const lines = source.split('\n');
+        const line = lines.length - 1;
+        return getCompletions(docs[0], Position.create(line, lines[line].length), documentIndex)
+            .map(i => i.label);
     };
 
     it('offers the members of the named scope', () => {
-        const items = at(SOURCE, 9, 21);
-        expect(items).toContain('scan');
-        expect(items).toContain('matrix');
+        expect(atEnd(SOURCE)).toEqual(expect.arrayContaining(['entry', 'matrix']));
     });
 
     it('does not offer symbols from the enclosing scope', () => {
-        // The reported bug: "keyboard." listed top-level symbols, none of which
-        // can follow the dot.
-        const items = at(SOURCE, 9, 21);
+        // The reported bug: "panel." listed top-level symbols, none of which can
+        // follow the dot.
+        const items = atEnd(SOURCE);
         expect(items).not.toContain('toplevel');
-        expect(items).not.toContain('keyboard');
+        expect(items).not.toContain('panel');
     });
 
     it('leaves out local symbols, which a dot cannot reach', () => {
-        expect(at(SOURCE, 9, 21)).not.toContain('_hidden');
+        expect(atEnd(SOURCE)).not.toContain('_hidden');
     });
 
     it('filters by operand kind after an opcode', () => {
         // A macro inside the scope is not a valid jsr target.
-        expect(at(SOURCE, 9, 21)).not.toContain('helper');
+        expect(atEnd(SOURCE)).not.toContain('helper');
     });
 
     it('offers a macro member where any symbol is valid', () => {
-        const source = SOURCE.replace('        jsr keyboard.', '        .byte keyboard.');
-        expect(at(source, 9, 23)).toContain('helper');
+        expect(atEnd(SOURCE.replace('        jsr panel.', '        .byte panel.'))).toContain('helper');
     });
 
     it('still works once part of the member name is typed', () => {
-        const source = SOURCE.replace('        jsr keyboard.', '        jsr keyboard.sc');
-        expect(at(source, 9, 23)).toContain('scan');
+        expect(atEnd(SOURCE.replace('        jsr panel.', '        jsr panel.en'))).toContain('entry');
     });
 
     it('resolves a nested scope path', () => {
@@ -384,12 +384,11 @@ describe('completion after a dot', () => {
             '        .pend',
             '        lda outer.inner.',
         ].join('\n');
-        expect(at(source, 5, 24)).toContain('deep');
+        expect(atEnd(source)).toContain('deep');
     });
 
     it('matches the scope case-insensitively by default', () => {
-        const source = SOURCE.replace('        jsr keyboard.', '        jsr KEYBOARD.');
-        expect(at(source, 9, 21)).toContain('scan');
+        expect(atEnd(SOURCE.replace('        jsr panel.', '        jsr PANEL.'))).toContain('entry');
     });
 
     it('offers a struct instance the members of its type', () => {
@@ -401,25 +400,23 @@ describe('completion after a dot', () => {
             'p1      .dstruct pt',
             '        lda p1.',
         ].join('\n');
-        const items = at(source, 5, 15);
-        expect(items).toEqual(expect.arrayContaining(['posx', 'posy']));
+        expect(atEnd(source)).toEqual(expect.arrayContaining(['posx', 'posy']));
     });
 
     it('offers a label on a macro call the macro\'s own labels', () => {
         const source = [
-            'drv     .macro',
-            'patchme lda #0',
+            'emit    .macro',
+            'target  lda #0',
             '        .endm',
             '        * = $1000',
-            'virt    #drv',
-            '        sta virt.',
+            'inst    #emit',
+            '        sta inst.',
         ].join('\n');
-        expect(at(source, 5, 17)).toContain('patchme');
+        expect(atEnd(source)).toContain('target');
     });
 
     it('offers nothing for a scope that does not exist', () => {
-        const source = SOURCE.replace('        jsr keyboard.', '        jsr nosuchscope.');
-        expect(at(source, 9, 24)).toEqual([]);
+        expect(atEnd(SOURCE.replace('        jsr panel.', '        jsr nosuchscope.'))).toEqual([]);
     });
 });
 

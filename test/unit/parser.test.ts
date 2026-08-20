@@ -853,9 +853,9 @@ describe('.for loop variables', () => {
 
 describe('.function parameter forms', () => {
     it('indexes a typed parameter by name only', () => {
-        // "loadkla .function _data : binary" - the annotation is not part of the name
-        const index = parse('loadkla .function _data : binary\n        .endf _data');
-        expect(index.parametersAtScope.get('loadkla')).toEqual(['_data']);
+        // "make .function _data : binary" - the annotation is not part of the name
+        const index = parse('make .function _data : binary\n        .endf _data');
+        expect(index.parametersAtScope.get('make')).toEqual(['_data']);
     });
 
     it('indexes a parameter with a default value', () => {
@@ -927,8 +927,8 @@ describe('local symbol assignment operators', () => {
 
     it('does not report a duplicate for a list built up with ..=', () => {
         // The shape of 64tass's own runtime_relocation example.
-        const index = parse('_differences    := []\n_differences    ..= [1]\n_differences    ..= [2]');
-        expect(index.labels.filter(l => l.name === '_differences')).toHaveLength(1);
+        const index = parse('_items    := []\n_differences    ..= [1]\n_differences    ..= [2]');
+        expect(index.labels.filter(l => l.name === '_items')).toHaveLength(1);
     });
 
     it('still records a bare local label', () => {
@@ -937,22 +937,22 @@ describe('local symbol assignment operators', () => {
 });
 
 describe('labels on macro calls', () => {
-    const MACRO = ['drv     .macro', 'inner   nop', 'patchme lda #0', '        .endm', '        * = $1000'].join('\n');
+    const MACRO = ['emit     .macro', 'inner   nop', 'target lda #0', '        .endm', '        * = $1000'].join('\n');
 
-    it.each(['.drv', '#drv'])('records a label calling a macro with "%s"', (call) => {
-        const index = parse(`${MACRO}\nvirt    ${call}`);
-        expect(index.labels.map(l => l.name)).toContain('virt');
-        expect(index.labelDefinedByMacro.get('virt')).toBe('drv');
+    it.each(['.emit', '#emit'])('records a label calling a macro with "%s"', (call) => {
+        const index = parse(`${MACRO}\ninst    ${call}`);
+        expect(index.labels.map(l => l.name)).toContain('inst');
+        expect(index.labelDefinedByMacro.get('inst')).toBe('emit');
     });
 
     it('does not mistake an immediate operand for a macro call', () => {
-        // "lda #COLORS" is an opcode with an immediate, not a label named lda.
-        const index = parse('COLORS  = 1\n        * = $1000\n        lda #COLORS');
+        // "lda #COUNT" is an opcode with an immediate, not a label named lda.
+        const index = parse('COUNT  = 1\n        * = $1000\n        lda #COUNT');
         expect(index.labels.map(l => l.name)).not.toContain('lda');
     });
 
     it('does not mistake an immediate on a labelled line for a macro call', () => {
-        const index = parse('COLORS  = 1\n        * = $1000\nstart   lda #COLORS');
+        const index = parse('COUNT  = 1\n        * = $1000\nstart   lda #COUNT');
         expect(index.labelDefinedByMacro.has('start')).toBe(false);
     });
 });

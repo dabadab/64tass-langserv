@@ -311,7 +311,11 @@ interface gains a field. Use `emptyIndex()` from `test/helpers/doc.ts` instead o
 building one literally.
 
 - **Framework:** Vitest
-- **Unit tests:** `test/unit/` — one file per module
+- **Unit tests:** `test/unit/` — one file per module. Self-contained: never reuse
+  symbol names lifted from `example/` (gitignored, private work) or
+  `test/fixtures/64tass-examples/`. Reproduce the SHAPE of a bug with invented
+  names and say in a comment which real construct it came from. Real sources
+  belong in the integration suites, which read the fixture files on purpose.
 - **Integration tests:** `test/integration/` — compiler reference tests. They need
   a real 64tass (`TASS_PATH`, default `/home/db/bin/64tass`) and SKIP silently
   without one, so `REQUIRE_TASS=1` turns a missing binary into a hard failure. CI

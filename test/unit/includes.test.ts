@@ -107,10 +107,10 @@ describe('compilationUnit', () => {
     it('excludes a tree belonging to a different root', () => {
         const graph = new IncludeGraph();
         graph.addRef('file:///a.asm', 'file:///main.asm');
-        graph.addRef('file:///forest.asm', 'file:///the_forest.asm');
+        graph.addRef('file:///other.asm', 'file:///unrelated.asm');
         const unit = graph.compilationUnit('file:///a.asm');
-        expect(unit.has('file:///forest.asm')).toBe(false);
-        expect(unit.has('file:///the_forest.asm')).toBe(false);
+        expect(unit.has('file:///other.asm')).toBe(false);
+        expect(unit.has('file:///unrelated.asm')).toBe(false);
     });
 
     it('spans both trees when two roots share a file', () => {

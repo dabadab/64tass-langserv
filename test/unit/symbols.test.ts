@@ -629,45 +629,45 @@ describe('.dstruct / .dunion instance members', () => {
 
 describe('members of a label on a macro call', () => {
     const SOURCE = [
-        'drv     .macro',
+        'emit     .macro',
         'inner   nop',
-        'patchme lda #0',
+        'target lda #0',
         '        .endm',
         '        * = $1000',
-        'virt    #drv',
-        '        sta virt.patchme + 1',
+        'inst    #emit',
+        '        sta inst.target + 1',
     ].join('\n');
 
     it('resolves a member through the macro the label calls', () => {
-        // Verified: "virt #drv" makes drv's patchme reachable as virt.patchme,
-        // and not as a bare patchme.
+        // Verified: "inst #emit" makes emit's target reachable as inst.target,
+        // and not as a bare target.
         const { documentIndex, docs } = buildIndex({ source: SOURCE });
-        const found = findSymbolInfo('virt.patchme', docs[0].uri, 6, documentIndex, false);
-        expect(found?.name).toBe('patchme');
+        const found = findSymbolInfo('inst.target', docs[0].uri, 6, documentIndex, false);
+        expect(found?.name).toBe('target');
     });
 
     it('returns nothing for a member the macro does not define', () => {
         const { documentIndex, docs } = buildIndex({ source: SOURCE });
-        expect(findSymbolInfo('virt.nosuch', docs[0].uri, 6, documentIndex, false)).toBeNull();
+        expect(findSymbolInfo('inst.nosuch', docs[0].uri, 6, documentIndex, false)).toBeNull();
     });
 });
 
 describe('members of a label assigned from a function call', () => {
     const SOURCE = [
         'mk      .function _v',
-        'BITMAP  = _v + 1',
-        'SCREEN  = _v + 2',
+        'FIRST  = _v + 1',
+        'SECOND  = _v + 2',
         '        .endf namespace(*)',
         'PIC     = mk(5)',
         '        * = $1000',
-        '        lda #PIC.BITMAP',
+        '        lda #PIC.FIRST',
     ].join('\n');
 
     it('resolves a member through the function that produced it', () => {
         // Verified: a .function returning namespace(*) exposes its own labels as
         // members of whatever the call is assigned to.
         const { documentIndex, docs } = buildIndex({ source: SOURCE });
-        expect(findSymbolInfo('PIC.BITMAP', docs[0].uri, 6, documentIndex, false)?.name).toBe('bitmap');
+        expect(findSymbolInfo('PIC.FIRST', docs[0].uri, 6, documentIndex, false)?.name).toBe('first');
     });
 
     it('returns nothing for a member the function does not define', () => {
@@ -676,20 +676,20 @@ describe('members of a label assigned from a function call', () => {
     });
 
     it('still prefers a real scope of that name over the substitution', () => {
-        // MAPDATA is assigned from ctm7(), but its members live in a namespace
-        // literally called mapdata - the written path has to win.
+        // RESULT is assigned from build(), but its members live in a namespace
+        // literally called result - the written path has to win.
         const source = [
-            'ctm7    .function _f',
-            'mapdata .namespace',
-            'COLORS  = 5',
+            'build    .function _f',
+            'result .namespace',
+            'COUNT  = 5',
             '        .endn',
-            '        .endf mapdata',
-            'MAPDATA = ctm7("x")',
+            '        .endf result',
+            'RESULT = build("x")',
             '        * = $1000',
-            '        lda #MAPDATA.COLORS',
+            '        lda #RESULT.COUNT',
         ].join('\n');
         const { documentIndex, docs } = buildIndex({ source });
-        expect(findSymbolInfo('MAPDATA.COLORS', docs[0].uri, 7, documentIndex, false)?.name).toBe('colors');
+        expect(findSymbolInfo('RESULT.COUNT', docs[0].uri, 7, documentIndex, false)?.name).toBe('count');
     });
 });
 
@@ -707,65 +707,65 @@ describe('dict literal member lookup', () => {
 });
 
 describe('a qualified name resolves through the scope chain', () => {
-    // All four verified against the assembler: from global, "keyboard.scan" does
-    // NOT find a keyboard nested inside qwe - only the full path does - while the
-    // same reference from inside qwe, or from a sibling scope within it, resolves.
-    const NESTED = ['qwe     .block', 'keyboard .proc', 'scan    rts', '        .pend', '        .bend'].join('\n');
+    // All four verified against the assembler: from global, "helper.entry" does
+    // NOT find a helper nested inside wrapper - only the full path does - while the
+    // same reference from inside wrapper, or from a sibling scope within it, resolves.
+    const NESTED = ['wrapper     .block', 'helper .proc', 'entry    rts', '        .pend', '        .bend'].join('\n');
 
     it('does not reach a nested scope by its tail from outside', () => {
-        const { documentIndex, docs } = buildIndex({ source: '        jsr keyboard.scan\n' + NESTED });
-        expect(findSymbolInfo('keyboard.scan', docs[0].uri, 0, documentIndex)).toBeNull();
+        const { documentIndex, docs } = buildIndex({ source: '        jsr helper.entry\n' + NESTED });
+        expect(findSymbolInfo('helper.entry', docs[0].uri, 0, documentIndex)).toBeNull();
     });
 
     it('reaches it by its full path', () => {
-        const { documentIndex, docs } = buildIndex({ source: '        jsr qwe.keyboard.scan\n' + NESTED });
-        expect(findSymbolInfo('qwe.keyboard.scan', docs[0].uri, 0, documentIndex)?.name).toBe('scan');
+        const { documentIndex, docs } = buildIndex({ source: '        jsr wrapper.helper.entry\n' + NESTED });
+        expect(findSymbolInfo('wrapper.helper.entry', docs[0].uri, 0, documentIndex)?.name).toBe('entry');
     });
 
     it('reaches it from inside the enclosing scope', () => {
-        const source = ['qwe     .block', 'keyboard .proc', 'scan    rts', '        .pend',
-                        '        jsr keyboard.scan', '        .bend'].join('\n');
+        const source = ['wrapper     .block', 'helper .proc', 'entry    rts', '        .pend',
+                        '        jsr helper.entry', '        .bend'].join('\n');
         const { documentIndex, docs } = buildIndex({ source });
-        expect(findSymbolInfo('keyboard.scan', docs[0].uri, 4, documentIndex)?.name).toBe('scan');
+        expect(findSymbolInfo('helper.entry', docs[0].uri, 4, documentIndex)?.name).toBe('entry');
     });
 
     it('reaches it from a sibling scope', () => {
-        const source = ['qwe     .block', 'keyboard .proc', 'scan    rts', '        .pend',
-                        'other   .proc', '        jsr keyboard.scan', '        .pend',
+        const source = ['wrapper     .block', 'helper .proc', 'entry    rts', '        .pend',
+                        'other   .proc', '        jsr helper.entry', '        .pend',
                         '        .bend'].join('\n');
         const { documentIndex, docs } = buildIndex({ source });
-        expect(findSymbolInfo('keyboard.scan', docs[0].uri, 5, documentIndex)?.name).toBe('scan');
+        expect(findSymbolInfo('helper.entry', docs[0].uri, 5, documentIndex)?.name).toBe('entry');
     });
 
     it('still resolves a scope that really is at the top level', () => {
-        const source = ['keyboard .proc', 'scan    rts', '        .pend', '        jsr keyboard.scan'].join('\n');
+        const source = ['helper .proc', 'entry    rts', '        .pend', '        jsr helper.entry'].join('\n');
         const { documentIndex, docs } = buildIndex({ source });
-        expect(findSymbolInfo('keyboard.scan', docs[0].uri, 3, documentIndex)?.name).toBe('scan');
+        expect(findSymbolInfo('helper.entry', docs[0].uri, 3, documentIndex)?.name).toBe('entry');
     });
 });
 
 describe('a function that returns one of its own scopes', () => {
     const SOURCE = [
-        'ctm7    .function d',
-        'mapdata .namespace',
-        'COLORS  = 5',
-        'CHARS   .namespace',
-        'DATA    = 6',
+        'build    .function d',
+        'result .namespace',
+        'COUNT  = 5',
+        'INNER   .namespace',
+        'VALUE    = 6',
         '        .endnamespace',
         '        .endnamespace',
-        '        .endf mapdata',
-        'MAPDATA = ctm7("x")',
-        '        lda #MAPDATA.COLORS',
+        '        .endf result',
+        'RESULT = build("x")',
+        '        lda #RESULT.COUNT',
     ].join('\n');
 
     it('exposes the returned scope\'s members, not the function\'s own', () => {
         const { documentIndex, docs } = buildIndex({ source: SOURCE });
-        expect(findSymbolInfo('MAPDATA.COLORS', docs[0].uri, 9, documentIndex)?.scopePath).toBe('ctm7.mapdata');
+        expect(findSymbolInfo('RESULT.COUNT', docs[0].uri, 9, documentIndex)?.scopePath).toBe('build.result');
     });
 
     it('substitutes only the leading segment of a longer path', () => {
         const { documentIndex, docs } = buildIndex({ source: SOURCE });
-        expect(findSymbolInfo('MAPDATA.CHARS.DATA', docs[0].uri, 9, documentIndex)?.scopePath)
-            .toBe('ctm7.mapdata.chars');
+        expect(findSymbolInfo('RESULT.INNER.VALUE', docs[0].uri, 9, documentIndex)?.scopePath)
+            .toBe('build.result.inner');
     });
 });
