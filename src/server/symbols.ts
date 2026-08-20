@@ -153,6 +153,66 @@ export function findAnonymousLabel(
     }
 }
 
+/**
+ * Scope paths to try for the part before the dot of a qualified reference.
+ *
+ * A name in front of the dot may stand for another scope entirely:
+ *   - a .dstruct/.dunion instance exposes its type's members, so "p1.posx"
+ *     resolves as "pt.posx"
+ *   - a label on a macro call, or assigned from a function returning
+ *     namespace(*), exposes that macro's or function's own labels
+ *
+ * The written path comes FIRST and the substitutes after it: a scope really
+ * called `targetPath` is the better answer when one exists, and callers match a
+ * candidate as the tail of a nested path anyway, so it is reached however deeply
+ * it is nested.
+ */
+function scopeCandidates(targetPath: string, documentIndex: Map<string, DocumentIndex>): string[] {
+    const candidates = [targetPath];
+    for (const [, index] of documentIndex) {
+        const declaredType = index.structInstances.get(targetPath);
+        if (declaredType) { candidates.push(declaredType); break; }
+    }
+    for (const [, index] of documentIndex) {
+        const memberSource = index.labelDefinedByMacro.get(targetPath);
+        if (memberSource) { candidates.push(memberSource); break; }
+    }
+    return candidates;
+}
+
+/**
+ * Every symbol reachable as `scopePath.member`, for completing a qualified
+ * reference once the dot has been typed.
+ *
+ * Resolves the scope the same way findSymbolInfo does, so an instance name or a
+ * label standing in for a macro's or function's scope offers that scope's
+ * members. Local (`_name`) and anonymous labels are left out: neither is
+ * reachable through a dot.
+ */
+export function collectScopeMembers(
+    scopePath: string,
+    documentIndex: Map<string, DocumentIndex>,
+    visibleUris?: ReadonlySet<string>
+): LabelDefinition[] {
+    for (const candidate of scopeCandidates(scopePath, documentIndex)) {
+        const seen = new Set<string>();
+        const members: LabelDefinition[] = [];
+        for (const [uri, index] of documentIndex) {
+            if (visibleUris && !visibleUris.has(uri)) continue;
+            for (const label of index.labels) {
+                if (label.isLocal || label.isAnonymous || seen.has(label.name)) continue;
+                // Match the scope exactly, or as the tail of a nested path.
+                if (label.scopePath !== candidate && !label.scopePath?.endsWith('.' + candidate)) continue;
+                seen.add(label.name);
+                members.push(label);
+            }
+        }
+        // First candidate that resolves to anything wins, as in findSymbolInfo.
+        if (members.length > 0) return members;
+    }
+    return [];
+}
+
 export function findSymbolInfo(
     word: string,
     fromUri: string,
@@ -192,25 +252,7 @@ export function findSymbolInfo(
         const targetName = parts[parts.length - 1];
         const targetPath = parts.slice(0, -1).join('.');
 
-        // A name in front of the dot may stand for another scope entirely:
-        //   - a .dstruct/.dunion instance exposes its type's members, so
-        //     "p1.posx" resolves as "pt.posx"
-        //   - a label on a macro call, or assigned from a function returning
-        //     namespace(*), exposes that macro's or function's own labels
-        // The written path is tried FIRST and the substitutes after it: a scope
-        // really called `targetPath` is the better answer when one exists, and the
-        // suffix match below already reaches it however deeply it is nested.
-        const candidatePaths = [targetPath];
-        for (const [, index] of documentIndex) {
-            const declaredType = index.structInstances.get(targetPath);
-            if (declaredType) { candidatePaths.push(declaredType); break; }
-        }
-        for (const [, index] of documentIndex) {
-            const memberSource = index.labelDefinedByMacro.get(targetPath);
-            if (memberSource) { candidatePaths.push(memberSource); break; }
-        }
-
-        for (const candidate of candidatePaths) {
+        for (const candidate of scopeCandidates(targetPath, documentIndex)) {
             for (const [, index] of documentIndex) {
                 for (const label of index.labelsByName.get(targetName) ?? []) {
                     // Match the scope exactly, or as the tail of a nested path.

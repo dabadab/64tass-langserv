@@ -137,6 +137,17 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   (`detectDefinePragmas` in `utils.ts`) mirrors 64tass's `-D` flag and is indexed by
   `parseDocument` as a normal `kind: 'var'` label, so it resolves like any other
   symbol. Mainly exists so `-D`-supplied flags can decide `.if` branches.
+- **Qualified completion**: a prefix containing a dot (`keyboard.`) completes the
+  MEMBERS of that scope, not what is in scope at the cursor - nothing visible here
+  can follow a dot. `collectScopeMembers` in `symbols.ts` resolves the path
+  through the same `scopeCandidates` helper `findSymbolInfo` uses, so a struct
+  instance, a label on a macro call and a label assigned from a function all
+  offer the right scope's members. Locals and anonymous labels are excluded, and
+  the operand-kind filter still applies, so `jsr scope.` will not offer a macro.
+- **Opcode completion is per-CPU**: `getOpcodeCompletions` takes the document's
+  `cpu` and uses `opcodesForCpu`, NOT the `OPCODES` union - the union exists for
+  *recognition*, where the target may be unknown, but suggesting `bra` on a 6502
+  offers something that cannot assemble.
 - **Index register completion**: after a comma in an opcode operand only index
   registers are offered, never symbols. `,` is deliberately NOT a trigger
   character (that would fire completion at every comma in the language), so the
@@ -239,7 +250,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1120 tests); compiles first
+yarn test          # Run all tests (currently 1135 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

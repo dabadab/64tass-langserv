@@ -287,3 +287,138 @@ describe('index register completion after a comma', () => {
         expect(completeAtEnd('        .text "a,b" ')).not.toEqual(['x', 'y']);
     });
 });
+
+describe('opcode completion follows the CPU', () => {
+    /** Complete `line` in a document whose .cpu directive selects `cpu`. */
+    function completeAtEnd(line: string, cpu: string) {
+        const source = `        .cpu "${cpu}"\n${line}`;
+        const { documentIndex, docs } = buildIndex({ source });
+        return getCompletions(docs[0], Position.create(1, line.length), documentIndex)
+            .map(i => i.label);
+    }
+
+    it('does not offer mnemonics the target does not have', () => {
+        // bra/brl/bbr/bsr belong to other targets; a 6502 cannot assemble them.
+        const items = completeAtEnd('        b', '6502');
+        expect(items).toContain('bne');
+        for (const absent of ['bra', 'brl', 'bbr', 'bbs', 'bsr']) {
+            expect(items, absent).not.toContain(absent);
+        }
+    });
+
+    it('offers them where the target does have them', () => {
+        expect(completeAtEnd('        b', '65816')).toEqual(expect.arrayContaining(['bra', 'brl']));
+        expect(completeAtEnd('        b', 'r65c02')).toEqual(expect.arrayContaining(['bbr', 'bbs', 'bra']));
+    });
+
+    it('keeps the undocumented opcodes to 6502i', () => {
+        expect(completeAtEnd('        la', '6502i')).toContain('lax');
+        expect(completeAtEnd('        la', '6502')).not.toContain('lax');
+    });
+
+    it('applies in the opcode slot after a label too', () => {
+        const items = completeAtEnd('start   b', '6502');
+        expect(items).toContain('bne');
+        expect(items).not.toContain('bra');
+    });
+});
+
+describe('completion after a dot', () => {
+    const SOURCE = [
+        'keyboard .proc',
+        'scan',
+        '        rts',
+        'matrix  .byte 0',
+        '_hidden = 1',
+        'helper  .macro',
+        '        .endm',
+        '        .pend',
+        'toplevel = 1',
+        '        jsr keyboard.',
+    ].join('\n');
+
+    const at = (source: string, line: number, character: number, caseSensitive = false) => {
+        const { documentIndex, docs } = buildIndex({ source, caseSensitive });
+        return getCompletions(docs[0], Position.create(line, character), documentIndex).map(i => i.label);
+    };
+
+    it('offers the members of the named scope', () => {
+        const items = at(SOURCE, 9, 21);
+        expect(items).toContain('scan');
+        expect(items).toContain('matrix');
+    });
+
+    it('does not offer symbols from the enclosing scope', () => {
+        // The reported bug: "keyboard." listed top-level symbols, none of which
+        // can follow the dot.
+        const items = at(SOURCE, 9, 21);
+        expect(items).not.toContain('toplevel');
+        expect(items).not.toContain('keyboard');
+    });
+
+    it('leaves out local symbols, which a dot cannot reach', () => {
+        expect(at(SOURCE, 9, 21)).not.toContain('_hidden');
+    });
+
+    it('filters by operand kind after an opcode', () => {
+        // A macro inside the scope is not a valid jsr target.
+        expect(at(SOURCE, 9, 21)).not.toContain('helper');
+    });
+
+    it('offers a macro member where any symbol is valid', () => {
+        const source = SOURCE.replace('        jsr keyboard.', '        .byte keyboard.');
+        expect(at(source, 9, 23)).toContain('helper');
+    });
+
+    it('still works once part of the member name is typed', () => {
+        const source = SOURCE.replace('        jsr keyboard.', '        jsr keyboard.sc');
+        expect(at(source, 9, 23)).toContain('scan');
+    });
+
+    it('resolves a nested scope path', () => {
+        const source = [
+            'outer   .proc',
+            'inner   .proc',
+            'deep    .byte 0',
+            '        .pend',
+            '        .pend',
+            '        lda outer.inner.',
+        ].join('\n');
+        expect(at(source, 5, 24)).toContain('deep');
+    });
+
+    it('matches the scope case-insensitively by default', () => {
+        const source = SOURCE.replace('        jsr keyboard.', '        jsr KEYBOARD.');
+        expect(at(source, 9, 21)).toContain('scan');
+    });
+
+    it('offers a struct instance the members of its type', () => {
+        const source = [
+            'pt      .struct',
+            'posx    .byte 0',
+            'posy    .byte 0',
+            '        .endstruct',
+            'p1      .dstruct pt',
+            '        lda p1.',
+        ].join('\n');
+        const items = at(source, 5, 15);
+        expect(items).toEqual(expect.arrayContaining(['posx', 'posy']));
+    });
+
+    it('offers a label on a macro call the macro\'s own labels', () => {
+        const source = [
+            'drv     .macro',
+            'patchme lda #0',
+            '        .endm',
+            '        * = $1000',
+            'virt    #drv',
+            '        sta virt.',
+        ].join('\n');
+        expect(at(source, 5, 17)).toContain('patchme');
+    });
+
+    it('offers nothing for a scope that does not exist', () => {
+        const source = SOURCE.replace('        jsr keyboard.', '        jsr nosuchscope.');
+        expect(at(source, 9, 24)).toEqual([]);
+    });
+});

@@ -11,9 +11,9 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { DocumentIndex, LabelKind } from './types';
-import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES, DEFAULT_CPU } from './constants';
+import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES, DEFAULT_CPU, opcodesForCpu } from './constants';
 import { addressingModesFor } from './addressing';
-import { collectVisibleLabels, collectVisibleParameters } from './symbols';
+import { collectVisibleLabels, collectVisibleParameters, collectScopeMembers } from './symbols';
 
 // Label kinds that represent something addressable, i.e. valid as a bare opcode
 // operand (branch/jump target, or the address a data label points at).
@@ -102,11 +102,14 @@ function getDirectiveCompletions(prefixWithDot: string): CompletionItem[] {
         }));
 }
 
-/** Suggest 6502/undocumented opcode mnemonics. */
-function getOpcodeCompletions(prefix: string): CompletionItem[] {
+/**
+ * Suggest mnemonics for the CPU this file targets - NOT the union of every
+ * target, which would offer a 65816 or 4510 instruction that will not assemble.
+ */
+function getOpcodeCompletions(prefix: string, cpu: string): CompletionItem[] {
     const lowerPrefix = prefix.toLowerCase();
     const items: CompletionItem[] = [];
-    for (const op of OPCODES) {
+    for (const op of opcodesForCpu(cpu)) {
         if (op.startsWith(lowerPrefix)) {
             items.push({ label: op, kind: CompletionItemKind.Keyword });
         }
@@ -193,8 +196,29 @@ function getSymbolCompletions(
     position: Position,
     documentIndex: Map<string, DocumentIndex>,
     onlyOperandKinds = false,
-    visibleUris?: ReadonlySet<string>
+    visibleUris?: ReadonlySet<string>,
+    prefix = ''
 ): CompletionItem[] {
+    // "keyboard." asks for what is inside `keyboard`, not for what is in scope
+    // here - offering the enclosing scope's symbols there is never useful, since
+    // none of them can follow the dot.
+    const lastDot = prefix.lastIndexOf('.');
+    if (lastDot > 0) {
+        const caseSensitive = documentIndex.get(document.uri)?.caseSensitive ?? false;
+        const written = prefix.slice(0, lastDot);
+        const scopePath = caseSensitive ? written : written.toLowerCase();
+        return collectScopeMembers(scopePath, documentIndex, visibleUris)
+            .filter(label => !onlyOperandKinds || OPERAND_KINDS.has(label.kind))
+            .map(label => ({
+                label: label.originalName,
+                kind: label.kind === 'macro' || label.kind === 'function'
+                    ? CompletionItemKind.Function
+                    : CompletionItemKind.Field,
+                detail: label.scopePath ?? undefined,
+                documentation: label.comment
+            }));
+    }
+
     const labels = collectVisibleLabels(document.uri, position.line, documentIndex, visibleUris)
         .filter(label => !onlyOperandKinds || OPERAND_KINDS.has(label.kind));
     const items: CompletionItem[] = labels.map(label => ({
@@ -254,6 +278,7 @@ export function getCompletions(
     if (commentIdx >= 0 && commentIdx < position.character) return [];
 
     const { before, prefix } = splitAtCursor(document, position);
+    const cpu = documentIndex.get(document.uri)?.cpu ?? DEFAULT_CPU;
 
     if (prefix.startsWith('.')) {
         return getDirectiveCompletions(prefix);
@@ -268,7 +293,7 @@ export function getCompletions(
     // opcode. Only opcodes are worth suggesting here - existing labels aren't
     // valid at the start of a fresh statement.
     if (tokens.length === 0) {
-        return getOpcodeCompletions(prefix);
+        return getOpcodeCompletions(prefix, cpu);
     }
 
     const firstToken = tokens[0].toLowerCase();
@@ -280,13 +305,13 @@ export function getCompletions(
         if (NON_SYMBOL_ARG_DIRECTIVES.has(firstToken.slice(1))) {
             return [];
         }
-        return getSymbolCompletions(document, position, documentIndex, false, visibleUris);
+        return getSymbolCompletions(document, position, documentIndex, false, visibleUris, prefix);
     }
 
     // Second token, with the first not a recognized opcode: that first token is
     // a code label ("label INX"), so this position is the opcode.
     if (tokens.length === 1 && !OPCODES.has(firstToken)) {
-        return getOpcodeCompletions(prefix);
+        return getOpcodeCompletions(prefix, cpu);
     }
 
     // Operand position after a real opcode: only addressable kinds make sense
@@ -307,7 +332,6 @@ export function getCompletions(
     // every indexed line.
     if (afterOpcode && /,\s*$/.test(before)) {
         const mnemonic = OPCODES.has(firstToken) ? firstToken : tokens[1]?.toLowerCase();
-        const cpu = documentIndex.get(document.uri)?.cpu ?? DEFAULT_CPU;
         const registers = mnemonic ? indexRegistersFor(cpu, mnemonic, commaContextAt(before)) : [];
         if (registers.length > 0) {
             return registers
@@ -320,5 +344,5 @@ export function getCompletions(
         }
     }
 
-    return getSymbolCompletions(document, position, documentIndex, afterOpcode, visibleUris);
+    return getSymbolCompletions(document, position, documentIndex, afterOpcode, visibleUris, prefix);
 }
