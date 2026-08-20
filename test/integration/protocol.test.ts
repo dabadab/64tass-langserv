@@ -73,6 +73,13 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
         expect(hover.contents.value).toContain('$A9');
     });
 
+    it('answers hover for a block closer', async () => {
+        // helper .proc is at line 7, its .pend at line 10
+        const hover = await server.request<{ contents: { value: string } }>(
+            'textDocument/hover', server.at('main.asm', 10, 10));
+        expect(hover.contents.value).toContain('helper');
+    });
+
     it('answers find-references', async () => {
         const locations = await server.request<{ range: { start: { line: number } } }[]>(
             'textDocument/references', { ...server.at('main.asm', 0, 2), context: { includeDeclaration: true } });

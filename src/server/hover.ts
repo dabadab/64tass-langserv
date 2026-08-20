@@ -1,11 +1,13 @@
 import { Hover, MarkupKind } from 'vscode-languageserver/node';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DocumentIndex } from './types';
 import { findSymbolInfo } from './symbols';
-import { opcodesForCpu, DEFAULT_CPU } from './constants';
+import { opcodesForCpu, DEFAULT_CPU, CLOSING_DIRECTIVES } from './constants';
 import { addressingModesFor } from './addressing';
 import { opcodeDoc } from './opcodeDocs';
 import { cyclesFor, hasCycleData, CycleVariance } from './cycles';
-import { parseNumericValue, formatNumericValue } from './utils';
+import { parseNumericValue, formatNumericValue, stripStrings, parseLineStructure } from './utils';
+import { computeFoldingRanges } from './folding';
 
 const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -66,6 +68,56 @@ export function opcodeHover(word: string, cpu: string): Hover | null {
     return { contents: { kind: MarkupKind.Markdown, value: lines.join('\n') } };
 }
 
+/**
+ * Hover for a block-closing directive: which scope it ends, and where that
+ * started.
+ *
+ * A long `.proc` can put its `.pend` a screen or more away from the name, which
+ * is exactly when it is worth asking. The opener is found with the same matching
+ * `computeFoldingRanges` does, so hover and folding can never disagree about
+ * which opener a closer belongs to.
+ *
+ * MUST be tried before symbolHover: that strips a leading dot to look a macro up,
+ * so a symbol happening to be called `pend` would otherwise answer for `.pend`.
+ */
+export function closerHover(
+    word: string,
+    text: string,
+    line: number,
+    uri: string,
+    documentIndex: Map<string, DocumentIndex>
+): Hover | null {
+    const closer = word.toLowerCase();
+    const openers = CLOSING_DIRECTIVES[closer];
+    if (!openers) return null;
+
+    const region = computeFoldingRanges(text).find(range => range.endLine === line);
+    if (!region) return null;   // unmatched; diagnostics reports that separately
+
+    const lines = text.split('\n');
+    const openerText = lines[region.startLine] ?? '';
+    const openerCode = stripStrings(parseLineStructure(openerText).code).toLowerCase();
+    // Safe: directive names come from the static CLOSING_DIRECTIVES table.
+    const directive = openers.find(open => new RegExp(`(?:^|\\s)\\${open}\\b`).test(openerCode));
+
+    // The parser records a scope opener's label with the directive as its kind, so
+    // requiring that is what separates a real scope name from another label that
+    // merely shares the line - `.for i = 0, ...` records `i` as a loop VARIABLE,
+    // and calling it the name of the block would be wrong.
+    const scopeKind = directive?.slice(1);
+    const named = scopeKind
+        ? documentIndex.get(uri)?.labels.find(label =>
+            label.range.start.line === region.startLine && label.kind === scopeKind)
+        : undefined;
+
+    const opened = `opened on line ${region.startLine + 1}`;
+    const content = named
+        ? `**${closer}**\n\nCloses **${named.originalName}**, the \`${directive ?? named.kind}\` ${opened}.`
+        : `**${closer}**\n\nCloses the \`${directive ?? 'block'}\` ${opened}.`;
+
+    return { contents: { kind: MarkupKind.Markdown, value: content } };
+}
+
 /** Hover for a label: where it is defined, its doc comment and its value. */
 export function symbolHover(
     word: string,
@@ -91,15 +143,16 @@ export function symbolHover(
     return { contents: { kind: MarkupKind.Markdown, value: content } };
 }
 
-/** Hover for a word: a symbol if one resolves, otherwise a mnemonic. */
+/** Hover for a word: a block closer, else a symbol, else a mnemonic. */
 export function buildHover(
     word: string,
-    uri: string,
+    document: TextDocument,
     line: number,
     documentIndex: Map<string, DocumentIndex>,
     caseSensitive: boolean,
     cpu: string = DEFAULT_CPU
 ): Hover | null {
-    return symbolHover(word, uri, line, documentIndex, caseSensitive)
+    return closerHover(word, document.getText(), line, document.uri, documentIndex)
+        ?? symbolHover(word, document.uri, line, documentIndex, caseSensitive)
         ?? opcodeHover(word, cpu);
 }

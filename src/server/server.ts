@@ -462,7 +462,7 @@ connection.onHover((params: HoverParams): Hover | null => {
     if (!word) return null;
 
     const uri = params.textDocument.uri;
-    return buildHover(word, uri, params.position.line, documentIndex,
+    return buildHover(word, document, params.position.line, documentIndex,
         effectiveCaseSensitive(uri), documentIndex.get(uri)?.cpu ?? globalSettings.cpu);
 });
 

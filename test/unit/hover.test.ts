@@ -127,18 +127,81 @@ describe('buildHover', () => {
         // A label may legitimately be named after an opcode; the definition is the
         // more useful answer when both exist.
         const { documentIndex, docs } = buildIndex({ source: 'inc     = $10\n        lda inc' });
-        const t = text(buildHover('inc', docs[0].uri, 1, documentIndex, false, '6502'));
+        const t = text(buildHover('inc', docs[0], 1, documentIndex, false, '6502'));
         expect(t).toContain('**inc**');
         expect(t).not.toContain('Addressing modes');
     });
 
     it('falls back to the mnemonic when no label matches', () => {
         const { documentIndex, docs } = buildIndex({ source: 'start\n        lda #1' });
-        expect(text(buildHover('lda', docs[0].uri, 1, documentIndex, false, '6502'))).toContain('Addressing modes');
+        expect(text(buildHover('lda', docs[0], 1, documentIndex, false, '6502'))).toContain('Addressing modes');
     });
 
     it('returns nothing for a word that is neither', () => {
         const { documentIndex, docs } = buildIndex({ source: 'start\n        rts' });
-        expect(buildHover('zzz', docs[0].uri, 1, documentIndex, false, '6502')).toBeNull();
+        expect(buildHover('zzz', docs[0], 1, documentIndex, false, '6502')).toBeNull();
+    });
+});
+
+describe('closerHover', () => {
+    const hoverOn = (source: string, word: string, line: number) => {
+        const { documentIndex, docs } = buildIndex({ source });
+        return text(buildHover(word, docs[0], line, documentIndex, false));
+    };
+
+    it('names the scope a .pend closes', () => {
+        expect(hoverOn('myproc  .proc\n        rts\n        .pend', '.pend', 2))
+            .toContain('Closes **myproc**');
+    });
+
+    it('says where the scope opened', () => {
+        expect(hoverOn('myproc  .proc\n        rts\n        .pend', '.pend', 2))
+            .toContain('opened on line 1');
+    });
+
+    it.each([
+        ['.pend', '.proc'],
+        ['.bend', '.block'],
+        ['.endm', '.macro'],
+        ['.endf', '.function'],
+        ['.endn', '.namespace'],
+    ])('handles %s closing %s', (closer, opener) => {
+        const source = `named   ${opener}\n        ${closer}`;
+        const shown = hoverOn(source, closer, 1);
+        expect(shown).toContain('Closes **named**');
+        expect(shown).toContain(`\`${opener}\``);
+    });
+
+    it('picks the innermost opener when scopes nest', () => {
+        const source = 'outer   .block\ninner   .proc\n        .pend\n        .bend';
+        expect(hoverOn(source, '.pend', 2)).toContain('Closes **inner**');
+        expect(hoverOn(source, '.bend', 3)).toContain('Closes **outer**');
+    });
+
+    it('describes an unnamed block by its directive', () => {
+        const shown = hoverOn('        .if 1\n        nop\n        .endif', '.endif', 2);
+        expect(shown).toContain('`.if`');
+        expect(shown).toContain('opened on line 1');
+        expect(shown).not.toContain('Closes **');
+    });
+
+    it('does not mistake a loop variable for the block name', () => {
+        // ".for i = 0, ..." records i as a loop variable, not as the name of the
+        // block, so .next must not claim to be closing "i".
+        const shown = hoverOn('        .for i = 0, i < 3, i = i + 1\n        .next', '.next', 1);
+        expect(shown).not.toContain('**i**');
+        expect(shown).toContain('`.for`');
+    });
+
+    it('returns nothing for an unmatched closer', () => {
+        const { documentIndex, docs } = buildIndex({ source: '        .bend' });
+        expect(buildHover('.bend', docs[0], 0, documentIndex, false)).toBeNull();
+    });
+
+    it('answers before a symbol that happens to share the name', () => {
+        // findSymbolInfo strips a leading dot to look up a macro, so a symbol
+        // called "pend" would otherwise answer for ".pend".
+        const source = 'pend    = 1\nmyproc  .proc\n        .pend';
+        expect(hoverOn(source, '.pend', 2)).toContain('Closes **myproc**');
     });
 });

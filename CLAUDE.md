@@ -229,6 +229,14 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   opcodes. CMOS and 16-bit targets are deliberately absent - the 65816's timing
   depends on register widths and direct-page alignment - and hover falls back to
   instruction length for them.
+- **Closer hover**: hovering `.pend`/`.bend`/`.endm`... says which scope it ends
+  and where that opened, which is worth having when the opener is a screen away.
+  The opener is found with `computeFoldingRanges`, so hover and folding can never
+  disagree about the pairing. Two traps, both covered by tests: it must be tried
+  BEFORE `symbolHover`, which strips a leading dot to look up a macro and would
+  otherwise answer for `.pend` with a symbol called `pend`; and the label at the
+  opener's line only counts as the scope's name when its `kind` matches the
+  directive, since `.for i = 0, ...` records `i` as a loop variable.
 - **Opcode hover**: `hover.ts` merges three sources. `addressing.ts` is GENERATED -
   every addressing mode was probed from 64tass, with the mode read back from the
   listing's monitor column (the assembler's own disassembly) rather than assumed
@@ -268,7 +276,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1176 tests); compiles first
+yarn test          # Run all tests (currently 1188 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
