@@ -110,10 +110,12 @@ export function closerHover(
             label.range.start.line === region.startLine && label.kind === scopeKind)
         : undefined;
 
+    // The closer already says what kind of scope it is, so only the name and the
+    // line are worth stating.
     const opened = `opened on line ${region.startLine + 1}`;
     const content = named
-        ? `**${closer}**\n\nCloses **${named.originalName}**, the \`${directive ?? named.kind}\` ${opened}.`
-        : `**${closer}**\n\nCloses the \`${directive ?? 'block'}\` ${opened}.`;
+        ? `**${closer}**\n\nCloses **${named.originalName}**, ${opened}.`
+        : `**${closer}**\n\n${opened.charAt(0).toUpperCase()}${opened.slice(1)}.`;
 
     return { contents: { kind: MarkupKind.Markdown, value: content } };
 }

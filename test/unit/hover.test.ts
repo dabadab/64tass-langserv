@@ -166,10 +166,8 @@ describe('closerHover', () => {
         ['.endf', '.function'],
         ['.endn', '.namespace'],
     ])('handles %s closing %s', (closer, opener) => {
-        const source = `named   ${opener}\n        ${closer}`;
-        const shown = hoverOn(source, closer, 1);
-        expect(shown).toContain('Closes **named**');
-        expect(shown).toContain(`\`${opener}\``);
+        expect(hoverOn(`named   ${opener}\n        ${closer}`, closer, 1))
+            .toContain('Closes **named**');
     });
 
     it('picks the innermost opener when scopes nest', () => {
@@ -178,10 +176,10 @@ describe('closerHover', () => {
         expect(hoverOn(source, '.bend', 3)).toContain('Closes **outer**');
     });
 
-    it('describes an unnamed block by its directive', () => {
+    it('gives only the line for an unnamed block', () => {
+        // The closer says what kind of scope it is, so there is nothing to add.
         const shown = hoverOn('        .if 1\n        nop\n        .endif', '.endif', 2);
-        expect(shown).toContain('`.if`');
-        expect(shown).toContain('opened on line 1');
+        expect(shown).toContain('Opened on line 1');
         expect(shown).not.toContain('Closes **');
     });
 
@@ -190,7 +188,7 @@ describe('closerHover', () => {
         // block, so .next must not claim to be closing "i".
         const shown = hoverOn('        .for i = 0, i < 3, i = i + 1\n        .next', '.next', 1);
         expect(shown).not.toContain('**i**');
-        expect(shown).toContain('`.for`');
+        expect(shown).toContain('Opened on line 1');
     });
 
     it('returns nothing for an unmatched closer', () => {

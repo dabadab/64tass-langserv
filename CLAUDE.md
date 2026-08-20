@@ -229,8 +229,8 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   opcodes. CMOS and 16-bit targets are deliberately absent - the 65816's timing
   depends on register widths and direct-page alignment - and hover falls back to
   instruction length for them.
-- **Closer hover**: hovering `.pend`/`.bend`/`.endm`... says which scope it ends
-  and where that opened, which is worth having when the opener is a screen away.
+- **Closer hover**: hovering `.pend`/`.bend`/`.endm`... names the scope it ends
+  and the line it opened on - not its kind, which the closer already says.
   The opener is found with `computeFoldingRanges`, so hover and folding can never
   disagree about the pairing. Two traps, both covered by tests: it must be tried
   BEFORE `symbolHover`, which strips a leading dot to look up a macro and would
