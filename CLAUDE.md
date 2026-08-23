@@ -371,8 +371,8 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   reading the word first produced `nop :`), and a line holding one word is left
   exactly where it sits - label or no-argument macro call, the assembler reads it
   the same either way, so moving it would pick a side the author did not.
-- **Cycle inlay hints**: `inlayHints.ts`, behind `64tass.cycleHints` and off by
-  default. Unlike hover, which lists every mode, a hint needs the ONE mode the
+- **Cycle inlay hints**: `inlayHints.ts`, behind `64tass.inlayHints.cycles` and
+  off by default. Unlike hover, which lists every mode, a hint needs the ONE mode the
   line assembles to, so the operand is matched by shape (`operands.ts`) and then
   narrowed by value width - `lda ZP` is zeropage where the constant resolves.
   Where several candidates remain, the hint appears only if they agree on the

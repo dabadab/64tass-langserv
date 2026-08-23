@@ -1,4 +1,3 @@
 - F12 opening the wrong file - do the same check as for the undefined symbols, do not force finding something anyway
-- how can I see the opcode cycle counts? there's no setting for that
 - run the assembler - if no root is specified use the same include tree as for the symbol definitions
 

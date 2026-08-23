@@ -100,11 +100,6 @@
           "default": true,
           "markdownDescription": "Grey out labels, constants and macros that nothing in the same program refers to, the way 64tass's own `-Wunused` reports them. A file of shared definitions uses none of its own symbols, so expect it to fade wholesale."
         },
-        "64tass.cycleHints": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Show each instruction's cycle count at the end of its line, as an inlay hint. Only the NMOS targets have timing data, and a line whose addressing mode cannot be pinned down gets no hint rather than a guessed one."
-        },
         "64tass.format.mnemonicColumn": {
           "type": "integer",
           "minimum": 0,
@@ -125,6 +120,11 @@
           "maximum": 200,
           "default": 40,
           "markdownDescription": "Column a trailing comment is aligned to. Full-line comments are never moved."
+        },
+        "64tass.inlayHints.cycles": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show each instruction's cycle count at the end of its line, as an inlay hint - `4` plainly, `4*` when an indexed access can cross a page, `2**` for a branch. Only the NMOS targets have timing data, and a line whose addressing mode cannot be pinned down gets no hint rather than a guessed one. Needs VS Code's own `#editor.inlayHints.enabled#` to be on, which it is by default."
         }
       }
     }

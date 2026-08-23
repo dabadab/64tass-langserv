@@ -119,6 +119,7 @@ interface Settings {
     assemblerPath: string;
     assemblerArgs: string[];
     unusedSymbols: boolean;
+    /** 64tass.inlayHints.cycles */
     cycleHints: boolean;
     format: FormatColumns;
 }
@@ -146,15 +147,20 @@ function readSettings(config: unknown): Settings {
         assemblerPath: typeof raw.assemblerPath === 'string' ? raw.assemblerPath.trim() : '',
         assemblerArgs: Array.isArray(raw.assemblerArgs) ? raw.assemblerArgs.map(String) : [],
         unusedSymbols: Boolean(raw.unusedSymbols ?? true),
-        cycleHints: Boolean(raw.cycleHints ?? false),
         // Dotted setting names arrive as a nested object.
+        cycleHints: Boolean(nested(raw.inlayHints).cycles ?? false),
         format: readColumns(raw.format),
     };
 }
 
+/** A dotted setting group, which the client sends as a nested object. */
+function nested(raw: unknown): Record<string, unknown> {
+    return (raw ?? {}) as Record<string, unknown>;
+}
+
 /** Format columns, each falling back to the default when absent or not a number. */
 function readColumns(raw: unknown): FormatColumns {
-    const given = (raw ?? {}) as Record<string, unknown>;
+    const given = nested(raw);
     const column = (value: unknown, fallback: number) =>
         typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
     return {
