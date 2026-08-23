@@ -110,6 +110,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   boundary (`outer:.proc` is valid) but a letter does not, which is what keeps the
   dotted reference `outer.proc` from reading as an opener.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`
+- **Label vs instruction**: decided by the FIRST TOKEN, never by the column
+  (verified): an indented `inner lda #1` defines `inner`, while `jsr rts` defines
+  nothing at either column - `jsr` is the instruction and `rts` its operand - and a
+  bare `nop` is the opcode, assembling to $EA. An explicit colon overrides all of
+  it, so `nop:` is a label. Anchoring on column 0 instead lost every indented label
+  (a false "undefined symbol" on each reference) and invented one for every
+  `jsr rts`, which also re-anchored the following `_local` symbols.
 - **Local symbols**: Start with `_`, scoped to the nearest code label above them.
   The underscore says WHERE a name lives, not what kind of thing it is: `_tbl .byte`
   is a data label, `_sub .block` opens a scope, a bare `_x` is a code label - all

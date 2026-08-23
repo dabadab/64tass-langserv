@@ -373,12 +373,18 @@ export function parseDocument(
             }
         }
 
-        // Check for code label (local symbol scope boundary):
-        // Regular name at line start, followed by nothing/comment/colon/opcode
-        // NOT followed by a scope-creating directive
-        const codeLabelMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(:)?\s*(;.*)?$/);
-        if (codeLabelMatch) {
-            const labelName = codeLabelMatch[1];
+        // Check for code label (local symbol scope boundary): a name alone on the
+        // line, optionally with a colon or a trailing comment.
+        //
+        // 64tass decides by FIRST TOKEN, not by column (verified): an indented
+        // `inner lda #1` defines inner, while `jsr rts` defines nothing at either
+        // column - jsr is the instruction and rts its operand. A bare `nop` is
+        // likewise the opcode, and assembles to $EA. An explicit colon overrides
+        // all of that: `nop:` IS a label.
+        const codeLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*(:)?\s*(;.*)?$/);
+        if (codeLabelMatch && (codeLabelMatch[3] === ':' || !opcodes.has(codeLabelMatch[2].toLowerCase()))) {
+            const labelName = codeLabelMatch[2];
+            const startChar = codeLabelMatch[1].length;
             if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
@@ -391,8 +397,8 @@ export function parseDocument(
                 originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
-                    Position.create(lineNum, 0),
-                    Position.create(lineNum, labelName.length)
+                    Position.create(lineNum, startChar),
+                    Position.create(lineNum, startChar + labelName.length)
                 ),
                 scopePath: getCurrentScopePath(),
                 localScope: isLocalName(labelName) ? currentLocalScope : null,
@@ -405,12 +411,16 @@ export function parseDocument(
 
         // Code label followed by opcode (also a local scope boundary)
         // Separated by whitespace or a colon: "LOOP: INX", "LOOP:INX", "LOOP INX".
-        // Deliberately still anchored at column 0 with no indent group: an indented
-        // "<opcode> <opcode>" line (e.g. "  jsr rts") would otherwise be read as a
-        // label followed by an opcode.
-        const codeLabelOpcodeMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([a-zA-Z]{3})\b/);
-        if (codeLabelOpcodeMatch && opcodes.has(codeLabelOpcodeMatch[2].toLowerCase())) {
-            const labelName = codeLabelOpcodeMatch[1];
+        // Indentation is allowed, because 64tass goes by the first token and not by
+        // the column: "  inner lda #1" defines inner. What keeps "  jsr rts" from
+        // reading the same way is that its first token is itself a mnemonic - unless
+        // a colon says otherwise, as in "nop: inx".
+        const codeLabelOpcodeMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:\s*|\s+)([a-zA-Z]{3})\b/);
+        if (codeLabelOpcodeMatch
+            && opcodes.has(codeLabelOpcodeMatch[4].toLowerCase())
+            && (codeLabelOpcodeMatch[3].includes(':') || !opcodes.has(codeLabelOpcodeMatch[2].toLowerCase()))) {
+            const labelName = codeLabelOpcodeMatch[2];
+            const startChar = codeLabelOpcodeMatch[1].length;
             if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
@@ -423,8 +433,8 @@ export function parseDocument(
                 originalName: labelName,
                 uri: document.uri,
                 range: Range.create(
-                    Position.create(lineNum, 0),
-                    Position.create(lineNum, labelName.length)
+                    Position.create(lineNum, startChar),
+                    Position.create(lineNum, startChar + labelName.length)
                 ),
                 scopePath: getCurrentScopePath(),
                 localScope: isLocalName(labelName) ? currentLocalScope : null,

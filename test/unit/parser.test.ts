@@ -1070,3 +1070,51 @@ describe('a leading underscore on any kind of label', () => {
         expect(index.labels.find(l => l.name === '_b')?.localScope).toBe('second');
     });
 });
+
+describe('first token decides label or instruction', () => {
+    // 64tass goes by the first token, not the column (all verified): an indented
+    // "inner lda #1" defines inner, "jsr rts" defines nothing at either column,
+    // a bare "nop" is the opcode and assembles to $EA, and an explicit colon
+    // overrides all of it.
+    const names = (source: string) => parse(source).labels.map(l => l.name);
+
+    it.each([
+        ['an indented label with an opcode', '        lda #0\n  inner lda #1', ['inner']],
+        ['an indented label alone', '    inner\n        nop', ['inner']],
+        ['a tab-indented label', '\tinner\tlda #1', ['inner']],
+        ['a label at column 0', 'inner   lda #1', ['inner']],
+    ])('indexes %s', (_name, source, expected) => {
+        expect(names(source)).toEqual(expected);
+    });
+
+    it.each([
+        ['jsr rts', 'jsr rts'],
+        ['indented jsr rts', '        jsr rts'],
+        ['lda tax', 'lda tax'],
+        ['sta txs', 'sta txs'],
+        ['a bare nop', 'nop'],
+        ['an indented bare rts', '        rts'],
+    ])('does not invent a label for "%s"', (_name, source) => {
+        expect(names(source)).toEqual([]);
+    });
+
+    it.each([
+        ['nop:', 'nop:'],
+        ['nop: inx', 'nop: inx'],
+    ])('honours an explicit colon in "%s"', (_name, source) => {
+        expect(names(source)).toEqual(['nop']);
+    });
+
+    it('does not let an instruction reset the local scope', () => {
+        // "jsr rts" used to index jsr as a code label, which re-anchored every
+        // following _local symbol onto it.
+        const index = parse('first   nop\n        jsr rts\n_after  = 1');
+        expect(index.labels.find(l => l.name === '_after')?.localScope).toBe('first');
+    });
+
+    it('points the range at the indented label, not column 0', () => {
+        const source = '    inner lda #1';
+        const label = parse(source).labels.find(l => l.name === 'inner')!;
+        expect(source.slice(label.range.start.character, label.range.end.character)).toBe('inner');
+    });
+});
