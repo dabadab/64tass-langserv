@@ -15,6 +15,7 @@ import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES, DEFAULT_CPU, opcode
 import { collectVisibleLabels, collectVisibleParameters, collectScopeMembers } from './symbols';
 import { parseLineStructure } from './utils';
 import { CommaContext, indexRegistersFor } from './operands';
+import { pragmaCompletions } from './pragmas';
 
 // Label kinds that represent something addressable, i.e. valid as a bare opcode
 // operand (branch/jump target, or the address a data label points at).
@@ -263,6 +264,13 @@ export function getCompletions(
         Position.create(position.line, 0),
         Position.create(position.line + 1, 0)
     ));
+    // A `; 64tass-langserv: ...` pragma being typed is the one thing worth
+    // completing inside a comment, and it has to be tried before the comment bail
+    // below sends everything else away.
+    const beforeCursor = fullLine.slice(0, position.character);
+    const pragmas = pragmaCompletions(beforeCursor, position);
+    if (pragmas !== null) return pragmas;
+
     // Don't offer keyword/opcode/symbol completions inside comments or strings.
     // parseLineStructure, not indexOf: a ';' inside a string literal is not a
     // comment, and treating it as one killed completion for the rest of a line

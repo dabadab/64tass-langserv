@@ -121,6 +121,9 @@ disturb your own build.
 **They are ordinary comments to 64tass** — they change only how
 this extension reads your code.
 
+Type `; 64t` and completion offers the prefix, then the pragma names, then the
+values each one takes. Hovering a pragma line says what it does.
+
 ### Case sensitivity
 
 ```asm

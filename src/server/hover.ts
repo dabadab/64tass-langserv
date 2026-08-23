@@ -8,6 +8,7 @@ import { opcodeDoc } from './opcodeDocs';
 import { cyclesFor, hasCycleData, formatCycles, CycleVariance } from './cycles';
 import { parseNumericValue, formatNumericValue, stripStrings, parseLineStructure } from './utils';
 import { computeFoldingRanges } from './folding';
+import { pragmaHover } from './pragmas';
 
 const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -144,7 +145,11 @@ export function buildHover(
     caseSensitive: boolean,
     cpu: string = DEFAULT_CPU
 ): Hover | null {
-    return closerHover(word, document.getText(), line, document.uri, documentIndex)
+    // The pragma comes first: its line is a comment, so nothing else would answer
+    // for it, and a word inside one ("cpu", "root") could otherwise be looked up
+    // as a symbol.
+    return pragmaHover(document.getText().split('\n')[line] ?? '', line)
+        ?? closerHover(word, document.getText(), line, document.uri, documentIndex)
         ?? symbolHover(word, document.uri, line, documentIndex, caseSensitive)
         ?? opcodeHover(word, cpu);
 }
