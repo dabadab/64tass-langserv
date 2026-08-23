@@ -552,7 +552,7 @@ export const BUILTINS = new Set([
 ]);
 
 // Built-in directives regex pattern for validation
-export const BUILTIN_DIRECTIVES_PATTERN = /^\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|align|binary|include|binclude|org|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|here|as|option|eor|seed|else|elsif|elif|case|default|shift|shiftl|proff|pron|hidemac|showmac|continue|break|breakif|continueif|sfunction|lbl|goto|databank|dpage|autsiz|mansiz|char|dint|lint|sint|dsection|dstruct|dunion|offs|tdef|al|alignind|alignpageind|check|from|xl|xs|end)$/i;
+export const BUILTIN_DIRECTIVES_PATTERN = /^\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|align|binary|include|binclude|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|here|as|option|eor|seed|else|elsif|elif|case|default|shift|shiftl|proff|pron|hidemac|showmac|continue|break|breakif|continueif|sfunction|lbl|goto|databank|dpage|autsiz|mansiz|char|dint|lint|sint|dsection|dstruct|dunion|offs|tdef|al|alignind|alignpageind|check|from|xl|xs|end)$/i;
 
 // Canonical list of all directive names (without the leading dot), for completion.
 // Derived from the other directive sources above so there's a single source of

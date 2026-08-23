@@ -191,9 +191,12 @@ describe('closerHover', () => {
         expect(shown).toContain('Opened on line 1');
     });
 
-    it('returns nothing for an unmatched closer', () => {
+    it('has no scope to name for an unmatched closer', () => {
+        // It falls through to the directive description, which is all there is
+        // to say about a `.bend` that closes nothing.
         const { documentIndex, docs } = buildIndex({ source: '        .bend' });
-        expect(buildHover('.bend', docs[0], 0, documentIndex, false)).toBeNull();
+        const hover = buildHover('.bend', docs[0], 0, documentIndex, false);
+        expect(String((hover!.contents as { value: string }).value)).not.toContain('Closes');
     });
 
     it('answers before a symbol that happens to share the name', () => {

@@ -9,6 +9,7 @@ import { cyclesFor, hasCycleData, formatCycles, CycleVariance } from './cycles';
 import { parseNumericValue, formatNumericValue, stripStrings, parseLineStructure } from './utils';
 import { computeFoldingRanges } from './folding';
 import { pragmaHover } from './pragmas';
+import { DIRECTIVE_DOCS } from './directiveDocs';
 
 const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -136,7 +137,35 @@ export function symbolHover(
     return { contents: { kind: MarkupKind.Markdown, value: content } };
 }
 
-/** Hover for a word: a block closer, else a symbol, else a mnemonic. */
+/**
+ * Hover for one of the assembler's own directives.
+ *
+ * Ranked above symbolHover because the assembler ranks it there too: a macro
+ * named `byte` does NOT take over `.byte`, which still emits a byte (verified).
+ * The text is the manual's, quoted rather than rewritten - what a directive means
+ * cannot be probed the way its opcode tables can, so there is no second source to
+ * check a paraphrase against.
+ */
+export function directiveHover(word: string): Hover | null {
+    const doc = DIRECTIVE_DOCS[word.toLowerCase()];
+    if (!doc) return null;
+    return {
+        contents: {
+            kind: MarkupKind.Markdown,
+            value: [
+                '```',
+                doc.syntax,
+                '```',
+                '',
+                doc.description,
+                '',
+                '*From the [64tass manual](https://tass64.sourceforge.net/).*',
+            ].join('\n')
+        }
+    };
+}
+
+/** Hover for a word: a pragma, a block closer, a directive, a symbol, else a mnemonic. */
 export function buildHover(
     word: string,
     document: TextDocument,
@@ -150,6 +179,7 @@ export function buildHover(
     // as a symbol.
     return pragmaHover(document.getText().split('\n')[line] ?? '', line)
         ?? closerHover(word, document.getText(), line, document.uri, documentIndex)
+        ?? directiveHover(word)
         ?? symbolHover(word, document.uri, line, documentIndex, caseSensitive)
         ?? opcodeHover(word, cpu);
 }

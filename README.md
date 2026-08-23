@@ -34,6 +34,7 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Folding** for `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif` and friends.
 - **Diagnostics** for various problems.
 - **Inactive code** greyed out - the branches of an `.if` chain the conditions rule out.
+- **Directive help** on hover, quoting the 64tass manual.
 
 ## Settings
 

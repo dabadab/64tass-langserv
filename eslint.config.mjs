@@ -9,6 +9,13 @@ export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
+        // The generators under tools/ are Node scripts, not part of the bundle.
+        files: ['tools/**/*.mjs'],
+        languageOptions: {
+            globals: { process: 'readonly', console: 'readonly', URL: 'readonly', fetch: 'readonly' },
+        },
+    },
+    {
         files: ['**/*.ts'],
         rules: {
             // The codebase deliberately uses `any` at the LSP configuration boundary,

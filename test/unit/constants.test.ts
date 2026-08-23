@@ -100,12 +100,17 @@ describe('BUILTINS', () => {
 });
 
 describe('BUILTIN_DIRECTIVES_PATTERN', () => {
+    it('leaves out names 64tass does not have', () => {
+        // `.org` reads as an undefined symbol to the assembler (verified), the
+        // same way `.const` and `.let` did before they were dropped.
+        expect(BUILTIN_DIRECTIVES_PATTERN.test('.org')).toBe(false);
+    });
+
     it('matches common directives', () => {
         expect(BUILTIN_DIRECTIVES_PATTERN.test('.byte')).toBe(true);
         expect(BUILTIN_DIRECTIVES_PATTERN.test('.word')).toBe(true);
         expect(BUILTIN_DIRECTIVES_PATTERN.test('.text')).toBe(true);
         expect(BUILTIN_DIRECTIVES_PATTERN.test('.include')).toBe(true);
-        expect(BUILTIN_DIRECTIVES_PATTERN.test('.org')).toBe(true);
     });
 
     it('does not match user macros', () => {
