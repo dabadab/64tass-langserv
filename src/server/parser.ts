@@ -9,6 +9,17 @@ import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTop
 
 export type LogFunction = (message: string) => void;
 
+/**
+ * A name beginning with `_` is local to the enclosing code label, whatever kind
+ * of definition introduces it - a data label, a scope opener and a plain
+ * assignment are all equally local (verified: none is reachable from under the
+ * next named code label). It also does NOT become the enclosing label itself,
+ * so `_a` defined before a `_code` label is still visible after it.
+ */
+function isLocalName(name: string): boolean {
+    return name.startsWith('_');
+}
+
 /** Index of the last element satisfying `predicate`, or -1. */
 function findLastIndex<T>(items: T[], predicate: (item: T) => boolean): number {
     for (let i = items.length - 1; i >= 0; i--) {
@@ -266,7 +277,7 @@ export function parseDocument(
         // the raw line, since its range has to point at real columns.
         for (const open of openersOnLine.filter(directive => directive in SCOPE_OPENERS)) {
             // Safe: directive name from static constant (SCOPE_OPENERS)
-            const openPattern = new RegExp(`^(\\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\\s*:\\s*|\\s+)\\${open}\\b\\s*(.*)`, 'i');
+            const openPattern = new RegExp(`^(\\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s*:\\s*|\\s+)\\${open}\\b\\s*(.*)`, 'i');
             const match = line.match(openPattern);
             if (match) {
                 const startChar = match[1].length;
@@ -284,8 +295,8 @@ export function parseDocument(
                         Position.create(lineNum, startChar + labelName.length)
                     ),
                     scopePath: currentPath,
-                    localScope: null,
-                    isLocal: false,
+                    localScope: isLocalName(labelName) ? currentLocalScope : null,
+                    isLocal: isLocalName(labelName),
                     kind: open.slice(1) as LabelKind,
                     comment
                 });
@@ -337,10 +348,10 @@ export function parseDocument(
         // Check for code label (local symbol scope boundary):
         // Regular name at line start, followed by nothing/comment/colon/opcode
         // NOT followed by a scope-creating directive
-        const codeLabelMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*(:)?\s*(;.*)?$/);
+        const codeLabelMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(:)?\s*(;.*)?$/);
         if (codeLabelMatch) {
             const labelName = codeLabelMatch[1];
-            currentLocalScope = normalizeName(labelName);
+            if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope,
@@ -356,8 +367,8 @@ export function parseDocument(
                     Position.create(lineNum, labelName.length)
                 ),
                 scopePath: getCurrentScopePath(),
-                localScope: null,
-                isLocal: false,
+                localScope: isLocalName(labelName) ? currentLocalScope : null,
+                isLocal: isLocalName(labelName),
                 kind: 'code',
                 comment: getBlockComment(lines, lineNum)
             });
@@ -369,10 +380,10 @@ export function parseDocument(
         // Deliberately still anchored at column 0 with no indent group: an indented
         // "<opcode> <opcode>" line (e.g. "  jsr rts") would otherwise be read as a
         // label followed by an opcode.
-        const codeLabelOpcodeMatch = line.match(/^([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([a-zA-Z]{3})\b/);
+        const codeLabelOpcodeMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([a-zA-Z]{3})\b/);
         if (codeLabelOpcodeMatch && opcodes.has(codeLabelOpcodeMatch[2].toLowerCase())) {
             const labelName = codeLabelOpcodeMatch[1];
-            currentLocalScope = normalizeName(labelName);
+            if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope,
@@ -388,8 +399,8 @@ export function parseDocument(
                     Position.create(lineNum, labelName.length)
                 ),
                 scopePath: getCurrentScopePath(),
-                localScope: null,
-                isLocal: false,
+                localScope: isLocalName(labelName) ? currentLocalScope : null,
+                isLocal: isLocalName(labelName),
                 kind: 'code',
                 comment: getBlockComment(lines, lineNum)
             });
@@ -514,7 +525,7 @@ export function parseDocument(
         //   _v ..= [1] a compound assignment - a modification of an existing
         //              variable, not a definition, so it is left as a reference
         // 64tass has ..= += -= *= /= &= |= ^= <<= >>= %= **= (all verified).
-        const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(\.\.=|\*\*=|<<=|>>=|[-+*/&|^%]=|:=|=|:|\s|;|$)/);
+        const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(\.\.=|\*\*=|<<=|>>=|[-+*/&|^%]=|:=|=|:|;|$)/);
         if (localMatch) {
             const labelName = localMatch[2];
             const startChar = localMatch[1].length;
@@ -581,7 +592,7 @@ export function parseDocument(
         // Labels with data directives (not scope-creating)
         // Separated by whitespace or a colon: "HI: .byte $00", even "HI:.byte $00"
         // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
-        const dataLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.(byte|word|addr|fill|text|ptext|null)\b/i);
+        const dataLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.(byte|word|addr|fill|text|ptext|null)\b/i);
         if (dataLabelMatch) {
             const labelName = dataLabelMatch[2];
             const startChar = dataLabelMatch[1].length;
@@ -594,8 +605,8 @@ export function parseDocument(
                     Position.create(lineNum, startChar + labelName.length)
                 ),
                 scopePath: getCurrentScopePath(),
-                localScope: null,
-                isLocal: false,
+                localScope: isLocalName(labelName) ? currentLocalScope : null,
+                isLocal: isLocalName(labelName),
                 kind: 'data',
                 comment: getBlockComment(lines, lineNum)
             });
@@ -622,8 +633,8 @@ export function parseDocument(
                     Position.create(lineNum, startChar + labelName.length)
                 ),
                 scopePath: getCurrentScopePath(),
-                localScope: null,
-                isLocal: false,
+                localScope: isLocalName(labelName) ? currentLocalScope : null,
+                isLocal: isLocalName(labelName),
                 kind: 'data',
                 comment: getBlockComment(lines, lineNum)
             });
@@ -638,7 +649,7 @@ export function parseDocument(
         // is why the macro used is recorded here and resolved at query time.
         // Separated by whitespace or a colon: "label: .macro_name args", even "label:.macro_name"
         // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
-        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([.#])([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
+        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([.#])([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
         // "lda #COLORS" is an opcode with an immediate operand, not a label calling
         // a macro, so the '#' form has to rule the mnemonics out.
         const isImmediateOperand = macroLabelMatch?.[3] === '#'
@@ -658,8 +669,8 @@ export function parseDocument(
                         Position.create(lineNum, startChar + labelName.length)
                     ),
                     scopePath: getCurrentScopePath(),
-                    localScope: null,
-                    isLocal: false,
+                    localScope: isLocalName(labelName) ? currentLocalScope : null,
+                    isLocal: isLocalName(labelName),
                     kind: 'data',
                     comment: getBlockComment(lines, lineNum)
                 });

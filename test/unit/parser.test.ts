@@ -931,8 +931,12 @@ describe('local symbol assignment operators', () => {
         expect(index.labels.filter(l => l.name === '_items')).toHaveLength(1);
     });
 
-    it('still records a bare local label', () => {
-        expect(parse('_x\n        lda #1').labels.find(l => l.name === '_x')?.kind).toBe('const');
+    it('records a bare local label as a code label', () => {
+        // It names the current address, so 'code' - it used to come out 'const'
+        // because the local branch claimed every underscore line regardless.
+        const label = parse('_x\n        lda #1').labels.find(l => l.name === '_x');
+        expect(label?.kind).toBe('code');
+        expect(label?.isLocal).toBe(true);
     });
 });
 
@@ -1016,5 +1020,53 @@ describe('block directives in comments and strings', () => {
         ['an opener in a string', 'outer   .proc\n        .text "a .block b"\ninner   lda #2\n        .pend'],
     ])('ignores %s', (_name, source) => {
         expect(parse(source).labels.find(l => l.name === 'inner')?.scopePath).toBe('outer');
+    });
+});
+
+describe('a leading underscore on any kind of label', () => {
+    // Every one of these is accepted by the assembler, and every one is local to
+    // the enclosing code label. The underscore used to be handled in one branch
+    // only, so all of them came out as plain constants - and "_sub .block" did
+    // not even open its scope.
+    const find = (source: string, name: string) =>
+        parse(source).labels.find(l => l.name === name);
+
+    it.each([
+        ['a data label', 'lbl     nop\n_tbl    .byte 1,2', '_tbl', 'data'],
+        ['a code label with an opcode', 'lbl     nop\n_code   nop', '_code', 'code'],
+        ['a bare code label', 'lbl     nop\n_bare', '_bare', 'code'],
+        ['a constant', 'lbl     nop\n_c      = 1', '_c', 'const'],
+        ['a scope opener', 'lbl     nop\n_sub    .block\n        .bend', '_sub', 'block'],
+        ['a proc', 'lbl     nop\n_sub    .proc\n        .pend', '_sub', 'proc'],
+    ])('gives %s its own kind', (_name, source, label, kind) => {
+        expect(find(source, label)?.kind).toBe(kind);
+    });
+
+    it.each([
+        ['lbl     nop\n_tbl    .byte 1,2', '_tbl'],
+        ['lbl     nop\n_code   nop', '_code'],
+        ['lbl     nop\n_sub    .block\n        .bend', '_sub'],
+    ])('still marks it local to the enclosing code label', (source, label) => {
+        const found = find(source, label);
+        expect(found?.isLocal).toBe(true);
+        expect(found?.localScope).toBe('lbl');
+    });
+
+    it('opens a scope for "_sub .block"', () => {
+        const index = parse('lbl     nop\n_sub    .block\nval     = 5\n        .bend');
+        expect(index.labels.find(l => l.name === 'val')?.scopePath).toBe('_sub');
+    });
+
+    it('does not become the enclosing label itself', () => {
+        // Verified: "_a" defined before a "_code" label is still visible after it,
+        // where a named label would have ended its scope.
+        const index = parse('lbl     nop\n_a      = 1\n_code   nop\n_b      = 2');
+        expect(index.labels.find(l => l.name === '_b')?.localScope).toBe('lbl');
+    });
+
+    it('a named code label still starts a new local scope', () => {
+        const index = parse('first   nop\n_a      = 1\nsecond  nop\n_b      = 2');
+        expect(index.labels.find(l => l.name === '_a')?.localScope).toBe('first');
+        expect(index.labels.find(l => l.name === '_b')?.localScope).toBe('second');
     });
 });

@@ -109,7 +109,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   boundary (`outer:.proc` is valid) but a letter does not, which is what keeps the
   dotted reference `outer.proc` from reading as an opener.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`
-- **Local symbols**: Start with `_`, scoped to the nearest code label above them
+- **Local symbols**: Start with `_`, scoped to the nearest code label above them.
+  The underscore says WHERE a name lives, not what kind of thing it is: `_tbl .byte`
+  is a data label, `_sub .block` opens a scope, a bare `_x` is a code label - all
+  local, all verified. Every label pattern in `parser.ts` accepts the underscore
+  and marks the result local via `isLocalName`; the dedicated local branch handles
+  only bare names and assignments. A `_` code label does NOT become the enclosing
+  label, so `_a` stays visible past a following `_code` (verified).
 - **Qualified names**: `a.b` resolves `a` through the ordinary scope chain, so its
   full path must be `<some enclosing scope>.a` (verified: from global,
   `keyboard.scan` does NOT reach a `keyboard` nested inside `qwe`; from inside
