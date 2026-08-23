@@ -716,8 +716,13 @@ export function parseDocument(
             const labelName = macroLabelMatch[2];
             const startChar = macroLabelMatch[1].length;
             const macroCalled = normalizeName(macroLabelMatch[4]);
+            // The directive vocabulary is always lowercase; only user symbols are
+            // subject to the case setting. Looking the raw spelling up meant that
+            // under `caseSensitive` a "FOO .PROC" was not recognised as a scope
+            // opener here and got indexed a second time as a macro call.
+            const calledDirective = `.${macroLabelMatch[4].toLowerCase()}`;
             // Skip if this is a scope-creating directive (already handled above)
-            if (!Object.keys(SCOPE_OPENERS).includes('.' + macroCalled)) {
+            if (!(calledDirective in SCOPE_OPENERS)) {
                 labels.push({
                     name: normalizeName(labelName),
                     originalName: labelName,

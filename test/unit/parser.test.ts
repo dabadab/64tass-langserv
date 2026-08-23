@@ -1181,3 +1181,29 @@ describe('unnamed scope openers', () => {
         expect(index.labels.find(l => l.name === 'visible')?.scopePath).toBe('named');
     });
 });
+
+describe('uppercase directives under case sensitivity', () => {
+    // The directive vocabulary is always lowercase; only user symbols follow the
+    // case setting. Looking up the raw spelling meant "FOO .PROC" was not seen as
+    // a scope opener by the macro-call guard and got indexed a second time.
+    const parseCS = (source: string) =>
+        parseDocument(createDoc(source), { caseSensitive: true });
+
+    it.each(['.PROC', '.BLOCK', '.MACRO', '.NAMESPACE'])('indexes "FOO %s" once', (directive) => {
+        const index = parseCS(`FOO     ${directive}`);
+        expect(index.labels.filter(l => l.name === 'FOO')).toHaveLength(1);
+    });
+
+    it('gives it the scope kind, not "data"', () => {
+        expect(parseCS('FOO     .PROC\n        .PEND').labels[0].kind).toBe('proc');
+    });
+
+    it('records no macro relationship for it', () => {
+        expect([...parseCS('FOO     .PROC\n        .PEND').labelDefinedByMacro]).toEqual([]);
+    });
+
+    it('still records a real macro call under case sensitivity', () => {
+        const index = parseCS('EMIT    .macro\n        .endm\nINST    #EMIT');
+        expect(index.labelDefinedByMacro.get('INST')).toBe('EMIT');
+    });
+});
