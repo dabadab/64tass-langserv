@@ -379,9 +379,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   count. `formatCycles` moved from `hover.ts` into `cycles.ts` so both render the
   markers the same way. The capability is declared unconditionally: a setting can
   be switched mid-session, a capability cannot.
-- **Unused symbols**: `unused.ts`, behind `64tass.unusedSymbols` and off by
-  default, mirroring 64tass's own `-Wunused` (whose messages it also mirrors:
-  unused label / const / macro / variable). NAME-based, not scope-resolved - any
+- **Unused symbols**: `unused.ts`, behind `64tass.unusedSymbols` (on by default),
+  mirroring 64tass's own `-Wunused` (whose messages it also mirrors: unused label
+  / const / macro / variable). Shown as a `Hint` with `DiagnosticTag.Unnecessary`
+  - faded text, nothing in the Problems panel - which is what makes on-by-default
+  tolerable for a file of shared definitions that uses none of its own symbols. NAME-based, not scope-resolved - any
   identifier written anywhere in the compilation unit, outside a definition's own
   range, marks that name used. Greying out a symbol that IS used is the expensive
   mistake; missing one that is not costs nothing. Comments and string contents are

@@ -126,7 +126,7 @@ interface Settings {
 // Default settings
 let globalSettings: Settings = {
     caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [],
-    assemblerPath: '', assemblerArgs: [], unusedSymbols: false, cycleHints: false,
+    assemblerPath: '', assemblerArgs: [], unusedSymbols: true, cycleHints: false,
     format: DEFAULT_COLUMNS
 };
 
@@ -145,7 +145,7 @@ function readSettings(config: unknown): Settings {
         includePaths: Array.isArray(raw.includePaths) ? raw.includePaths.map(String) : [],
         assemblerPath: typeof raw.assemblerPath === 'string' ? raw.assemblerPath.trim() : '',
         assemblerArgs: Array.isArray(raw.assemblerArgs) ? raw.assemblerArgs.map(String) : [],
-        unusedSymbols: Boolean(raw.unusedSymbols ?? false),
+        unusedSymbols: Boolean(raw.unusedSymbols ?? true),
         cycleHints: Boolean(raw.cycleHints ?? false),
         // Dotted setting names arrive as a nested object.
         format: readColumns(raw.format),

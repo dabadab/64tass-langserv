@@ -23,6 +23,13 @@ export const SERVER_BUILT = fs.existsSync(SERVER);
  * wiring - that each capability is declared, routed to the right module, and
  * answered in the shape the protocol expects.
  */
+/** As much of a diagnostic as the protocol tests look at. */
+export interface PublishedDiagnostic {
+    message: string;
+    code?: string | number;
+    severity?: number;
+}
+
 export class TestServer {
     private constructor(
         private readonly child: cp.ChildProcess,
@@ -81,14 +88,14 @@ export class TestServer {
     }
 
     /** Resolve with the next diagnostics published for a URI. */
-    nextDiagnostics(uri: string, timeoutMs = 10000): Promise<{ message: string; code?: string | number }[]> {
+    nextDiagnostics(uri: string, timeoutMs = 10000): Promise<PublishedDiagnostic[]> {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 disposable.dispose();
                 reject(new Error(`no diagnostics published for ${uri} within ${timeoutMs}ms`));
             }, timeoutMs);
             const disposable = this.connection.onNotification('textDocument/publishDiagnostics', (params: {
-                uri: string; diagnostics: { message: string; code?: string | number }[];
+                uri: string; diagnostics: PublishedDiagnostic[];
             }) => {
                 if (params.uri !== uri) return;
                 clearTimeout(timer);

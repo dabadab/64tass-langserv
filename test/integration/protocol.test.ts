@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
+import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import { TestServer, SERVER_BUILT } from '../helpers/lspClient';
 
 /**
@@ -166,7 +167,9 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
             textDocument: { uri, version: 2 },
             contentChanges: [{ text: 'undefined_thing = 1\nstart\n        lda undefined_thing\n' }],
         });
-        expect(await cleared).toEqual([]);
+        // Hints are a different class and stay - `start` is an unused label, and
+        // that is on by default. What must be gone is the error.
+        expect((await cleared).filter(d => d.severity !== DiagnosticSeverity.Hint)).toEqual([]);
     }, 20000);
 
     it('offers a quick fix for a misspelled symbol', async () => {

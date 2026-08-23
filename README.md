@@ -75,10 +75,10 @@ workspace root.
 
 ### `64tass.unusedSymbols`
 
-Default `false`. Greys out labels, constants and macros nothing in the same
-program refers to, the way 64tass's own `-Wunused` reports them. Off by default
-for the same reason it is off there: a file of shared definitions is full of
-symbols it does not use itself.
+Default `true`. Greys out labels, constants and macros nothing in the same
+program refers to, the way 64tass's own `-Wunused` reports them. Worth knowing
+before you turn it off: a file of shared definitions uses none of its own
+symbols, so it fades wholesale.
 
 ### `64tass.format.mnemonicColumn` / `operandColumn` / `commentColumn`
 
