@@ -99,6 +99,11 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Grey out labels, constants and macros that nothing in the same program refers to. Mirrors 64tass's `-Wunused`, and is off by default for the same reason it is there: a library of shared definitions is full of symbols its own file never uses."
+        },
+        "64tass.cycleHints": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show each instruction's cycle count at the end of its line, as an inlay hint. Only the NMOS targets have timing data, and a line whose addressing mode cannot be pinned down gets no hint rather than a guessed one."
         }
       }
     }

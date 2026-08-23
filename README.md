@@ -78,6 +78,14 @@ program refers to, the way 64tass's own `-Wunused` reports them. Off by default
 for the same reason it is off there: a file of shared definitions is full of
 symbols it does not use itself.
 
+### `64tass.cycleHints`
+
+Default `false`. Shows each instruction's cycle count at the end of its line as
+an inlay hint — `4` plainly, `4*` when an indexed access can cross a page, `2**`
+for a branch. Only the NMOS targets have timing data, and a line whose addressing
+mode cannot be pinned down (`lda elsewhere`, which may be zeropage or absolute)
+gets no hint rather than a guessed one.
+
 ### `64tass.assemblerPath`
 
 Path to the real `64tass` binary. When set, **saving a file assembles it** and

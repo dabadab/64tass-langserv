@@ -317,3 +317,16 @@ export function cyclesFor(cpu: string, opcode: number): CycleInfo | null {
 export function hasCycleData(cpu: string): boolean {
     return NMOS_TARGETS.has(cpu.toLowerCase());
 }
+
+/**
+ * How a count is written where there is no room to explain it: a bare number, or
+ * one with the markers hover's legend describes.
+ */
+export function formatCycles(cycles: number, variance: CycleVariance): string {
+    switch (variance) {
+        case 'page': return `${cycles}*`;
+        case 'branch': return `${cycles}**`;
+        case 'jam': return '--';
+        default: return String(cycles);
+    }
+}

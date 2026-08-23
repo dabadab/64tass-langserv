@@ -5,21 +5,11 @@ import { findSymbolInfo } from './symbols';
 import { opcodesForCpu, DEFAULT_CPU, CLOSING_DIRECTIVES } from './constants';
 import { addressingModesFor } from './addressing';
 import { opcodeDoc } from './opcodeDocs';
-import { cyclesFor, hasCycleData, CycleVariance } from './cycles';
+import { cyclesFor, hasCycleData, formatCycles, CycleVariance } from './cycles';
 import { parseNumericValue, formatNumericValue, stripStrings, parseLineStructure } from './utils';
 import { computeFoldingRanges } from './folding';
 
 const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
-
-/** Cycle count with the classic markers for the conditional extras. */
-function formatCycles(cycles: number, variance: CycleVariance): string {
-    switch (variance) {
-        case 'page': return `${cycles}*`;
-        case 'branch': return `${cycles}**`;
-        case 'jam': return '--';
-        default: return String(cycles);
-    }
-}
 
 /**
  * Hover for a mnemonic: what it does, and the addressing modes it has on the CPU

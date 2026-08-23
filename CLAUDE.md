@@ -325,6 +325,14 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   semantics cannot be probed, so mnemonics outside the sets whose meaning is
   unambiguous are left undescribed rather than guessed at, and hover degrades to
   showing just their (verified) modes.
+- **Cycle inlay hints**: `inlayHints.ts`, behind `64tass.cycleHints` and off by
+  default. Unlike hover, which lists every mode, a hint needs the ONE mode the
+  line assembles to, so the operand is matched by shape (`operands.ts`) and then
+  narrowed by value width - `lda ZP` is zeropage where the constant resolves.
+  Where several candidates remain, the hint appears only if they agree on the
+  count. `formatCycles` moved from `hover.ts` into `cycles.ts` so both render the
+  markers the same way. The capability is declared unconditionally: a setting can
+  be switched mid-session, a capability cannot.
 - **Unused symbols**: `unused.ts`, behind `64tass.unusedSymbols` and off by
   default, mirroring 64tass's own `-Wunused` (whose messages it also mirrors:
   unused label / const / macro / variable). NAME-based, not scope-resolved - any
@@ -398,7 +406,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1400 tests); compiles first
+yarn test          # Run all tests (currently 1407 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

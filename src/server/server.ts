@@ -45,6 +45,7 @@ import {
     SemanticTokens,
     SemanticTokensBuilder,
     Diagnostic,
+    InlayHint,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -66,6 +67,7 @@ import {
 import { validateDocument } from './diagnostics';
 import { assemble, chooseRoot } from './assembler';
 import { findUnusedSymbols } from './unused';
+import { computeInlayHints } from './inlayHints';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
 import { collectSourceFiles, findFilePathAt } from './workspace';
@@ -115,12 +117,13 @@ interface Settings {
     assemblerPath: string;
     assemblerArgs: string[];
     unusedSymbols: boolean;
+    cycleHints: boolean;
 }
 
 // Default settings
 let globalSettings: Settings = {
     caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [],
-    assemblerPath: '', assemblerArgs: [], unusedSymbols: false
+    assemblerPath: '', assemblerArgs: [], unusedSymbols: false, cycleHints: false
 };
 
 /**
@@ -139,6 +142,7 @@ function readSettings(config: unknown): Settings {
         assemblerPath: typeof raw.assemblerPath === 'string' ? raw.assemblerPath.trim() : '',
         assemblerArgs: Array.isArray(raw.assemblerArgs) ? raw.assemblerArgs.map(String) : [],
         unusedSymbols: Boolean(raw.unusedSymbols ?? false),
+        cycleHints: Boolean(raw.cycleHints ?? false),
     };
 }
 
@@ -313,6 +317,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
                 full: true
             },
             workspaceSymbolProvider: true,
+            // Declared unconditionally: the setting can be turned on mid-session,
+            // and a capability cannot. The handler returns nothing while it is off.
+            inlayHintProvider: true,
             signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },
             completionProvider: {
                 triggerCharacters: ['.', '"', '/']
@@ -709,6 +716,13 @@ documents.onDidChangeContent(change => {
         // ...but collapse bursts of typing into a single validation pass
         diagnosticDebouncer.run(change.document.uri, () => publishDiagnosticsFor(change.document.uri));
     });
+});
+
+connection.languages.inlayHint.on((params): InlayHint[] => {
+    if (!globalSettings.cycleHints) return [];
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+    return computeInlayHints(document, params.range, documentIndex);
 });
 
 documents.onDidSave(event => {
