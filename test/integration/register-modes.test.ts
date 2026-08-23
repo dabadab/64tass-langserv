@@ -5,7 +5,7 @@ import * as path from 'path';
 import { TASS_EXISTS, TASS_PATH, TABLES_MATCH_TASS, CPU_FLAG, compile } from '../helpers/compiler';
 import * as cp from 'child_process';
 import { registerModesForCpu, opcodesForCpu } from '../../src/server/constants';
-import { indexRegistersFor, CommaContext } from '../../src/server/completions';
+import { indexRegistersFor, CommaContext } from '../../src/server/operands';
 
 /**
  * The register-mode table was probed from the assembler, and a flaw in that probe

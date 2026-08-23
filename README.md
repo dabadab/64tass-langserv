@@ -53,8 +53,10 @@ recognised, mirroring 64tass's CPU selection flags. Accepts the same names as th
 A `.cpu "..."` directive in a file is honoured automatically, and overrides the
 setting for that file and everything it `.include`s.
 
-Saying which target you are on also turns on a check: a mnemonic that belongs to
-some other CPU (`bra` on a plain 6502) is reported. Left at the default, that
+Saying which target you are on also turns on some checks: a mnemonic that belongs
+to some other CPU (`bra` on a plain 6502) is reported, as is an addressing mode
+that exists elsewhere but not here (`lda $10,s`). A form no CPU has at all
+(`lda ($10),x`) is reported either way. Left at the default, that
 check stays off — the target can also come from a command-line flag, and guessing
 wrong would mean errors on correct code.
 

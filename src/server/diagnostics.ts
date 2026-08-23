@@ -23,6 +23,7 @@ import {
 import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { blockDirectivesOn } from './blocks';
+import { findAddressingProblem } from './operands';
 import { LABEL_REQUIRED_OPENERS } from './constants';
 import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
@@ -466,6 +467,24 @@ export function validateDocument(
         if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
             operand = opcodeMatch[2];
             operandStart = opcodeMatch[0].length - operand.length;
+
+            // Does that operand have an addressing mode at all? `lda ($10),x` and
+            // `ldx $10,x` are errors the probed table already knows about.
+            const problem = findAddressingProblem(index.cpu, opcodeMatch[1], operand);
+            // A form no target accepts is wrong whatever the real CPU is; one that
+            // exists elsewhere is only reportable once the target was declared.
+            if (problem && (problem.universal || index.cpuExplicit)) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Error,
+                    range: Range.create(
+                        Position.create(lineNum, operandStart),
+                        Position.create(lineNum, operandStart + operand.trimEnd().length)
+                    ),
+                    message: problem.message,
+                    source: '64tass',
+                    code: 'no-addressing-mode'
+                });
+            }
         } else if (dataDirectiveMatch) {
             operand = dataDirectiveMatch[2];
             operandStart = dataDirectiveMatch[0].length - operand.length;

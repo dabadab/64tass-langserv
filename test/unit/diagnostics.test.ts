@@ -1065,3 +1065,36 @@ describe('mnemonics the target CPU does not have', () => {
             .some(d => d.code === 'undefined-symbol' && d.message.includes('nowhere'))).toBe(true);
     });
 });
+
+describe('operands with no addressing mode', () => {
+    function onCpu(source: string, cpu?: string) {
+        const doc = createDoc(cpu ? '        .cpu "' + cpu + '"\n' + source : source);
+        const index = parseDocument(doc, cpu ? { cpu } : {});
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, index]]);
+        return validateDocument(doc, documentIndex).filter(d => d.code === 'no-addressing-mode');
+    }
+
+    it('reports an index the opcode has no mode for', () => {
+        const found = onCpu('        ldx $10,x');
+        expect(found).toHaveLength(1);
+        expect(found[0].message).toBe("no x indexed addressing mode for opcode 'ldx'");
+        // The range covers the operand, where 64tass points.
+        expect(found[0].range.start.character).toBe(12);
+        expect(found[0].range.end.character).toBe(17);
+    });
+
+    it('reports an index on the wrong side of the brackets', () => {
+        expect(onCpu('        lda ($10),x')).toHaveLength(1);
+    });
+
+    it('accepts the forms that do assemble', () => {
+        expect(onCpu('        lda ($10),y\n        lda ($10,x)\n        lda $1234,y')).toHaveLength(0);
+    });
+
+    it('reports a form another target has only once this one was declared', () => {
+        // `lda $10,s` is a 65816 mode: on a guessed target it stays silent.
+        expect(onCpu('        lda $10,s')).toHaveLength(0);
+        expect(onCpu('        lda $10,s', '6502i')).toHaveLength(1);
+        expect(onCpu('        lda $10,s', '65816')).toHaveLength(0);
+    });
+});

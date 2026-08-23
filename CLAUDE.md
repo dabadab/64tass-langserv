@@ -319,6 +319,22 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   semantics cannot be probed, so mnemonics outside the sets whose meaning is
   unambiguous are left undescribed rather than guessed at, and hover degrades to
   showing just their (verified) modes.
+- **Operand shapes**: `operands.ts` is the one place that reads an operand's
+  structure - bracket, index register inside (`($10,x)`), index register outside
+  (`($10),y`, `$10,x`), and both at once (the 65816's `($10,s),y`). Completion asks
+  it which registers a comma can take; `findAddressingProblem` asks whether the
+  written form has a mode at all, so `lda ($10),x` and `ldx $10,x` are reported.
+  Everything is derived from the probed `addressing.ts`, with two limits the
+  assembler itself forced, both found by `addressing-check.test.ts` (which runs
+  every mnemonic of every target through every shape and demands ZERO reports on
+  anything 64tass accepts): the patterns are the assembler's DISASSEMBLY, so a
+  source form it rewrites is invisible - `pei ($10)` and `jml [$1234]` assemble but
+  read back as plain addresses, hence bracket-only forms are only reported for
+  mnemonics the table shows brackets for - and WHICH bracket is not distinguished,
+  since the 45gs02 takes `lda [$10],z` for the same mode it prints as `($10),z`.
+  Immediates, implied forms, register operands (`asl a`) and the `bbr`/`mvn`
+  multi-operand families are deliberately not modelled. A form that exists on some
+  other target is reported only when `cpuExplicit`; one no target has is always.
 - **Include resolution**: `resolveIncludePath` in `paths.ts`. 64tass tries the
   including file's own directory first, then each `-I` directory in order
   (verified). The `-I` list is the `64tass.includePaths` setting, made absolute
@@ -348,7 +364,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1320 tests); compiles first
+yarn test          # Run all tests (currently 1356 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

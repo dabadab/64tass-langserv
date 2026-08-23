@@ -12,9 +12,9 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { DocumentIndex, LabelKind } from './types';
 import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES, DEFAULT_CPU, opcodesForCpu } from './constants';
-import { addressingModesFor } from './addressing';
 import { collectVisibleLabels, collectVisibleParameters, collectScopeMembers } from './symbols';
 import { parseLineStructure } from './utils';
+import { CommaContext, indexRegistersFor } from './operands';
 
 // Label kinds that represent something addressable, i.e. valid as a bare opcode
 // operand (branch/jump target, or the address a data label points at).
@@ -141,48 +141,6 @@ function getOpcodeCompletions(prefix: string, cpu: string): CompletionItem[] {
         }
     }
     return items;
-}
-
-/**
- * Where a comma sits in an operand. The three positions take different
- * registers, so they must not be lumped together:
- *   plain        `lda $1234,x`    - no brackets involved
- *   inside       `lda ($10,x)`    - within an unclosed bracket
- *   after-close  `lda ($10),y`    - after the bracket has closed
- */
-export type CommaContext = 'plain' | 'inside' | 'after-close';
-
-/**
- * The registers valid immediately after a comma in this mnemonic's operand.
- *
- * Read out of the addressing table rather than from a blanket list, so it is
- * exact per opcode, per CPU and per position: `ldx $10,` takes only Y, `inc $10,`
- * only X, `lda $10,` takes X or Y - plus S on the 65816 and Z on the
- * 4510/45GS02 - while `lda ($10),` takes only Y.
- *
- * Empty when the mnemonic has no such form at all: `jmp $1234,` and
- * `bbr 3,$10,` take an address there, and the caller falls back to symbols.
- */
-export function indexRegistersFor(cpu: string, mnemonic: string, context: CommaContext): string[] {
-    const registers = new Set<string>();
-    for (const [pattern] of addressingModesFor(cpu, mnemonic)) {
-        let depth = 0;
-        let closed = false;
-        for (let i = 0; i < pattern.length; i++) {
-            const char = pattern[i];
-            if (char === '(' || char === '[') {
-                depth++;
-            } else if (char === ')' || char === ']') {
-                depth--;
-                closed = true;
-            } else if (char === ',') {
-                const at: CommaContext = depth > 0 ? 'inside' : closed ? 'after-close' : 'plain';
-                const register = pattern.slice(i + 1).match(/^\s*([a-z]+)/);
-                if (register && at === context) registers.add(register[1]);
-            }
-        }
-    }
-    return [...registers].sort();
 }
 
 /**
