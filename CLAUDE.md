@@ -325,6 +325,19 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   semantics cannot be probed, so mnemonics outside the sets whose meaning is
   unambiguous are left undescribed rather than guessed at, and hover degrades to
   showing just their (verified) modes.
+- **Formatting**: `formatting.ts` changes only the WHITESPACE BETWEEN label,
+  mnemonic, operand and comment - never a token, never a full-line comment, never
+  anything inside a `.comment` block, and nothing at all on a line it cannot split
+  confidently. The split uses the assembler's first-token rule; where that does not
+  decide (a word that is neither opcode nor directive), INDENTATION does: at column
+  0 it reads as a label, indented as an unprefixed macro call, which is where each
+  belongs anyway. Columns come from `64tass.format.*`, defaulting to 8/12/40 - the
+  columns the distribution's own sources use most. `formatting.test.ts` is the
+  guarantee: every corpus fixture is formatted, and squashed flat and formatted
+  again, then assembled - the output must be BYTE-IDENTICAL to the committed
+  file's. That is what catches a moved token rather than a moved space. Its
+  scratch copies go to a temp directory, never into `test/fixtures/corpus`, which
+  other suites scan.
 - **Cycle inlay hints**: `inlayHints.ts`, behind `64tass.cycleHints` and off by
   default. Unlike hover, which lists every mode, a hint needs the ONE mode the
   line assembles to, so the operand is matched by shape (`operands.ts`) and then
@@ -406,7 +419,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1407 tests); compiles first
+yarn test          # Run all tests (currently 1463 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

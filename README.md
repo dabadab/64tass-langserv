@@ -78,6 +78,16 @@ program refers to, the way 64tass's own `-Wunused` reports them. Off by default
 for the same reason it is off there: a file of shared definitions is full of
 symbols it does not use itself.
 
+### `64tass.format.mnemonicColumn` / `operandColumn` / `commentColumn`
+
+Where **Format Document** puts each field: mnemonic at 8, operand at 12, trailing
+comment at 40 — the columns the 64tass distribution's own sources use. A field
+that overruns its column gets a single space instead.
+
+Formatting only ever changes the whitespace *between* label, mnemonic, operand and
+comment. Full-line comments and `.comment` blocks are never touched, and a line it
+cannot split confidently is left exactly as it is.
+
 ### `64tass.cycleHints`
 
 Default `false`. Shows each instruction's cycle count at the end of its line as

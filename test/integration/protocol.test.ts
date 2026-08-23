@@ -49,6 +49,7 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
             'semanticTokensProvider', 'workspaceSymbolProvider', 'signatureHelpProvider',
             'completionProvider', 'documentLinkProvider', 'selectionRangeProvider',
             'codeActionProvider', 'inlayHintProvider',
+            'documentFormattingProvider', 'documentRangeFormattingProvider',
         ]) {
             expect(capabilities[capability], capability).toBeTruthy();
         }

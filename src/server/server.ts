@@ -46,6 +46,7 @@ import {
     SemanticTokensBuilder,
     Diagnostic,
     InlayHint,
+    TextEdit,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -68,6 +69,7 @@ import { validateDocument } from './diagnostics';
 import { assemble, chooseRoot } from './assembler';
 import { findUnusedSymbols } from './unused';
 import { computeInlayHints } from './inlayHints';
+import { formatDocument, FormatColumns, DEFAULT_COLUMNS } from './formatting';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
 import { collectSourceFiles, findFilePathAt } from './workspace';
@@ -118,12 +120,14 @@ interface Settings {
     assemblerArgs: string[];
     unusedSymbols: boolean;
     cycleHints: boolean;
+    format: FormatColumns;
 }
 
 // Default settings
 let globalSettings: Settings = {
     caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [],
-    assemblerPath: '', assemblerArgs: [], unusedSymbols: false, cycleHints: false
+    assemblerPath: '', assemblerArgs: [], unusedSymbols: false, cycleHints: false,
+    format: DEFAULT_COLUMNS
 };
 
 /**
@@ -143,6 +147,20 @@ function readSettings(config: unknown): Settings {
         assemblerArgs: Array.isArray(raw.assemblerArgs) ? raw.assemblerArgs.map(String) : [],
         unusedSymbols: Boolean(raw.unusedSymbols ?? false),
         cycleHints: Boolean(raw.cycleHints ?? false),
+        // Dotted setting names arrive as a nested object.
+        format: readColumns(raw.format),
+    };
+}
+
+/** Format columns, each falling back to the default when absent or not a number. */
+function readColumns(raw: unknown): FormatColumns {
+    const given = (raw ?? {}) as Record<string, unknown>;
+    const column = (value: unknown, fallback: number) =>
+        typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
+    return {
+        mnemonic: column(given.mnemonicColumn, DEFAULT_COLUMNS.mnemonic),
+        operand: column(given.operandColumn, DEFAULT_COLUMNS.operand),
+        comment: column(given.commentColumn, DEFAULT_COLUMNS.comment),
     };
 }
 
@@ -320,6 +338,8 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             // Declared unconditionally: the setting can be turned on mid-session,
             // and a capability cannot. The handler returns nothing while it is off.
             inlayHintProvider: true,
+            documentFormattingProvider: true,
+            documentRangeFormattingProvider: true,
             signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },
             completionProvider: {
                 triggerCharacters: ['.', '"', '/']
@@ -716,6 +736,16 @@ documents.onDidChangeContent(change => {
         // ...but collapse bursts of typing into a single validation pass
         diagnosticDebouncer.run(change.document.uri, () => publishDiagnosticsFor(change.document.uri));
     });
+});
+
+connection.onDocumentFormatting((params): TextEdit[] => {
+    const document = documents.get(params.textDocument.uri);
+    return document ? formatDocument(document.getText(), globalSettings.format) : [];
+});
+
+connection.onDocumentRangeFormatting((params): TextEdit[] => {
+    const document = documents.get(params.textDocument.uri);
+    return document ? formatDocument(document.getText(), globalSettings.format, params.range) : [];
 });
 
 connection.languages.inlayHint.on((params): InlayHint[] => {

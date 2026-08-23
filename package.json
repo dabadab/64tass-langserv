@@ -104,6 +104,27 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Show each instruction's cycle count at the end of its line, as an inlay hint. Only the NMOS targets have timing data, and a line whose addressing mode cannot be pinned down gets no hint rather than a guessed one."
+        },
+        "64tass.format.mnemonicColumn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200,
+          "default": 8,
+          "markdownDescription": "Column the mnemonic, directive or macro call is aligned to when formatting. The 64tass distribution's own sources use 8."
+        },
+        "64tass.format.operandColumn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200,
+          "default": 12,
+          "markdownDescription": "Column the operand is aligned to. A field that overruns its column simply gets one space instead."
+        },
+        "64tass.format.commentColumn": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200,
+          "default": 40,
+          "markdownDescription": "Column a trailing comment is aligned to. Full-line comments are never moved."
         }
       }
     }
