@@ -87,4 +87,12 @@ export interface DocumentIndex {
     // cascades into its .include tree, like caseSensitive). Decides which opcodes
     // and which register addressing modes are recognised.
     cpu: string;
+    // Whether that CPU was actually DECLARED - by a `.cpu` directive or cpu
+    // pragma here or in a file that includes this one, or by a 64tass.cpu setting
+    // holding something other than the default. False means nobody said, and the
+    // index is running on the default guess. Checks that would call good code
+    // wrong on the wrong guess (a mnemonic missing from the target's set) stay
+    // silent then, since the real target can also come from a command-line flag
+    // the server never sees.
+    cpuExplicit: boolean;
 }

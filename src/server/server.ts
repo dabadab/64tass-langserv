@@ -173,6 +173,9 @@ const indexContext: IndexContext = {
     getOpenDocument: (uri) => documents.get(uri),
     get defaultCaseSensitive() { return globalSettings.caseSensitive; },
     get defaultCpu() { return globalSettings.cpu; },
+    // A setting holding anything but the default is a deliberate choice; the
+    // default itself is indistinguishable from nobody having set it.
+    get defaultCpuExplicit() { return globalSettings.cpu !== DEFAULT_CPU; },
     get includePaths() { return searchPaths(); },
     log: (message) => connection.console.warn(message)
 };

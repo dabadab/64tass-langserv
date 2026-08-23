@@ -39,6 +39,7 @@ function diagnose(file: string) {
         },
         defaultCaseSensitive: false,
         defaultCpu: DEFAULT_CPU,
+        defaultCpuExplicit: false,
         includePaths: [],
     };
     indexDocument(doc, context);

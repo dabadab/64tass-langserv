@@ -10,6 +10,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex } from './types';
 import {
+    OPCODES,
     opcodesForCpu,
     registerModesForCpu,
     INDEX_REGISTERS,
@@ -158,6 +159,45 @@ function describeLocation(label: LabelDefinition, fromUri: string): string {
     return `also defined in ${name} on line ${line}`;
 }
 
+/**
+ * A mnemonic the assembler knows on SOME target but not on this one - the case
+ * 64tass reports as a bare "general syntax" error, because it reads the word as
+ * a label and then chokes on what follows.
+ *
+ * Which is also why the operand decides: on a 6502 a lone `phx` is a perfectly
+ * good label definition (verified), `bra nop` is a label plus an instruction, and
+ * `bra = 5` is an assignment. Only `bra lbl` - a word that cannot be a label
+ * because something follows it that is not an instruction, a directive or an
+ * assignment - is an error. After a leading label the slot must be an instruction,
+ * so `loop bra` errors with nothing following at all.
+ *
+ * Returns the offending token and its column, or null.
+ */
+function findUnsupportedMnemonic(
+    code: string,
+    cpuOpcodes: ReadonlySet<string>
+): { name: string; column: number } | null {
+    const tokens = code.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(:?)(\s+(\S+))?/);
+    if (!tokens) return null;
+    const [, indent, first, colon, , second] = tokens;
+    const unsupported = (word: string) =>
+        OPCODES.has(word.toLowerCase()) && !cpuOpcodes.has(word.toLowerCase());
+
+    // First token reads as an instruction only when nothing before it could be the
+    // label. A colon settles it the other way: "bra:" is a label, whatever follows.
+    if (!colon && unsupported(first)) {
+        if (second === undefined) return null;                       // a lone label
+        if (/^[.=]|^:=/.test(second)) return null;                   // directive or assignment
+        if (cpuOpcodes.has(second.toLowerCase())) return null;        // label + instruction
+        return { name: first, column: indent.length };
+    }
+    // A label came first, so the next token has to be the instruction.
+    if (second !== undefined && !cpuOpcodes.has(first.toLowerCase()) && unsupported(second)) {
+        return { name: second, column: code.indexOf(second, indent.length + first.length) };
+    }
+    return null;
+}
+
 export function validateDocument(
     document: TextDocument,
     documentIndex: Map<string, DocumentIndex>,
@@ -294,6 +334,27 @@ export function validateDocument(
             }
         }
 
+        // A mnemonic this CPU does not have. Reported only when the target was
+        // actually declared: on the default guess the real target may have come
+        // from a command-line flag, and flagging `bra` in a 65c02 project that
+        // never said so would be an error on correct code.
+        if (index.cpuExplicit) {
+            const unsupported = findUnsupportedMnemonic(code, opcodes);
+            // A macro of that name makes the line a macro call, and legal (verified).
+            if (unsupported && !findSymbolInfo(unsupported.name, document.uri, lineNum, documentIndex, caseSensitive)) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Error,
+                    range: Range.create(
+                        Position.create(lineNum, unsupported.column),
+                        Position.create(lineNum, unsupported.column + unsupported.name.length)
+                    ),
+                    message: `'${unsupported.name}' is not a ${index.cpu} instruction`,
+                    source: '64tass',
+                    code: 'unsupported-mnemonic'
+                });
+            }
+        }
+
         // Check for closing directives
         for (const close of closed) {
             const openers = CLOSING_DIRECTIVES[close];
@@ -398,7 +459,11 @@ export function validateDocument(
         // Both patterns are anchored and end with (.+)$, so the operand is the tail
         // of the match - deriving its offset that way is exact, where indexOf(operand)
         // could in principle find an earlier occurrence of the same text.
-        if (opcodeMatch && opcodes.has(opcodeMatch[1].toLowerCase())) {
+        // OPCODES, not this CPU's set: a mnemonic the target does not have still
+        // takes an operand whose symbols are worth checking. Gating on the narrow
+        // set meant one missing mnemonic silently disabled symbol validation for
+        // its whole line - and the target is only a guess unless it was declared.
+        if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
             operand = opcodeMatch[2];
             operandStart = opcodeMatch[0].length - operand.length;
         } else if (dataDirectiveMatch) {

@@ -44,6 +44,8 @@ export interface ParseOptions {
     log?: LogFunction;
     /** Effective CPU target; a `.cpu` directive in the text still wins over it. */
     cpu?: string;
+    /** Whether that inherited CPU was declared rather than defaulted (DocumentIndex.cpuExplicit). */
+    cpuExplicit?: boolean;
     /**
      * Scope this whole file sits inside, set when it was reached through a
      * `.binclude`. Prefixed onto every scope path the file produces.
@@ -57,12 +59,13 @@ export function parseDocument(
     document: TextDocument,
     options: ParseOptions = {}
 ): DocumentIndex {
-    const { caseSensitive = false, log, cpu = DEFAULT_CPU, baseScope = null, includePaths = [] } = options;
+    const { caseSensitive = false, log, cpu = DEFAULT_CPU, cpuExplicit = false, baseScope = null, includePaths = [] } = options;
 
     const text = document.getText();
     // A `.cpu` directive or cpu pragma in the file always wins over the value
     // inherited from the parent, mirroring the case-sensitivity cascade.
-    const effectiveCpu = detectCpu(text) ?? cpu;
+    const declaredCpu = detectCpu(text);
+    const effectiveCpu = declaredCpu ?? cpu;
     // Which mnemonics count as opcodes depends on the target: label detection gates
     // on this, so a mnemonic the CPU does not have leaves the line unindexed.
     const opcodes = opcodesForCpu(effectiveCpu);
@@ -841,5 +844,5 @@ export function parseDocument(
         else labelsByName.set(label.name, [label]);
     }
 
-    return { labels, labelsByName, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu };
+    return { labels, labelsByName, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu, cpuExplicit: declaredCpu !== null || cpuExplicit };
 }

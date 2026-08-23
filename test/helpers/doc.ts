@@ -66,6 +66,7 @@ export function emptyIndex(overrides: Partial<DocumentIndex> = {}): DocumentInde
         includeScopes: new Map(),
         caseSensitive: false,
         cpu: DEFAULT_CPU,
+        cpuExplicit: false,
         ...overrides,
     };
 }

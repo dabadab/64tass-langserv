@@ -994,3 +994,74 @@ describe('openers that require a label', () => {
         expect(errors('        nop     ; a .proc here').map(d => d.code)).not.toContain('label-required');
     });
 });
+
+describe('mnemonics the target CPU does not have', () => {
+    // Every expectation here was checked against 64tass with --m6502: `bra lbl`
+    // is "general syntax", while a lone `phx` is a legal label definition.
+    function onCpu(source: string, cpu = '6502i') {
+        const doc = createDoc('        .cpu "' + cpu + '"\n' + source);
+        const index = parseDocument(doc, { cpu });
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, index]]);
+        return validateDocument(doc, documentIndex)
+            .filter(d => d.code === 'unsupported-mnemonic');
+    }
+
+    it('reports a mnemonic that belongs to another target', () => {
+        const found = onCpu('lbl\n        bra lbl');
+        expect(found).toHaveLength(1);
+        expect(found[0].message).toBe("'bra' is not a 6502i instruction");
+        expect(found[0].range.start.character).toBe(8);
+    });
+
+    it('reports it in the instruction slot after a label', () => {
+        const found = onCpu('loop    bra loop');
+        expect(found).toHaveLength(1);
+        expect(found[0].range.start.character).toBe(8);
+    });
+
+    it('reports it after a label even with nothing following', () => {
+        expect(onCpu('loop    bra')).toHaveLength(1);
+    });
+
+    it('accepts it as a label when nothing follows', () => {
+        expect(onCpu('        phx\n        rts')).toHaveLength(0);
+    });
+
+    it('accepts it as a label followed by an instruction', () => {
+        expect(onCpu('        bra nop')).toHaveLength(0);
+    });
+
+    it('accepts it as an assignment or data label', () => {
+        expect(onCpu('        bra = 5')).toHaveLength(0);
+        expect(onCpu('bra     .byte 1')).toHaveLength(0);
+    });
+
+    it('accepts it on a target that has it', () => {
+        expect(onCpu('lbl\n        bra lbl', '65c02')).toHaveLength(0);
+    });
+
+    it('says nothing when the target was never declared', () => {
+        // The real target can come from a command-line flag the server cannot see,
+        // so on the default guess this would be an error on correct code.
+        const doc = createDoc('lbl\n        bra lbl');
+        const index = parseDocument(doc);
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, index]]);
+        expect(validateDocument(doc, documentIndex)
+            .filter(d => d.code === 'unsupported-mnemonic')).toHaveLength(0);
+    });
+
+    it('says nothing when a macro of that name exists', () => {
+        // A macro makes the line a macro call, which assembles (verified).
+        expect(onCpu('bra     .macro\n        .endm\n        bra lbl')).toHaveLength(0);
+    });
+
+    it('still checks the operand of a mnemonic the target lacks', () => {
+        // The narrow gate used to stop treating the line as an instruction at all,
+        // so one missing mnemonic disabled symbol checking for the whole line.
+        const doc = createDoc('        bra nowhere');
+        const index = parseDocument(doc);
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, index]]);
+        expect(validateDocument(doc, documentIndex)
+            .some(d => d.code === 'undefined-symbol' && d.message.includes('nowhere'))).toBe(true);
+    });
+});

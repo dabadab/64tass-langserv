@@ -25,6 +25,8 @@ export interface IndexContext {
     defaultCaseSensitive: boolean;
     /** Workspace CPU target, used when no directive or pragma overrides it. */
     defaultCpu: string;
+    /** Whether defaultCpu came from a setting the user actually chose (DocumentIndex.cpuExplicit). */
+    defaultCpuExplicit: boolean;
     /**
      * Absolute directories searched for includes that are not next to the
      * includer, mirroring 64tass's `-I` flag (`64tass.includePaths`).
@@ -55,6 +57,7 @@ export function indexDocument(
     rootUri?: string,
     inheritedCaseSensitive: boolean = context.defaultCaseSensitive,
     inheritedCpu: string = context.defaultCpu,
+    inheritedCpuExplicit: boolean = context.defaultCpuExplicit,
     // Scope this document's contents belong to, non-null once a `.binclude` above
     // it opened one. Inherited by plain `.include`s, since those are textual.
     baseScope: string | null = null
@@ -80,6 +83,7 @@ export function indexDocument(
         caseSensitive: effectiveCaseSensitive,
         log: context.log,
         cpu: effectiveCpu,
+        cpuExplicit: inheritedCpuExplicit,
         baseScope,
         includePaths: context.includePaths,
     });
@@ -101,7 +105,8 @@ export function indexDocument(
         // A .binclude records the full scope path its contents land in; a plain
         // .include has no entry and simply stays in whatever scope we are already in.
         const childScope = index.includeScopes.get(includeUri) ?? baseScope;
-        indexDocument(includeDoc, context, indexedUris, effectiveRootUri, effectiveCaseSensitive, effectiveCpu, childScope);
+        indexDocument(includeDoc, context, indexedUris, effectiveRootUri, effectiveCaseSensitive,
+            effectiveCpu, index.cpuExplicit, childScope);
     }
 }
 

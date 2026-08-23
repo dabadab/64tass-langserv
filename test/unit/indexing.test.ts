@@ -38,6 +38,7 @@ function makeContext(disk: Record<string, string>, open: Record<string, string> 
         },
         defaultCaseSensitive,
         defaultCpu: DEFAULT_CPU,
+        defaultCpuExplicit: false,
         includePaths: includeDirs.map(d => path.join(dir, d)),
     };
 
