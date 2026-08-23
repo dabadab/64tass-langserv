@@ -43,6 +43,21 @@ export function evaluateCondition(
     return value !== 0;
 }
 
+/**
+ * Evaluate an expression to a number, or null when it cannot be decided - an
+ * unresolved symbol, the program counter, a string, an operator not modelled.
+ * Same conservative contract as evaluateCondition: never guess.
+ */
+export function evaluateExpression(
+    expr: string,
+    uri: string,
+    line: number,
+    documentIndex: Map<string, DocumentIndex>,
+    caseSensitive = false
+): number | null {
+    return evalExpr(expr, { uri, line, documentIndex, caseSensitive, seen: new Set() });
+}
+
 /** Evaluate an expression to a number, or null if undecidable. */
 function evalExpr(expr: string, ctx: Ctx): number | null {
     const tokens = tokenize(expr);

@@ -6,6 +6,8 @@ import { execFileSync } from 'child_process';
 import { TASS_PATH, TASS_EXISTS, TABLES_MATCH_TASS, CPU_FLAG } from '../helpers/compiler';
 import { CPU_NAMES, opcodesForCpu } from '../../src/server/constants';
 import { findAddressingProblem } from '../../src/server/operands';
+import { findOversizedImmediate } from '../../src/server/diagnostics';
+import { DocumentIndex } from '../../src/server/types';
 
 /**
  * The addressing-mode diagnostic, checked against the assembler for every
@@ -67,11 +69,36 @@ describe.skipIf(!TASS_EXISTS || !TABLES_MATCH_TASS)('addressing diagnostic again
         expect(falsePositives).toEqual([]);
     });
 
+    const IMMEDIATES = ['#$10', '#$1234', '#255', '#256', '#-1', '#-129', '#<$1234', '#>$1234'];
+
+    it.each(CPU_NAMES)('reports no immediate %s accepts', (cpu) => {
+        const lines = ['        *= $1000', 'lbl     nop'];
+        const cases: [string, string][] = [];
+        for (const mnemonic of [...opcodesForCpu(cpu)].sort()) {
+            for (const operand of IMMEDIATES) {
+                lines.push(`        ${mnemonic} ${operand}`);
+                cases.push([mnemonic, operand]);
+            }
+        }
+        const rejected = assemble(cpu, lines, dir);
+        const empty = new Map<string, DocumentIndex>();
+
+        const falsePositives = cases
+            .map(([mnemonic, operand], i) => ({ mnemonic, operand, error: rejected.get(i + 3) }))
+            .filter(({ mnemonic, operand, error }) => error === undefined
+                && findOversizedImmediate(cpu, mnemonic, operand, 'file:///x.asm', 0, empty, false) !== null)
+            .map(({ mnemonic, operand }) => `${mnemonic} ${operand}`);
+
+        expect(falsePositives).toEqual([]);
+    });
+
     it('does report the forms 64tass rejects outright', () => {
         // The other half: silence everywhere would also pass the test above.
         expect(findAddressingProblem('6502i', 'lda', '($10),x')?.message)
             .toBe("no indirect x indexed addressing mode for opcode 'lda'");
         expect(findAddressingProblem('6502i', 'ldx', '$10,x')?.message)
             .toBe("no x indexed addressing mode for opcode 'ldx'");
+        expect(findOversizedImmediate('6502i', 'lda', '#$1234', 'file:///x.asm', 0, new Map(), false))
+            .toBe('4660 does not fit in 8 bits');
     });
 });

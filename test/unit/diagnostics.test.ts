@@ -1098,3 +1098,50 @@ describe('operands with no addressing mode', () => {
         expect(onCpu('        lda $10,s', '65816')).toHaveLength(0);
     });
 });
+
+describe('immediates that do not fit', () => {
+    function on(source: string, cpu?: string) {
+        const doc = createDoc(source);
+        const index = parseDocument(doc, cpu ? { cpu } : {});
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, index]]);
+        return validateDocument(doc, documentIndex).filter(d => d.code === 'immediate-too-large');
+    }
+
+    // Every case checked against 64tass: #-1 assembles, #-129 does not.
+    it('reports a value past the byte', () => {
+        const found = on('        lda #$1234');
+        expect(found).toHaveLength(1);
+        expect(found[0].message).toBe('4660 does not fit in 8 bits');
+    });
+
+    it('accepts both readings of the byte', () => {
+        expect(on('        lda #255')).toHaveLength(0);
+        expect(on('        lda #-1')).toHaveLength(0);
+        expect(on('        lda #256')).toHaveLength(1);
+        expect(on('        lda #-129')).toHaveLength(1);
+    });
+
+    it('evaluates the expression rather than the literal', () => {
+        expect(on('        lda #$ff+1')).toHaveLength(1);
+        expect(on('LIMIT = $300\n        lda #LIMIT')).toHaveLength(1);
+    });
+
+    it('leaves the byte-extracting operators alone', () => {
+        expect(on('        lda #<$1234')).toHaveLength(0);
+        expect(on('        lda #>$1234')).toHaveLength(0);
+    });
+
+    it('says nothing about a value it cannot compute', () => {
+        // A code label has no address here, so `#target` stays undecided.
+        expect(on('target  nop\n        lda #target')).toHaveLength(0);
+    });
+
+    it('measures against the width the mnemonic actually has', () => {
+        expect(on('        phw #$1234', '65ce02')).toHaveLength(0);
+    });
+
+    it('says nothing where the width is switchable', () => {
+        // `.al` makes `lda #$1234` legal on the 65816, and this cannot see it.
+        expect(on('        lda #$1234', '65816')).toHaveLength(0);
+    });
+});

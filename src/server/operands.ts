@@ -10,7 +10,7 @@
  * assembler, so neither carries a hand-written list of what is legal.
  */
 import { addressingModesFor } from './addressing';
-import { CPU_NAMES, OPCODES, REGISTER_MODES } from './constants';
+import { CPU_NAMES, OPCODES, REGISTER_MODES, opcodesForCpu } from './constants';
 
 /**
  * Where a comma sits relative to the operand's brackets:
@@ -263,4 +263,25 @@ function wrongPart(cpu: string, mnemonic: string, shape: OperandShape): string |
         .some(([pattern]) => pattern.includes('(') || pattern.includes('['));
     if (!bracketed) return null;
     return `no ${shape.bracket === '[' ? 'long ' : ''}indirect addressing mode`;
+}
+
+/**
+ * How many bytes an immediate operand takes on this mnemonic, or null when that
+ * is not a static fact.
+ *
+ * Null for a target with `rep`/`sep`: there the accumulator and index registers
+ * switch between 8 and 16 bits at run time, so `lda #$1234` assembles under `.al`
+ * and not otherwise (verified) - the width simply is not knowable from the line.
+ * Null too when the mnemonic has no immediate form at all, since then there is
+ * nothing to measure against.
+ */
+export function immediateBytesFor(cpu: string, mnemonic: string): number | null {
+    const set = opcodesForCpu(cpu);
+    if (set.has('rep') && set.has('sep')) return null;
+    let bytes: number | null = null;
+    for (const [pattern, , length] of addressingModesFor(cpu, mnemonic)) {
+        if (!pattern.startsWith('#')) continue;
+        bytes = Math.max(bytes ?? 0, length - 1);
+    }
+    return bytes;
 }

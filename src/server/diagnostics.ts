@@ -23,9 +23,9 @@ import {
 import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { blockDirectivesOn } from './blocks';
-import { findAddressingProblem } from './operands';
+import { findAddressingProblem, immediateBytesFor } from './operands';
 import { LABEL_REQUIRED_OPENERS } from './constants';
-import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from './conditions';
+import { evaluateCondition, evaluateExpression, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
 /**
  * Lines that sit inside a conditional branch which provably cannot be taken.
@@ -197,6 +197,40 @@ function findUnsupportedMnemonic(
         return { name: second, column: code.indexOf(second, indent.length + first.length) };
     }
     return null;
+}
+
+/**
+ * An immediate whose value cannot fit the operand byte: `lda #$1234`.
+ *
+ * Only literal-valued expressions get here - a code label has no address the
+ * index knows, so `lda #target` stays undecided rather than guessed at. The
+ * accepted range is what the assembler accepts (verified): `lda #-1` is fine and
+ * `lda #-129` is not, so it spans the signed and unsigned readings of the byte.
+ */
+export function findOversizedImmediate(
+    cpu: string,
+    mnemonic: string,
+    operand: string,
+    uri: string,
+    line: number,
+    documentIndex: Map<string, DocumentIndex>,
+    caseSensitive: boolean
+): string | null {
+    const text = operand.trim();
+    if (!text.startsWith('#')) return null;
+    const bytes = immediateBytesFor(cpu, mnemonic);
+    if (bytes === null || bytes < 1) return null;
+
+    const expression = text.slice(1).trim();
+    // `<` `>` `^` take a byte OUT of a wider value, so those never overflow.
+    if (/^[<>^`]/.test(expression)) return null;
+
+    const value = evaluateExpression(expression, uri, line, documentIndex, caseSensitive);
+    if (value === null || !Number.isInteger(value)) return null;
+
+    const bits = bytes * 8;
+    if (value <= (2 ** bits) - 1 && value >= -(2 ** (bits - 1))) return null;
+    return `${value} does not fit in ${bits} bits`;
 }
 
 export function validateDocument(
@@ -467,6 +501,22 @@ export function validateDocument(
         if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
             operand = opcodeMatch[2];
             operandStart = opcodeMatch[0].length - operand.length;
+
+            // Does the immediate value fit the byte it is assembled into?
+            const tooLarge = findOversizedImmediate(
+                index.cpu, opcodeMatch[1], operand, document.uri, lineNum, documentIndex, caseSensitive);
+            if (tooLarge) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Error,
+                    range: Range.create(
+                        Position.create(lineNum, operandStart),
+                        Position.create(lineNum, operandStart + operand.trimEnd().length)
+                    ),
+                    message: tooLarge,
+                    source: '64tass',
+                    code: 'immediate-too-large'
+                });
+            }
 
             // Does that operand have an addressing mode at all? `lda ($10),x` and
             // `ldx $10,x` are errors the probed table already knows about.

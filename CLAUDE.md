@@ -333,7 +333,14 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   mnemonics the table shows brackets for - and WHICH bracket is not distinguished,
   since the 45gs02 takes `lda [$10],z` for the same mode it prints as `($10),z`.
   Immediates, implied forms, register operands (`asl a`) and the `bbr`/`mvn`
-  multi-operand families are deliberately not modelled. A form that exists on some
+  multi-operand families are deliberately not modelled.
+  `immediateBytesFor` covers the immediates instead: `findOversizedImmediate` in
+  `diagnostics.ts` reports `lda #$1234`, taking the width from the mnemonic's own
+  `#` patterns and the value from `evaluateExpression` (`conditions.ts`), so an
+  unresolvable one is simply not reported. Silent on `rep`/`sep` targets, where
+  `.al` switches the width at run time, and on `<`/`>`/`^`, which take a byte out
+  of a wider value. The accepted range spans both readings of the byte: `#-1`
+  assembles, `#-129` does not. A form that exists on some
   other target is reported only when `cpuExplicit`; one no target has is always.
 - **Include resolution**: `resolveIncludePath` in `paths.ts`. 64tass tries the
   including file's own directory first, then each `-I` directory in order
@@ -364,7 +371,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1356 tests); compiles first
+yarn test          # Run all tests (currently 1375 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
