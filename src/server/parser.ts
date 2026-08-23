@@ -2,11 +2,20 @@ import { Range, Position } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
-import { SCOPE_OPENERS, OPENER_TO_CLOSERS, opcodesForCpu, DEFAULT_CPU } from './constants';
+import { SCOPE_OPENERS, CLOSING_DIRECTIVES, opcodesForCpu, DEFAULT_CPU } from './constants';
+import { blockDirectivesOn } from './blocks';
 import { resolveIncludePath } from './paths';
 import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys } from './utils';
 
 export type LogFunction = (message: string) => void;
+
+/** Index of the last element satisfying `predicate`, or -1. */
+function findLastIndex<T>(items: T[], predicate: (item: T) => boolean): number {
+    for (let i = items.length - 1; i >= 0; i--) {
+        if (predicate(items[i])) return i;
+    }
+    return -1;
+}
 
 // Compound assignments modify an existing variable rather than defining one.
 const COMPOUND_ASSIGNMENT = /^(?:\.\.|\*\*|<<|>>|[-+*/&|^%])=$/;
@@ -193,55 +202,47 @@ export function parseDocument(
             continue;
         }
 
-        // Check for scope-closing directives first
+        // Check for scope-closing directives first. blockDirectivesOn strips the
+        // comment and any string contents, so a `.pend` that is only being talked
+        // about does not close anything - the parser used to test the raw line and
+        // file every following label under the wrong scope.
+        const { opened: openersOnLine, closed: closersOnLine } = blockDirectivesOn(line);
         let closedScope = false;
-        for (const open of Object.keys(SCOPE_OPENERS)) {
-            // Every closer the directive accepts, not just the primary one:
-            // `.endnamespace` is not matched by a pattern built from `.endn`,
-            // since \b needs a word boundary that "endnamespace" does not have.
-            // Missing the long forms left every scope after one of them open.
-            // Safe: directive names from the static OPENER_TO_CLOSERS table.
-            const closePattern = new RegExp(
-                `(?:^|\\s)(?:${OPENER_TO_CLOSERS[open].map(c => `\\${c}`).join('|')})\\b`, 'i');
-            if (closePattern.test(lineLower)) {
-                // If closing a macro, extract sub-labels from its body (stored normalized)
-                if (open === '.macro' && currentMacroCapture) {
-                    const subLabels: string[] = [];
-                    for (let i = currentMacroCapture.startLine; i < lineNum; i++) {
-                        const macroLine = lines[i];
-                        // Look for label definitions at start of line: "name" or "name =" or "name .byte", etc.
-                        const labelMatch = macroLine.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:$|:|=|\.)/);
-                        if (labelMatch) {
-                            subLabels.push(normalizeName(labelMatch[1]));
-                        }
-                    }
-                    if (subLabels.length > 0) {
-                        macroSubLabels.set(currentMacroCapture.name, subLabels);
-                    }
-                    currentMacroCapture = null;
-                }
+        for (const closer of closersOnLine) {
+            // Which of the open scopes this closer ends, innermost first.
+            const openers = CLOSING_DIRECTIVES[closer].filter(o => o in SCOPE_OPENERS);
+            const index = findLastIndex(scopeStack, entry => openers.includes(entry.directive));
+            if (index < 0) continue;
+            const open = scopeStack[index].directive;
 
-                // "`.endf mapdata`" returns a scope defined inside the function, so
-                // the members of a call's result are that scope's, not the
-                // function's own. "`.endf namespace(*)`" returns the function scope
-                // itself and needs no entry - that is the default.
-                if (open === '.function') {
-                    const returned = line.match(/(?:^|\s)\.endf(?:unction)?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:;.*)?$/i);
-                    const functionPath = getCurrentScopePath();
-                    if (returned && functionPath) {
-                        functionReturnScope.set(functionPath, `${functionPath}.${normalizeName(returned[1])}`);
-                    }
+            // Closing a macro: collect the sub-labels its body defines (normalized)
+            if (open === '.macro' && currentMacroCapture) {
+                const subLabels: string[] = [];
+                for (let i = currentMacroCapture.startLine; i < lineNum; i++) {
+                    // Look for label definitions at start of line: "name" or "name =" or "name .byte", etc.
+                    const labelMatch = lines[i].match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:$|:|=|\.)/);
+                    if (labelMatch) subLabels.push(normalizeName(labelMatch[1]));
                 }
+                if (subLabels.length > 0) {
+                    macroSubLabels.set(currentMacroCapture.name, subLabels);
+                }
+                currentMacroCapture = null;
+            }
 
-                // Pop matching scope from stack
-                for (let i = scopeStack.length - 1; i >= 0; i--) {
-                    if (scopeStack[i].directive === open) {
-                        scopeStack.splice(i, 1);
-                        closedScope = true;
-                        break;
-                    }
+            // "`.endf mapdata`" returns a scope defined inside the function, so the
+            // members of a call's result are that scope's, not the function's own.
+            // "`.endf namespace(*)`" returns the function scope itself and needs no
+            // entry - that is the default.
+            if (open === '.function') {
+                const returned = line.match(/(?:^|\s)\.endf(?:unction)?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:;.*)?$/i);
+                const functionPath = getCurrentScopePath();
+                if (returned && functionPath) {
+                    functionReturnScope.set(functionPath, `${functionPath}.${normalizeName(returned[1])}`);
                 }
             }
+
+            scopeStack.splice(index, 1);
+            closedScope = true;
         }
         if (closedScope) {
             // Update scope after closing
@@ -260,7 +261,10 @@ export function parseDocument(
         // The separator is deliberately "whitespace OR colon" rather than an optional
         // colon plus optional whitespace: allowing neither would make a plain dotted
         // reference like "outer.proc" parse as label "outer" opening a .proc scope.
-        for (const [open] of Object.entries(SCOPE_OPENERS)) {
+        // Only the openers actually on the line, so one named in a comment or a
+        // string literal cannot open a scope. The label itself is still read from
+        // the raw line, since its range has to point at real columns.
+        for (const open of openersOnLine.filter(directive => directive in SCOPE_OPENERS)) {
             // Safe: directive name from static constant (SCOPE_OPENERS)
             const openPattern = new RegExp(`^(\\s*)([a-zA-Z][a-zA-Z0-9_]*)(?:\\s*:\\s*|\\s+)\\${open}\\b\\s*(.*)`, 'i');
             const match = line.match(openPattern);
@@ -314,7 +318,8 @@ export function parseDocument(
                     localScope: currentLocalScope,
                     withScopes: [...withScopes]
                 });
-                continue;
+                // A line opens at most one scope, and this was it.
+                break;
             }
 
             // Safe: directive name from static constant (SCOPE_OPENERS)

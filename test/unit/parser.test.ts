@@ -1004,3 +1004,17 @@ describe('long-form scope closers', () => {
         expect(index.labels.find(l => l.name === 'b')?.scopePath).toBe('outer.two');
     });
 });
+
+describe('block directives in comments and strings', () => {
+    // The parser used to test the raw line, so a closer that was only being
+    // talked about closed the enclosing scope and every label after it was filed
+    // under the wrong one - silently, with no diagnostic.
+    it.each([
+        ['a closer in a comment', 'outer   .proc\n        lda #1   ; restore with .pend later\ninner   lda #2\n        .pend'],
+        ['a closer in a string', 'outer   .block\n        .text "use .bend to close"\ninner   lda #2\n        .bend'],
+        ['an opener in a comment', 'outer   .proc\n        lda #1   ; a .block here\ninner   lda #2\n        .pend'],
+        ['an opener in a string', 'outer   .proc\n        .text "a .block b"\ninner   lda #2\n        .pend'],
+    ])('ignores %s', (_name, source) => {
+        expect(parse(source).labels.find(l => l.name === 'inner')?.scopePath).toBe('outer');
+    });
+});

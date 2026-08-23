@@ -13,6 +13,7 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │       ├── types.ts              # Shared interfaces (LabelDefinition, DocumentIndex)
 │       ├── constants.ts          # Opcode tables (all 11 CPU targets), directives, builtins
 │       ├── utils.ts              # String/comment/numeric helpers, pragma detection
+│       ├── blocks.ts             # blockDirectivesOn — the one block-directive scanner
 │       ├── parser.ts             # parseDocument — label/scope/macro extraction
 │       ├── paths.ts              # .include/.binclude path resolution (-I search paths)
 │       ├── hover.ts              # Symbol and opcode hover
@@ -99,6 +100,14 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   addressing-size and bank suffixes. These are not symbol references, so the
   undefined-symbol check skips them. Kept per-opcode rather than as a blanket list
   of short names, so `lda i` is still reported.
+- **Block directives**: `blockDirectivesOn` (`blocks.ts`) is the ONE place that
+  decides which openers and closers a line carries; the parser, the unclosed-block
+  check in `diagnostics.ts` and `folding.ts` all consume it. They used to have
+  three separate implementations, and the parser's tested the RAW line - so a
+  `.pend` in a comment or a `.bend` in a string closed the enclosing scope and
+  every later label was filed under the wrong one, silently. A `:` counts as a
+  boundary (`outer:.proc` is valid) but a letter does not, which is what keeps the
+  dotted reference `outer.proc` from reading as an opener.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`
 - **Local symbols**: Start with `_`, scoped to the nearest code label above them
 - **Qualified names**: `a.b` resolves `a` through the ordinary scope chain, so its

@@ -21,6 +21,7 @@ import {
 } from './constants';
 import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
+import { blockDirectivesOn } from './blocks';
 import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
 /**
@@ -269,42 +270,35 @@ export function validateDocument(
             });
         }
 
-        // Check for opening directives
-        for (const open of Object.keys(FOLDING_PAIRS)) {
-            // Safe: directive name from static constant (FOLDING_PAIRS)
-            const openPattern = new RegExp(`(?:^|\\s)\\${open}\\b`, 'i');
-            if (openPattern.test(codeLower)) {
-                blockStack.push({ directive: open, line: lineNum });
-            }
+        const { opened, closed } = blockDirectivesOn(line);
+        for (const directive of opened) {
+            blockStack.push({ directive, line: lineNum });
         }
 
         // Check for closing directives
-        for (const [close, openers] of Object.entries(CLOSING_DIRECTIVES)) {
-            // Safe: directive name from static constant (CLOSING_DIRECTIVES)
-            const closePattern = new RegExp(`(?:^|\\s)\\${close}\\b`, 'i');
-            if (closePattern.test(codeLower)) {
-                // Find the most recent matching opener
-                let found = false;
-                for (let i = blockStack.length - 1; i >= 0; i--) {
-                    if (openers.includes(blockStack[i].directive)) {
-                        blockStack.splice(i, 1);
-                        found = true;
-                        break;
-                    }
+        for (const close of closed) {
+            const openers = CLOSING_DIRECTIVES[close];
+            // Find the most recent matching opener
+            let found = false;
+            for (let i = blockStack.length - 1; i >= 0; i--) {
+                if (openers.includes(blockStack[i].directive)) {
+                    blockStack.splice(i, 1);
+                    found = true;
+                    break;
                 }
-                if (!found) {
-                    const startCol = codeLower.indexOf(close);
-                    const expectedOpeners = openers.join(', ');
-                    diagnostics.push({
-                        severity: DiagnosticSeverity.Error,
-                        range: Range.create(
-                            Position.create(lineNum, startCol >= 0 ? startCol : 0),
-                            Position.create(lineNum, (startCol >= 0 ? startCol : 0) + close.length)
-                        ),
-                        message: `'${close}' without matching ${expectedOpeners}`,
-                        source: '64tass'
-                    });
-                }
+            }
+            if (!found) {
+                const startCol = codeLower.indexOf(close);
+                const expectedOpeners = openers.join(', ');
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Error,
+                    range: Range.create(
+                        Position.create(lineNum, startCol >= 0 ? startCol : 0),
+                        Position.create(lineNum, (startCol >= 0 ? startCol : 0) + close.length)
+                    ),
+                    message: `'${close}' without matching ${expectedOpeners}`,
+                    source: '64tass'
+                });
             }
         }
 
