@@ -218,6 +218,12 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   deliberately excluded: they assemble but are addressing-size and bank
   overrides, not indices (`lda $10,b` disassembles as a plain absolute
   `lda $0010`).
+- **Index lifetime**: `scanWorkspace` runs once, at startup, so `onDidClose` must
+  NOT simply drop a file - doing so shrank the index with every file opened and
+  closed, quietly costing Ctrl+T and cross-file go-to-definition for the rest of
+  the session. A closed file under a workspace root is re-indexed from disk
+  instead; only one outside the roots is dropped. `onDidChangeWatchedFiles`
+  likewise treats `Created` as a reason to index rather than to skip.
 - **Compilation units**: a workspace holds many independent programs, so symbols
   from a file that is not assembled together with the current one must not be
   offered. `IncludeGraph.compilationUnit(uri)` is that set: the file's own

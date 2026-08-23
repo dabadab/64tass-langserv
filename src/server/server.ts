@@ -1,3 +1,4 @@
+import * as path from 'path';
 import {
     createConnection,
     TextDocuments,
@@ -126,6 +127,16 @@ function readSettings(config: unknown): Settings {
         cpu: isCpuName(cpu) ? cpu.toLowerCase() : DEFAULT_CPU,
         includePaths: Array.isArray(raw.includePaths) ? raw.includePaths.map(String) : [],
     };
+}
+
+/** Whether a file:// URI lives under one of the workspace roots. */
+function isUnderWorkspaceRoot(uri: string): boolean {
+    let filePath: string;
+    try { filePath = fileURLToPath(uri); } catch { return false; }
+    return workspaceRoots.some(root => {
+        const rel = path.relative(root, filePath);
+        return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+    });
 }
 
 /** Configured include search paths, made absolute against the workspace root. */
@@ -589,7 +600,10 @@ connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
             // An open document is the editor's to report; its buffer is authoritative
             // and onDidChangeContent already handles it.
             if (documents.get(uri)) continue;
-            if (!documentIndex.has(uri)) continue;
+            // Already-indexed files are re-read; a newly CREATED one - a git
+            // checkout, a generated table - has no entry yet and would otherwise
+            // never be picked up at all.
+            if (!documentIndex.has(uri) && change.type !== FileChangeType.Created) continue;
 
             if (change.type === FileChangeType.Deleted) {
                 clearIncludeRefs(uri);
@@ -635,8 +649,19 @@ documents.onDidClose(event => {
 
     // Keep the index entry if another still-open document .includes this file -
     // dropping it would strip every symbol it provides from that parent.
+    //
+    // Otherwise re-index it from disk rather than dropping it: the workspace scan
+    // only ever runs at startup, so deleting here made the index shrink with every
+    // file the user opened and closed, and Ctrl+T and cross-file go-to-definition
+    // quietly lost them for the rest of the session. Only a file outside the
+    // workspace roots is really gone.
     if (!includeGraph.isReferenced(uri)) {
-        documentIndex.delete(uri);
+        const content = isUnderWorkspaceRoot(uri) ? getDocumentText(uri) : null;
+        if (content === null) {
+            documentIndex.delete(uri);
+        } else {
+            indexDocument(TextDocument.create(uri, '64tass', 1, content));
+        }
     }
 
     connection.sendDiagnostics({ uri, diagnostics: [] });

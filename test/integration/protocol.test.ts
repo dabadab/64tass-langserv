@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import * as fs from 'fs';
 import { TestServer, SERVER_BUILT } from '../helpers/lspClient';
 
 /**
@@ -188,6 +189,37 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
         });
         expect(actions.map(a => a.title)).toContain("Change to 'counter'");
     });
+
+    it('keeps a file in the workspace index after it is closed', async () => {
+        // The workspace scan only runs at startup, so deleting the entry on close
+        // made the index shrink with every file opened and closed in a session.
+        const uri = server.uriOf('closable.asm');
+        fs.writeFileSync(new URL(uri), 'closable_symbol = 1\n');
+        await server.connection.sendNotification('textDocument/didOpen', {
+            textDocument: { uri, languageId: '64tass', version: 1, text: 'closable_symbol = 1\n' },
+        });
+        await server.nextDiagnostics(uri).catch(() => null);
+
+        await server.connection.sendNotification('textDocument/didClose', { textDocument: { uri } });
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const symbols = await server.request<{ name: string }[]>('workspace/symbol', { query: 'closable' });
+        expect(symbols.map(s => s.name)).toContain('closable_symbol');
+    }, 20000);
+
+    it('picks up a file created in the workspace', async () => {
+        // The watcher skipped any URI not already indexed, so a git checkout or a
+        // generated table was never seen.
+        const uri = server.uriOf('created.asm');
+        fs.writeFileSync(new URL(uri), 'created_symbol = 1\n');
+        await server.connection.sendNotification('workspace/didChangeWatchedFiles', {
+            changes: [{ uri, type: 1 }],   // 1 = Created
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const symbols = await server.request<{ name: string }[]>('workspace/symbol', { query: 'created' });
+        expect(symbols.map(s => s.name)).toContain('created_symbol');
+    }, 20000);
 
     it('answers signature help inside a macro call', async () => {
         await server.open('sig.asm', ['setup   .macro ptr, val', '        rts', '        .endm', 'start', '        #setup '].join('\n'));
