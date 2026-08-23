@@ -865,3 +865,47 @@ describe('same-named struct instances in different scopes', () => {
         expect(findSymbolInfo('item.w', docs[0].uri, 4, documentIndex, false)?.uri).toBe('file:///b.asm');
     });
 });
+
+describe('picking between same-named definitions in different files', () => {
+    // From the .sid example: `tune` is defined in the file being edited and also
+    // in an unrelated program elsewhere in the workspace. Whichever was indexed
+    // first used to win, so F12 could land in a file with nothing to do with this
+    // one. Names invented; the shape is the point.
+    const mine = 'tune    .byte 0\n        lda tune';
+    const other = 'tune    .byte 0';
+
+    function setup() {
+        // The unrelated file first, which is the order that used to lose.
+        const { documentIndex, docs } = buildIndex(
+            { source: other, uri: 'file:///elsewhere/other.asm' },
+            { source: mine, uri: 'file:///proj/mine.asm' });
+        return { documentIndex, mineUri: docs[1].uri };
+    }
+
+    it('prefers the definition in the file being edited', () => {
+        const { documentIndex, mineUri } = setup();
+        expect(findSymbolInfo('tune', mineUri, 1, documentIndex, false)?.uri).toBe(mineUri);
+    });
+
+    it('prefers a file in the same compilation unit over an unrelated one', () => {
+        const unitMain = 'file:///proj/main.asm';
+        const unitPart = 'file:///proj/part.inc';
+        const outside = 'file:///elsewhere/other.asm';
+        const { documentIndex } = buildIndex(
+            { source: 'tune    .byte 0', uri: outside },
+            { source: 'tune    .byte 0', uri: unitPart },
+            { source: '        lda tune', uri: unitMain });
+        const unit = new Set([unitMain, unitPart]);
+        expect(findSymbolInfo('tune', unitMain, 0, documentIndex, false, true, unit)?.uri).toBe(unitPart);
+        // Without the unit it still resolves - this only ever ranks, never filters.
+        expect(findSymbolInfo('tune', unitMain, 0, documentIndex, false)?.uri).toBe(outside);
+    });
+
+    it('still finds a definition that exists only outside the unit', () => {
+        const { documentIndex } = buildIndex(
+            { source: 'elsewhere = 1', uri: 'file:///elsewhere/other.asm' },
+            { source: '        lda elsewhere', uri: 'file:///proj/mine.asm' });
+        expect(findSymbolInfo('elsewhere', 'file:///proj/mine.asm', 0, documentIndex, false,
+            true, new Set(['file:///proj/mine.asm']))?.uri).toBe('file:///elsewhere/other.asm');
+    });
+});

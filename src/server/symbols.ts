@@ -260,6 +260,32 @@ export function collectScopeMembers(
     return members;
 }
 
+/**
+ * Documents in the order a lookup should consult them: the file itself, then the
+ * rest of its compilation unit, then everything else.
+ *
+ * This is a RANKING, never a filter - an incomplete include graph would turn a
+ * filter into false "undefined symbol" reports, which is why findSymbolInfo does
+ * not take the unit as a restriction. But when two unrelated programs both define
+ * `music`, whichever happened to be indexed first was winning, so go-to-definition
+ * could land in a file that has nothing to do with the one being edited.
+ */
+function documentsByPreference(
+    documentIndex: Map<string, DocumentIndex>,
+    fromUri: string,
+    unit?: ReadonlySet<string>
+): DocumentIndex[] {
+    const own: DocumentIndex[] = [];
+    const sameUnit: DocumentIndex[] = [];
+    const rest: DocumentIndex[] = [];
+    for (const [uri, index] of documentIndex) {
+        if (uri === fromUri) own.push(index);
+        else if (unit?.has(uri)) sameUnit.push(index);
+        else rest.push(index);
+    }
+    return [...own, ...sameUnit, ...rest];
+}
+
 export function findSymbolInfo(
     word: string,
     fromUri: string,
@@ -268,7 +294,10 @@ export function findSymbolInfo(
     caseSensitive = false,
     // Set false when already resolving through a `.with`, so expanding a name
     // against the imported scopes cannot expand it again and again.
-    applyWith = true
+    applyWith = true,
+    // Documents assembled together with fromUri. Only ORDERS the search - see
+    // documentsByPreference - so an unknown or partial unit costs nothing.
+    unit?: ReadonlySet<string>
 ): LabelDefinition | null {
     // Check if word is an anonymous label reference
     if (/^[+-]+$/.test(word)) {
@@ -319,7 +348,7 @@ export function findSymbolInfo(
         const targetPath = parts.slice(0, -1).join('.');
 
         const candidates = scopeCandidates(targetPath, currentScopePath, documentIndex);
-        for (const [, index] of documentIndex) {
+        for (const index of documentsByPreference(documentIndex, fromUri, unit)) {
             for (const label of index.labelsByName.get(targetName) ?? []) {
                 if (inCandidateScope(label.scopePath, candidates)) return label;
             }
@@ -343,7 +372,7 @@ export function findSymbolInfo(
 
     // Regular symbol lookup: search current scope, then parent scopes, out to global
     for (const scopeToTry of getScopeChain(currentScopePath)) {
-        for (const [, index] of documentIndex) {
+        for (const index of documentsByPreference(documentIndex, fromUri, unit)) {
             for (const label of index.labelsByName.get(lookupWord) ?? []) {
                 if (!label.isLocal && label.scopePath === scopeToTry) {
                     return label;
@@ -447,9 +476,11 @@ export function findDefinition(
     fromUri: string,
     fromLine: number,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive = false
+    caseSensitive = false,
+    /** Documents assembled together with fromUri, to prefer over unrelated ones. */
+    unit?: ReadonlySet<string>
 ): Location | null {
-    const label = findSymbolInfo(word, fromUri, fromLine, documentIndex, caseSensitive);
+    const label = findSymbolInfo(word, fromUri, fromLine, documentIndex, caseSensitive, true, unit);
     if (label) {
         return Location.create(label.uri, label.range);
     }

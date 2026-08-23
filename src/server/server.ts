@@ -503,7 +503,11 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     const word = getWordAtPosition(document, params.position);
     if (!word) return null;
 
-    return findDefinition(word, params.textDocument.uri, params.position.line, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
+    // The compilation unit only ranks the candidates - a name defined in two
+    // unrelated programs should resolve to the one being edited.
+    return findDefinition(word, params.textDocument.uri, params.position.line, documentIndex,
+        effectiveCaseSensitive(params.textDocument.uri),
+        includeGraph.compilationUnit(params.textDocument.uri));
 });
 
 connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
@@ -607,7 +611,8 @@ connection.onReferences((params: ReferenceParams): Location[] => {
     if (!word) return [];
 
     const uri = params.textDocument.uri;
-    const symbol = findSymbolInfo(word, uri, params.position.line, documentIndex, effectiveCaseSensitive(uri));
+    const symbol = findSymbolInfo(word, uri, params.position.line, documentIndex, effectiveCaseSensitive(uri),
+        true, includeGraph.compilationUnit(uri));
     if (!symbol) return [];
 
     return findReferences(
@@ -624,7 +629,8 @@ connection.onDocumentHighlight((params: DocumentHighlightParams): DocumentHighli
     if (!word) return [];
 
     const uri = params.textDocument.uri;
-    const symbol = findSymbolInfo(word, uri, params.position.line, documentIndex, effectiveCaseSensitive(uri));
+    const symbol = findSymbolInfo(word, uri, params.position.line, documentIndex, effectiveCaseSensitive(uri),
+        true, includeGraph.compilationUnit(uri));
     if (!symbol) return [];
 
     return findDocumentHighlights(symbol, uri, documentIndex, getDocumentText, effectiveCaseSensitive(symbol.uri));
@@ -640,7 +646,8 @@ function resolveRenameTarget(uri: string, position: Position) {
     const word = getWordAtPosition(document, position);
     if (!word) return null;
 
-    const symbol = findSymbolInfo(word, uri, position.line, documentIndex, effectiveCaseSensitive(uri));
+    const symbol = findSymbolInfo(word, uri, position.line, documentIndex, effectiveCaseSensitive(uri),
+        true, includeGraph.compilationUnit(uri));
     if (!symbol) return null;
 
     return { document, word, symbol };
