@@ -318,3 +318,19 @@ describe('BUILTINS', () => {
         }
     });
 });
+
+describe('directives that do not exist', () => {
+    it.each(['.const', '.let'])('does not claim %s is a directive', (directive) => {
+        // Verified against V1.60.3243 and absent from the manual: both are
+        // rejected with "not defined symbol". Listing them offered a completion
+        // that cannot assemble, and suppressed the undefined-macro warning that
+        // should have caught the mistake.
+        expect(BUILTIN_DIRECTIVES_PATTERN.test(directive)).toBe(false);
+        expect(ALL_DIRECTIVES).not.toContain(directive.slice(1));
+    });
+
+    it('keeps .var, which does exist', () => {
+        expect(BUILTIN_DIRECTIVES_PATTERN.test('.var')).toBe(true);
+        expect(ALL_DIRECTIVES).toContain('var');
+    });
+});
