@@ -38,6 +38,15 @@ describe('undefined symbol fixes', () => {
         expect(titles('counter = 1\nstart\n        lda zzzzzzzz')).toEqual([]);
     });
 
+    it('rejects a candidate that is merely much longer', () => {
+        // The length difference alone puts it past the threshold.
+        expect(titles('ab = 1\nstart\n        lda abcdefghij')).toEqual([]);
+    });
+
+    it('still suggests across a small length difference', () => {
+        expect(titles('counter = 1\nstart\n        lda counte')).toContain("Change to 'counter'");
+    });
+
     it('offers at most three suggestions', () => {
         const source = ['aaa1 = 1', 'aaa2 = 2', 'aaa3 = 3', 'aaa4 = 4', 'aaa5 = 5', 'start', '        lda aaa'].join('\n');
         expect(titles(source).length).toBeLessThanOrEqual(3);

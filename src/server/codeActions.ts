@@ -55,11 +55,14 @@ function spellingFixes(
     const isMacro = diagnostic.code === 'undefined-macro';
     const target = caseSensitive ? written : written.toLowerCase();
 
+    // The furthest a suggestion may be and still be worth offering.
+    const limit = Math.max(1, Math.floor(target.length * MAX_DISTANCE_RATIO));
+
     const candidates = new Map<string, number>();
     for (const label of collectVisibleLabels(document.uri, diagnostic.range.start.line, documentIndex, visibleUris)) {
         if (isMacro && label.kind !== 'macro') continue;
-        const distance = editDistance(target, label.name);
-        if (distance === 0 || distance > Math.max(1, Math.floor(target.length * MAX_DISTANCE_RATIO))) continue;
+        const distance = editDistance(target, label.name, limit);
+        if (distance === 0 || distance > limit) continue;
         const existing = candidates.get(label.originalName);
         if (existing === undefined || distance < existing) candidates.set(label.originalName, distance);
     }
@@ -98,10 +101,15 @@ function closeBlockFix(document: TextDocument, diagnostic: Diagnostic, lines: st
     };
 }
 
-/** Levenshtein distance, capped implicitly by the caller's threshold. */
-function editDistance(a: string, b: string): number {
+/**
+ * Levenshtein distance, giving up once it cannot come in under `limit`.
+ *
+ * The difference in length is a lower bound on the distance, so anything further
+ * apart than the caller would accept is rejected without building the matrix.
+ */
+function editDistance(a: string, b: string, limit: number): number {
     if (a === b) return 0;
-    if (Math.abs(a.length - b.length) > a.length) return Infinity;
+    if (Math.abs(a.length - b.length) > limit) return Infinity;
 
     let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
     for (let i = 1; i <= a.length; i++) {
