@@ -140,34 +140,56 @@ export function assemble(options: AssembleOptions): Promise<AssembleResult> {
 }
 
 /**
- * Which file to assemble for `uri`. An include usually cannot stand alone, so:
- * a `; 64tass-langserv: root <file>` pragma wins, then the single root whose
- * include tree contains this file, and failing both the file itself.
+ * One map holding every run's messages, per file.
  *
- * Ambiguity deliberately falls back to the file itself rather than picking one of
- * several roots: assembling the wrong program would report errors about code the
- * user is not looking at.
+ * Two programs that share a header can each have something to say about it, and
+ * both are true - the header is part of both builds.
  */
-export function chooseRoot(
+export function mergeDiagnostics(runs: readonly Map<string, Diagnostic[]>[]): Map<string, Diagnostic[]> {
+    const merged = new Map<string, Diagnostic[]>();
+    for (const run of runs) {
+        for (const [uri, diagnostics] of run) {
+            merged.set(uri, [...(merged.get(uri) ?? []), ...diagnostics]);
+        }
+    }
+    return merged;
+}
+
+/**
+ * Which files to assemble when `uri` is saved.
+ *
+ * An include usually cannot stand alone, so: a `; 64tass-langserv: root <file>`
+ * pragma wins outright, then every root whose include tree holds this file, and
+ * failing both the file itself.
+ *
+ * EVERY root, not one of them: a header shared by two programs is part of both,
+ * and an error it causes in either is real. That is the same set of files symbol
+ * resolution treats as one compilation unit, so the two halves of the extension
+ * answer for the same programs.
+ */
+export function chooseRoots(
     uri: string,
     text: string,
     rootsIncluding: readonly string[]
-): string | null {
-    const pragma = detectRootPragma(text);
-    if (pragma) {
+): string[] {
+    const toPath = (fileUri: string): string | null => {
         try {
-            return path.resolve(path.dirname(fileURLToPath(uri)), pragma);
+            return fileURLToPath(fileUri);
         } catch {
             return null;
         }
+    };
+
+    const pragma = detectRootPragma(text);
+    if (pragma) {
+        const from = toPath(uri);
+        return from === null ? [] : [path.resolve(path.dirname(from), pragma)];
     }
+
     const roots = rootsIncluding.filter(root => root !== uri);
-    const chosen = roots.length === 1 ? roots[0] : uri;
-    try {
-        return fileURLToPath(chosen);
-    } catch {
-        return null;
-    }
+    const chosen = roots.length > 0 ? roots : [uri];
+    // Sorted so a save assembles the same programs in the same order every time.
+    return chosen.map(toPath).filter((p): p is string => p !== null).sort();
 }
 
 const ROOT_PRAGMA = /^\s*;\s*64tass-langserv\s*:\s*root\s+(\S.*?)\s*$/i;

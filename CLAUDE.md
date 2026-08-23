@@ -394,11 +394,15 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   `os.devNull` so it cannot disturb the user's own build. Messages are parsed
   `file:line:col: severity: message`, grouped BY FILE - an include's error belongs
   in the include - and a `note` is folded into the message above it rather than
-  shown separately. `chooseRoot` decides what to assemble: a
-  `; 64tass-langserv: root <file>` pragma, else the single root whose include tree
-  holds the file, else the file itself; several roots deliberately fall back to
-  the file, since assembling the wrong program reports errors about code the user
-  is not looking at. `server.ts` keeps the result in `buildDiagnostics` and
+  shown separately. `chooseRoots` decides what to assemble: a
+  `; 64tass-langserv: root <file>` pragma, else EVERY root whose include tree holds
+  the file, else the file itself. Every root, not one of them - a header shared by
+  two programs is part of both builds, and an error it causes in either is real;
+  that is also the set symbol resolution treats as one compilation unit, so the
+  two halves answer for the same programs. The runs are sequential and their
+  messages go through `mergeDiagnostics`, so a file both programs complain about
+  carries both. If every root fails to RUN, the previous build's messages are left
+  alone rather than cleared as though the source had been fixed. `server.ts` keeps the result in `buildDiagnostics` and
   `publishFor` merges it with the live checks - the two have different lifetimes,
   one per build and one per keystroke, so they cannot share a list. `CPU_FLAG`
   moved into `constants.ts` for this (the test helper re-exports it).

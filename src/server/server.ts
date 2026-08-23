@@ -66,7 +66,7 @@ import {
     isRenameable, isValidSymbolName, findReferences, findDocumentHighlights
 } from './symbols';
 import { validateDocument } from './diagnostics';
-import { assemble, chooseRoot } from './assembler';
+import { assemble, chooseRoots, mergeDiagnostics } from './assembler';
 import { findUnusedSymbols } from './unused';
 import { computeInlayHints } from './inlayHints';
 import { formatDocument, FormatColumns, DEFAULT_COLUMNS } from './formatting';
@@ -278,27 +278,39 @@ async function runAssembler(uri: string): Promise<void> {
     const doc = documents.get(uri);
     if (!doc) return;
 
-    const root = chooseRoot(uri, doc.getText(), includeGraph.rootsFor(uri));
-    if (root === null) return;
+    const roots = chooseRoots(uri, doc.getText(), includeGraph.rootsFor(uri));
+    if (roots.length === 0) return;
 
     const index = documentIndex.get(uri);
-    const result = await assemble({
-        assemblerPath: globalSettings.assemblerPath,
-        file: root,
-        includePaths: searchPaths(),
-        caseSensitive: effectiveCaseSensitive(uri),
-        cpuFlag: index?.cpuExplicit ? CPU_FLAG[index.cpu] ?? null : null,
-        extraArgs: globalSettings.assemblerArgs,
-    });
+    // Sequentially: a save usually means two or three roots, and running them at
+    // once only interleaves their output.
+    const runs: Map<string, Diagnostic[]>[] = [];
+    let ran = false;
+    for (const root of roots) {
+        const result = await assemble({
+            assemblerPath: globalSettings.assemblerPath,
+            file: root,
+            includePaths: searchPaths(),
+            caseSensitive: effectiveCaseSensitive(uri),
+            cpuFlag: index?.cpuExplicit ? CPU_FLAG[index.cpu] ?? null : null,
+            extraArgs: globalSettings.assemblerArgs,
+        });
 
-    if (result.failure !== null) {
-        connection.console.warn(`64tass: could not run '${globalSettings.assemblerPath}': ${result.failure}`);
-        return;
+        if (result.failure !== null) {
+            connection.console.warn(
+                `64tass: could not assemble '${root}' with '${globalSettings.assemblerPath}': ${result.failure}`);
+            continue;
+        }
+        ran = true;
+        runs.push(result.diagnostics);
     }
+    // Every root failing to run leaves the previous build's messages alone, rather
+    // than clearing them as though the source had been fixed.
+    if (!ran) return;
 
     const stale = [...buildDiagnostics.keys()];
     buildDiagnostics.clear();
-    for (const [fileUri, diagnostics] of result.diagnostics) buildDiagnostics.set(fileUri, diagnostics);
+    for (const [fileUri, diagnostics] of mergeDiagnostics(runs)) buildDiagnostics.set(fileUri, diagnostics);
     for (const fileUri of new Set([...stale, ...buildDiagnostics.keys()])) publishFor(fileUri);
 }
 

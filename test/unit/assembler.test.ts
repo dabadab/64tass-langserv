@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAssemblerOutput, toDiagnostics, chooseRoot, detectRootPragma } from '../../src/server/assembler';
+import { parseAssemblerOutput, toDiagnostics, chooseRoots, detectRootPragma, mergeDiagnostics } from '../../src/server/assembler';
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
 
 describe('parseAssemblerOutput', () => {
@@ -54,26 +54,53 @@ describe('choosing what to assemble', () => {
     it('follows a root pragma, relative to the file holding it', () => {
         expect(detectRootPragma('        nop\n; 64tass-langserv: root ../build/main.asm\n'))
             .toBe('../build/main.asm');
-        expect(chooseRoot('file:///proj/inc/part.inc', '; 64tass-langserv: root ../main.asm', []))
-            .toBe('/proj/main.asm');
+        expect(chooseRoots('file:///proj/inc/part.inc', '; 64tass-langserv: root ../main.asm', []))
+            .toEqual(['/proj/main.asm']);
     });
 
     it('assembles the single root that includes the file', () => {
-        expect(chooseRoot('file:///proj/part.inc', '', ['file:///proj/main.asm'])).toBe('/proj/main.asm');
+        expect(chooseRoots('file:///proj/part.inc', '', ['file:///proj/main.asm']))
+            .toEqual(['/proj/main.asm']);
     });
 
     it('assembles the file itself when nothing includes it', () => {
-        expect(chooseRoot('file:///proj/main.asm', '', [])).toBe('/proj/main.asm');
+        expect(chooseRoots('file:///proj/main.asm', '', [])).toEqual(['/proj/main.asm']);
     });
 
-    it('assembles the file itself when several roots include it', () => {
-        // Picking one would report errors about a program the user is not editing.
-        expect(chooseRoot('file:///proj/part.inc', '', ['file:///proj/a.asm', 'file:///proj/b.asm']))
-            .toBe('/proj/part.inc');
+    it('assembles every root when several include the file', () => {
+        // A header shared by two programs belongs to both, and an error it causes
+        // in either is real - the same set symbol resolution treats as one unit.
+        expect(chooseRoots('file:///proj/part.inc', '', ['file:///proj/b.asm', 'file:///proj/a.asm']))
+            .toEqual(['/proj/a.asm', '/proj/b.asm']);
     });
 
     it('ignores the file appearing in its own root list', () => {
-        expect(chooseRoot('file:///proj/main.asm', '', ['file:///proj/main.asm', 'file:///proj/top.asm']))
-            .toBe('/proj/top.asm');
+        expect(chooseRoots('file:///proj/main.asm', '', ['file:///proj/main.asm', 'file:///proj/top.asm']))
+            .toEqual(['/proj/top.asm']);
+    });
+
+    it('gives up on a URI it cannot turn into a path', () => {
+        expect(chooseRoots('untitled:Untitled-1', '', [])).toEqual([]);
+    });
+});
+
+describe('mergeDiagnostics', () => {
+    const run = (uri: string, message: string) =>
+        toDiagnostics(parseAssemblerOutput(`${uri}:1:1: error: ${message}\n`), '/proj');
+
+    it('keeps what every run said about the same file', () => {
+        // A header assembled as part of two programs can be wrong in both.
+        const merged = mergeDiagnostics([run('shared.inc', 'first program'), run('shared.inc', 'second program')]);
+        expect(merged.get('file:///proj/shared.inc')?.map(d => d.message))
+            .toEqual(['first program', 'second program']);
+    });
+
+    it('keeps files only one run mentioned', () => {
+        const merged = mergeDiagnostics([run('a.asm', 'in a'), run('b.asm', 'in b')]);
+        expect([...merged.keys()]).toEqual(['file:///proj/a.asm', 'file:///proj/b.asm']);
+    });
+
+    it('is empty for no runs at all', () => {
+        expect(mergeDiagnostics([]).size).toBe(0);
     });
 });

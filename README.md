@@ -168,9 +168,8 @@ Defining them stops false "undefined symbol" / "duplicate symbol" reports, and l
 ```
 
 An include usually cannot be assembled on its own. Without this pragma, saving a
-file assembles the one root that includes it, or the file itself when nothing
-does — or when several unrelated programs do, since guessing there would report
-errors about a program you are not editing.
+file assembles every root that includes it — a header shared by two programs is
+part of both, and both are checked — or the file itself when nothing does.
 
 ## Editor defaults
 
