@@ -1258,3 +1258,16 @@ describe('data labels beyond the common directives', () => {
         expect(index.labels[0].kind).toBe('proc');
     });
 });
+
+describe('includes that do not resolve', () => {
+    // Recorded rather than only logged: the server refuses to narrow symbol
+    // lookups to a compilation unit when the include graph has a missing edge,
+    // because a reachable symbol would then read as undefined.
+    it('flags a document whose include path resolves to nothing', () => {
+        expect(parse('        .include "no-such-file.asm"').unresolvedIncludes).toBe(true);
+    });
+
+    it('leaves a document with no includes at all unflagged', () => {
+        expect(parse('start   nop').unresolvedIncludes).toBe(false);
+    });
+});

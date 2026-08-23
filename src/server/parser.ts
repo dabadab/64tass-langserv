@@ -78,6 +78,7 @@ export function parseDocument(
     const functionReturnScope: Map<string, string> = new Map();
     const structInstances: Map<string, string> = new Map();
     const includes: string[] = [];
+    let unresolvedIncludes = false;
     const includeScopes: Map<string, string> = new Map();
     const lines = text.split('\n');
     const commentBlockLines = findCommentBlockLines(lines);
@@ -215,6 +216,10 @@ export function parseDocument(
                     includeScopes.set(includeUri, enclosing ? `${enclosing}.${scopeName}` : scopeName);
                 }
             } else {
+                // Remembered, not just logged: a file whose includes do not all
+                // resolve cannot have its symbol lookups narrowed to its own
+                // compilation unit, because the graph is missing an edge.
+                unresolvedIncludes = true;
                 log?.(`Could not resolve .${directive} path '${includePath}'`);
             }
 
@@ -850,5 +855,6 @@ export function parseDocument(
         else labelsByName.set(label.name, [label]);
     }
 
-    return { labels, labelsByName, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu, cpuExplicit: declaredCpu !== null || cpuExplicit };
+    return { labels, labelsByName, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu, cpuExplicit: declaredCpu !== null || cpuExplicit,
+        unresolvedIncludes };
 }

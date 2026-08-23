@@ -174,16 +174,19 @@ export function findAnonymousLabel(
 function scopeCandidates(
     targetPath: string,
     fromScope: string | null,
-    documentIndex: Map<string, DocumentIndex>
+    documentIndex: Map<string, DocumentIndex>,
+    unit?: ReadonlySet<string>
 ): { reachable: string[]; substituted: string[] } {
     const reachable = getScopeChain(fromScope)
         .map(scope => (scope ? `${scope}.${targetPath}` : targetPath));
 
     // Both maps are keyed by FULL path, so the lookup happens on each path the
     // reference could be naming, not on its first segment: two `p1` instances in
-    // different scopes are different instances. Every document is consulted -
-    // stopping at the first would make the answer depend on indexing order.
-    const substituted = reachable.flatMap(full => substitutionsFor(full, documentIndex));
+    // different scopes are different instances. Every document in the unit is
+    // consulted - stopping at the first would make the answer depend on indexing
+    // order - and only those, or a `.dstruct` type from an unrelated program
+    // would decide what `p1.member` means here.
+    const substituted = reachable.flatMap(full => substitutionsFor(full, documentIndex, unit));
     return { reachable, substituted };
 }
 
@@ -192,7 +195,11 @@ function scopeCandidates(
  * assigned. The longest matching prefix wins, and the remainder is carried over:
  * `RESULT.INNER` is the instance `RESULT` plus `.INNER` within it.
  */
-function substitutionsFor(full: string, documentIndex: Map<string, DocumentIndex>): string[] {
+function substitutionsFor(
+    full: string,
+    documentIndex: Map<string, DocumentIndex>,
+    unit?: ReadonlySet<string>
+): string[] {
     const parts = full.split('.');
     for (let take = parts.length; take > 0; take--) {
         const prefix = parts.slice(0, take).join('.');
@@ -200,7 +207,8 @@ function substitutionsFor(full: string, documentIndex: Map<string, DocumentIndex
         const suffix = remainder ? `.${remainder}` : '';
         const found: string[] = [];
 
-        for (const [, index] of documentIndex) {
+        for (const [uri, index] of documentIndex) {
+            if (unit && !unit.has(uri)) continue;
             const declaredType = index.structInstances.get(prefix);
             if (declaredType) found.push(declaredType + suffix);
 
@@ -208,7 +216,8 @@ function substitutionsFor(full: string, documentIndex: Map<string, DocumentIndex
             if (memberSource) {
                 // A function whose `.endf` hands back a scope of its own exposes
                 // that scope's members, not its top-level ones.
-                for (const [, other] of documentIndex) {
+                for (const [otherUri, other] of documentIndex) {
+                    if (unit && !unit.has(otherUri)) continue;
                     const returned = other.functionReturnScope.get(memberSource);
                     if (returned) found.push(returned + suffix);
                 }
@@ -245,7 +254,7 @@ export function collectScopeMembers(
     visibleUris?: ReadonlySet<string>,
     fromScope: string | null = null
 ): LabelDefinition[] {
-    const candidates = scopeCandidates(scopePath, fromScope, documentIndex);
+    const candidates = scopeCandidates(scopePath, fromScope, documentIndex, visibleUris);
     const seen = new Set<string>();
     const members: LabelDefinition[] = [];
     for (const [uri, index] of documentIndex) {
@@ -261,16 +270,20 @@ export function collectScopeMembers(
 }
 
 /**
- * Documents in the order a lookup should consult them: the file itself, then the
- * rest of its compilation unit, then everything else.
+ * The documents a lookup may consult: the file itself first, then the rest of its
+ * compilation unit - and NOTHING else, once a unit is given.
  *
- * This is a RANKING, never a filter - an incomplete include graph would turn a
- * filter into false "undefined symbol" reports, which is why findSymbolInfo does
- * not take the unit as a restriction. But when two unrelated programs both define
- * `music`, whichever happened to be indexed first was winning, so go-to-definition
- * could land in a file that has nothing to do with the one being edited.
+ * A unit is a restriction, so a name that only exists in an unrelated program is
+ * not found at all, rather than found in a file that has nothing to do with this
+ * one. Two programs that both define `music` used to resolve to whichever was
+ * indexed first.
+ *
+ * The caller decides whether to pass one, and only does when the include graph is
+ * known to be complete - see `unitFor` in server.ts. With no unit every document
+ * is searched, which is what every caller that has no graph to consult (and every
+ * unit test) gets.
  */
-function documentsByPreference(
+function documentsToSearch(
     documentIndex: Map<string, DocumentIndex>,
     fromUri: string,
     unit?: ReadonlySet<string>
@@ -283,7 +296,7 @@ function documentsByPreference(
         else if (unit?.has(uri)) sameUnit.push(index);
         else rest.push(index);
     }
-    return [...own, ...sameUnit, ...rest];
+    return unit ? [...own, ...sameUnit] : [...own, ...rest];
 }
 
 export function findSymbolInfo(
@@ -295,8 +308,9 @@ export function findSymbolInfo(
     // Set false when already resolving through a `.with`, so expanding a name
     // against the imported scopes cannot expand it again and again.
     applyWith = true,
-    // Documents assembled together with fromUri. Only ORDERS the search - see
-    // documentsByPreference - so an unknown or partial unit costs nothing.
+    // Documents assembled together with fromUri. RESTRICTS the search - see
+    // documentsToSearch. Omitted means "no reliable graph", and everything is
+    // searched, which is the old behaviour.
     unit?: ReadonlySet<string>
 ): LabelDefinition | null {
     // Check if word is an anonymous label reference
@@ -335,7 +349,7 @@ export function findSymbolInfo(
         for (let i = imported.length - 1; i >= 0; i--) {
             const path = imported.slice(0, i + 1).join('.');
             const found = findSymbolInfo(
-                `${path}.${lookupWord}`, fromUri, fromLine, documentIndex, caseSensitive, false);
+                `${path}.${lookupWord}`, fromUri, fromLine, documentIndex, caseSensitive, false, unit);
             if (found) return found;
         }
         return null;
@@ -347,8 +361,8 @@ export function findSymbolInfo(
         const targetName = parts[parts.length - 1];
         const targetPath = parts.slice(0, -1).join('.');
 
-        const candidates = scopeCandidates(targetPath, currentScopePath, documentIndex);
-        for (const index of documentsByPreference(documentIndex, fromUri, unit)) {
+        const candidates = scopeCandidates(targetPath, currentScopePath, documentIndex, unit);
+        for (const index of documentsToSearch(documentIndex, fromUri, unit)) {
             for (const label of index.labelsByName.get(targetName) ?? []) {
                 if (inCandidateScope(label.scopePath, candidates)) return label;
             }
@@ -372,7 +386,7 @@ export function findSymbolInfo(
 
     // Regular symbol lookup: search current scope, then parent scopes, out to global
     for (const scopeToTry of getScopeChain(currentScopePath)) {
-        for (const index of documentsByPreference(documentIndex, fromUri, unit)) {
+        for (const index of documentsToSearch(documentIndex, fromUri, unit)) {
             for (const label of index.labelsByName.get(lookupWord) ?? []) {
                 if (!label.isLocal && label.scopePath === scopeToTry) {
                     return label;
@@ -556,7 +570,10 @@ export function findSymbolOccurrences(
     documentIndex: Map<string, DocumentIndex>,
     getDocumentText: (uri: string) => string | null,
     caseSensitive = false,
-    restrictToUri?: string
+    restrictToUri?: string,
+    // Documents assembled together with the symbol's own. Restricts the scan, so
+    // renaming cannot rewrite a same-named symbol in an unrelated program.
+    unit?: ReadonlySet<string>
 ): SymbolOccurrence[] {
     const occurrences: SymbolOccurrence[] = [];
     const seen = new Set<string>();
@@ -576,7 +593,8 @@ export function findSymbolOccurrences(
         // Use the case sensitivity this specific document was actually indexed
         // with (which may differ per compilation unit via a pragma), falling
         // back to the caller-supplied default if it isn't indexed at all.
-        const refSymbol = findSymbolInfo(word, uri, lineNum, documentIndex, documentIndex.get(uri)?.caseSensitive ?? caseSensitive);
+        const refSymbol = findSymbolInfo(word, uri, lineNum, documentIndex,
+            documentIndex.get(uri)?.caseSensitive ?? caseSensitive, true, unit);
         return !!refSymbol && refSymbol.uri === symbol.uri &&
             refSymbol.range.start.line === symbol.range.start.line &&
             refSymbol.range.start.character === symbol.range.start.character;
@@ -593,6 +611,7 @@ export function findSymbolOccurrences(
 
     for (const [uri, index] of documentIndex) {
         if (restrictToUri && uri !== restrictToUri) continue;
+        if (unit && !unit.has(uri)) continue;
 
         const docContent = getDocumentText(uri);
         if (docContent === null) continue;
@@ -701,9 +720,10 @@ export function findReferences(
     documentIndex: Map<string, DocumentIndex>,
     getDocumentText: (uri: string) => string | null,
     includeDeclaration: boolean,
-    caseSensitive = false
+    caseSensitive = false,
+    unit?: ReadonlySet<string>
 ): Location[] {
-    return findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive)
+    return findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive, undefined, unit)
         .filter(o => !o.inComment && (includeDeclaration || !o.isDefinition))
         .map(o => Location.create(o.uri, o.range));
 }
@@ -717,9 +737,10 @@ export function findDocumentHighlights(
     uri: string,
     documentIndex: Map<string, DocumentIndex>,
     getDocumentText: (uri: string) => string | null,
-    caseSensitive = false
+    caseSensitive = false,
+    unit?: ReadonlySet<string>
 ): DocumentHighlight[] {
-    return findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive, uri)
+    return findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive, uri, unit)
         .filter(o => !o.inComment)
         .map(o => DocumentHighlight.create(
             o.range,
@@ -737,7 +758,8 @@ export function computeRenameEdits(
     newName: string,
     documentIndex: Map<string, DocumentIndex>,
     getDocumentText: (uri: string) => string | null,
-    caseSensitive = false
+    caseSensitive = false,
+    unit?: ReadonlySet<string>
 ): WorkspaceEdit | null {
     // Refused here rather than only in the LSP handler, so no caller can produce
     // an edit that silently corrupts the source: an anonymous label has no name to
@@ -748,7 +770,7 @@ export function computeRenameEdits(
     const codeEdits: Map<string, TextEdit[]> = new Map();
     const commentEdits: Map<string, AnnotatedTextEdit[]> = new Map();
 
-    for (const occurrence of findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive)) {
+    for (const occurrence of findSymbolOccurrences(symbol, documentIndex, getDocumentText, caseSensitive, undefined, unit)) {
         const bucket = occurrence.inComment ? commentEdits : codeEdits;
         if (!bucket.has(occurrence.uri)) bucket.set(occurrence.uri, []);
         if (occurrence.inComment) {

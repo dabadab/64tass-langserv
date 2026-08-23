@@ -95,4 +95,9 @@ export interface DocumentIndex {
     // silent then, since the real target can also come from a command-line flag
     // the server never sees.
     cpuExplicit: boolean;
+    // Whether an `.include`/`.binclude` path in this file did NOT resolve on disk.
+    // The include graph is then known to be incomplete, which is what decides
+    // whether symbol lookups may be restricted to a compilation unit at all: a
+    // missing edge would make a perfectly reachable symbol read as undefined.
+    unresolvedIncludes: boolean;
 }

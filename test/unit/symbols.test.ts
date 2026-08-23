@@ -887,7 +887,7 @@ describe('picking between same-named definitions in different files', () => {
         expect(findSymbolInfo('tune', mineUri, 1, documentIndex, false)?.uri).toBe(mineUri);
     });
 
-    it('prefers a file in the same compilation unit over an unrelated one', () => {
+    it('resolves within the compilation unit and not outside it', () => {
         const unitMain = 'file:///proj/main.asm';
         const unitPart = 'file:///proj/part.inc';
         const outside = 'file:///elsewhere/other.asm';
@@ -897,15 +897,23 @@ describe('picking between same-named definitions in different files', () => {
             { source: '        lda tune', uri: unitMain });
         const unit = new Set([unitMain, unitPart]);
         expect(findSymbolInfo('tune', unitMain, 0, documentIndex, false, true, unit)?.uri).toBe(unitPart);
-        // Without the unit it still resolves - this only ever ranks, never filters.
+        // With no unit given, every document is searched - which is what callers
+        // that have no reliable include graph get.
         expect(findSymbolInfo('tune', unitMain, 0, documentIndex, false)?.uri).toBe(outside);
     });
 
-    it('still finds a definition that exists only outside the unit', () => {
+    it('does not reach a definition that exists only outside the unit', () => {
+        // The whole point: F12 finds nothing rather than opening a program that
+        // has nothing to do with this one. Whether a unit is passed at all is the
+        // caller's call, and server.ts only does it when the include graph is
+        // known to be complete.
         const { documentIndex } = buildIndex(
             { source: 'elsewhere = 1', uri: 'file:///elsewhere/other.asm' },
             { source: '        lda elsewhere', uri: 'file:///proj/mine.asm' });
         expect(findSymbolInfo('elsewhere', 'file:///proj/mine.asm', 0, documentIndex, false,
-            true, new Set(['file:///proj/mine.asm']))?.uri).toBe('file:///elsewhere/other.asm');
+            true, new Set(['file:///proj/mine.asm']))).toBeNull();
+        // ...and without a unit it is found, unchanged.
+        expect(findSymbolInfo('elsewhere', 'file:///proj/mine.asm', 0, documentIndex, false)?.uri)
+            .toBe('file:///elsewhere/other.asm');
     });
 });

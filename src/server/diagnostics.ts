@@ -40,7 +40,8 @@ function findDeadLines(
     lines: string[],
     uri: string,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive: boolean
+    caseSensitive: boolean,
+    unit?: ReadonlySet<string>
 ): Set<number> {
     const dead = new Set<number>();
     // taken: has some branch of this chain already been taken?
@@ -64,7 +65,7 @@ function findDeadLines(
             // Only plain .if conditions are evaluated; .ifeq/.ifne/... compare against
             // the program counter era and are left undecided.
             const cond = open[1].toLowerCase() === 'if'
-                ? evaluateCondition(open[2].trim(), uri, i, documentIndex, caseSensitive)
+                ? evaluateCondition(open[2].trim(), uri, i, documentIndex, caseSensitive, unit)
                 : null;
             stack.push({ live: cond === null ? true : cond, taken: cond });
             continue;
@@ -75,7 +76,7 @@ function findDeadLines(
             if (frame.taken === true) {
                 frame.live = false; // an earlier branch already ran
             } else if (frame.taken === false) {
-                const cond = evaluateCondition(elsif[2].trim(), uri, i, documentIndex, caseSensitive);
+                const cond = evaluateCondition(elsif[2].trim(), uri, i, documentIndex, caseSensitive, unit);
                 frame.live = cond === null ? true : cond;
                 if (cond === true) frame.taken = true;
                 else if (cond !== null) frame.taken = false;
@@ -215,7 +216,8 @@ export function findOversizedImmediate(
     uri: string,
     line: number,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive: boolean
+    caseSensitive: boolean,
+    unit?: ReadonlySet<string>
 ): string | null {
     const text = operand.trim();
     if (!text.startsWith('#')) return null;
@@ -226,7 +228,7 @@ export function findOversizedImmediate(
     // `<` `>` `^` take a byte OUT of a wider value, so those never overflow.
     if (/^[<>^`]/.test(expression)) return null;
 
-    const value = evaluateExpression(expression, uri, line, documentIndex, caseSensitive);
+    const value = evaluateExpression(expression, uri, line, documentIndex, caseSensitive, unit);
     if (value === null || !Number.isInteger(value)) return null;
 
     const bits = bytes * 8;
@@ -314,15 +316,29 @@ function contiguousRuns(lines: ReadonlySet<number>): [number, number][] {
     return runs;
 }
 
+export interface ValidateOptions {
+    /**
+     * Reads another document's text. Lets the cross-file duplicate check see
+     * whether the OTHER definition sits in a branch that is never assembled;
+     * without it that check still runs, just without that filter.
+     */
+    getText?: (uri: string) => string | null;
+    /**
+     * Documents assembled together with this one. Symbol resolution is restricted
+     * to them, so a name that only exists in an unrelated program is reported
+     * undefined - which it is. Omitted means the include graph is not known to be
+     * complete, and every document is searched instead.
+     */
+    unit?: ReadonlySet<string>;
+}
+
 export function validateDocument(
     document: TextDocument,
     documentIndex: Map<string, DocumentIndex>,
     caseSensitive = false,
-    // Lets the cross-file duplicate check see whether the OTHER definition sits in
-    // a branch that is never assembled. Without it that check still runs, just
-    // without that filter.
-    getText?: (uri: string) => string | null
+    options: ValidateOptions = {}
 ): Diagnostic[] {
+    const { getText, unit } = options;
     const diagnostics: Diagnostic[] = [];
     const text = document.getText();
     const lines = text.split('\n');
@@ -339,7 +355,7 @@ export function validateDocument(
 
     // Lines in .if branches the assembler provably never evaluates. Undefined-symbol
     // reporting is skipped for these, since the assembler does not resolve them either.
-    const deadLines = findDeadLines(lines, document.uri, documentIndex, caseSensitive);
+    const deadLines = findDeadLines(lines, document.uri, documentIndex, caseSensitive, unit);
 
     // Grey out the branches the assembler provably never reaches. findDeadLines
     // only marks what it can decide - `.if 0`, a condition of resolved constants -
@@ -498,7 +514,7 @@ export function validateDocument(
         if (index.cpuExplicit) {
             const unsupported = findUnsupportedMnemonic(code, opcodes);
             // A macro of that name makes the line a macro call, and legal (verified).
-            if (unsupported && !findSymbolInfo(unsupported.name, document.uri, lineNum, documentIndex, caseSensitive)) {
+            if (unsupported && !findSymbolInfo(unsupported.name, document.uri, lineNum, documentIndex, caseSensitive, true, unit)) {
                 diagnostics.push({
                     severity: DiagnosticSeverity.Error,
                     range: Range.create(
@@ -584,7 +600,7 @@ export function validateDocument(
 
             if (!isBuiltinDirective) {
                 // Try to find the macro definition
-                const symbol = findSymbolInfo(fullMatch, document.uri, lineNum, documentIndex, caseSensitive);
+                const symbol = findSymbolInfo(fullMatch, document.uri, lineNum, documentIndex, caseSensitive, true, unit);
                 if (!symbol) {
                     // Point at the name, not the leading dot, so the range matches
                     // the name the message quotes - and matches where 64tass points.
@@ -626,7 +642,7 @@ export function validateDocument(
 
             // Does the immediate value fit the byte it is assembled into?
             const tooLarge = findOversizedImmediate(
-                index.cpu, opcodeMatch[1], operand, document.uri, lineNum, documentIndex, caseSensitive);
+                index.cpu, opcodeMatch[1], operand, document.uri, lineNum, documentIndex, caseSensitive, unit);
             if (tooLarge) {
                 diagnostics.push({
                     severity: DiagnosticSeverity.Error,
@@ -805,7 +821,7 @@ export function validateDocument(
                     }
                 }
 
-                const symbol = findSymbolInfo(symName, document.uri, lineNum, documentIndex, caseSensitive);
+                const symbol = findSymbolInfo(symName, document.uri, lineNum, documentIndex, caseSensitive, true, unit);
                 if (!symbol && !deadLines.has(lineNum)) {
                     const startCol = operandStart + match.index;
                     diagnostics.push({

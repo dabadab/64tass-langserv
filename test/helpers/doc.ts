@@ -67,6 +67,7 @@ export function emptyIndex(overrides: Partial<DocumentIndex> = {}): DocumentInde
         caseSensitive: false,
         cpu: DEFAULT_CPU,
         cpuExplicit: false,
+        unresolvedIncludes: false,
         ...overrides,
     };
 }

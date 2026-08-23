@@ -172,6 +172,26 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
         expect((await cleared).filter(d => d.severity !== DiagnosticSeverity.Hint)).toEqual([]);
     }, 20000);
 
+    it('reports a symbol that only exists in a program this file is not part of', async () => {
+        // dep.asm defines depsym and nothing includes it here, so the two files are
+        // never assembled together - which is exactly what the assembler would say.
+        const uri = server.uriOf('separate.asm');
+        const published = server.nextDiagnostics(uri);
+        await server.connection.sendNotification('textDocument/didOpen', {
+            textDocument: { uri, languageId: '64tass', version: 1, text: '        lda depsym\n' },
+        });
+        expect((await published).map(d => d.code)).toContain('undefined-symbol');
+    }, 20000);
+
+    it('accepts the same symbol once the file includes what defines it', async () => {
+        const uri = server.uriOf('including.asm');
+        const published = server.nextDiagnostics(uri);
+        await server.connection.sendNotification('textDocument/didOpen', {
+            textDocument: { uri, languageId: '64tass', version: 1, text: '        .include "dep.asm"\n        lda depsym\n' },
+        });
+        expect((await published).map(d => d.code)).not.toContain('undefined-symbol');
+    }, 20000);
+
     it('offers a quick fix for a misspelled symbol', async () => {
         const uri = server.uriOf('typo.asm');
         await server.open('typo.asm', 'counter = 1\nstart\n        lda countor\n');

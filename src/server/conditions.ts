@@ -15,6 +15,8 @@ type Ctx = {
     line: number;
     documentIndex: Map<string, DocumentIndex>;
     caseSensitive: boolean;
+    /** Documents assembled together with `uri`; restricts symbol lookups. */
+    unit?: ReadonlySet<string>;
     /** guards against a symbol whose value refers back to itself */
     seen: Set<string>;
 };
@@ -36,9 +38,10 @@ export function evaluateCondition(
     uri: string,
     line: number,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive = false
+    caseSensitive = false,
+    unit?: ReadonlySet<string>
 ): Truth {
-    const value = evalExpr(expr, { uri, line, documentIndex, caseSensitive, seen: new Set() });
+    const value = evalExpr(expr, { uri, line, documentIndex, caseSensitive, unit, seen: new Set() });
     if (value === null) return null;
     return value !== 0;
 }
@@ -53,9 +56,10 @@ export function evaluateExpression(
     uri: string,
     line: number,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive = false
+    caseSensitive = false,
+    unit?: ReadonlySet<string>
 ): number | null {
-    return evalExpr(expr, { uri, line, documentIndex, caseSensitive, seen: new Set() });
+    return evalExpr(expr, { uri, line, documentIndex, caseSensitive, unit, seen: new Set() });
 }
 
 /** Evaluate an expression to a number, or null if undecidable. */
@@ -194,9 +198,9 @@ class Parser {
 
     /** Resolve a symbol to a number through the index, following one level of value. */
     private resolveSymbol(name: string): number | null {
-        const { uri, line, documentIndex, caseSensitive, seen } = this.ctx;
+        const { uri, line, documentIndex, caseSensitive, unit, seen } = this.ctx;
         if (seen.has(name)) return null; // self-referential definition
-        const symbol = findSymbolInfo(name, uri, line, documentIndex, caseSensitive);
+        const symbol = findSymbolInfo(name, uri, line, documentIndex, caseSensitive, true, unit);
         if (!symbol || symbol.value === undefined) return null;
 
         const direct = parseNumericValue(symbol.value);

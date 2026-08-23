@@ -1161,7 +1161,7 @@ describe('duplicates across an include', () => {
             [mainUri, { ...parseDocument(mainDoc), includes: [incUri] }],
         ]);
         const texts: Record<string, string> = { [mainUri]: main, [incUri]: included };
-        return validateDocument(mainDoc, documentIndex, false, (uri) => texts[uri] ?? null)
+        return validateDocument(mainDoc, documentIndex, false, { getText: (uri: string) => texts[uri] ?? null })
             .filter(d => d.message.startsWith('Duplicate'));
     }
 
@@ -1264,5 +1264,47 @@ describe('inactive code', () => {
             '        .endif',
         ].join('\n'));
         expect(found.map(d => [d.range.start.line, d.range.end.line])).toEqual([[2, 2], [6, 6]]);
+    });
+});
+
+describe('symbols from another program', () => {
+    // Two files that are never assembled together: neither includes the other.
+    const MINE = 'file:///proj/mine.asm';
+    const OTHER = 'file:///elsewhere/other.asm';
+
+    function setup(source: string) {
+        const mineDoc = createDoc(source, MINE);
+        const documentIndex = new Map<string, DocumentIndex>([
+            [OTHER, parseDocument(createDoc('elsewhere = 1', OTHER))],
+            [MINE, parseDocument(mineDoc)],
+        ]);
+        return { mineDoc, documentIndex };
+    }
+
+    it('reports a name that only exists in the other program', () => {
+        const { mineDoc, documentIndex } = setup('        lda elsewhere');
+        const found = validateDocument(mineDoc, documentIndex, false, { unit: new Set([MINE]) });
+        expect(found.map(d => d.message)).toContain("Undefined symbol 'elsewhere'");
+    });
+
+    it('says nothing when no unit is given', () => {
+        // Which is what the server does when the include graph might be incomplete.
+        const { mineDoc, documentIndex } = setup('        lda elsewhere');
+        expect(validateDocument(mineDoc, documentIndex, false)
+            .filter(d => d.code === 'undefined-symbol')).toEqual([]);
+    });
+
+    it('accepts a name from a file in the same unit', () => {
+        const { mineDoc, documentIndex } = setup('        lda elsewhere');
+        expect(validateDocument(mineDoc, documentIndex, false, { unit: new Set([MINE, OTHER]) })
+            .filter(d => d.code === 'undefined-symbol')).toEqual([]);
+    });
+
+    it('decides .if branches only on symbols the unit can see', () => {
+        // `elsewhere` is 1 over there, but not here - so the condition is
+        // undecidable and neither branch is faded.
+        const { mineDoc, documentIndex } = setup('        .if elsewhere\n        nop\n        .endif');
+        expect(validateDocument(mineDoc, documentIndex, false, { unit: new Set([MINE]) })
+            .filter(d => d.code === 'inactive-code')).toEqual([]);
     });
 });

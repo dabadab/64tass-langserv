@@ -74,7 +74,9 @@ export function buildSemanticTokens(
     text: string,
     uri: string,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive = false
+    caseSensitive = false,
+    /** Documents assembled together with `uri`; restricts symbol lookups. */
+    unit?: ReadonlySet<string>
 ): SemanticToken[] {
     const tokens: SemanticToken[] = [];
     const index = documentIndex.get(uri);
@@ -111,7 +113,7 @@ export function buildSemanticTokens(
                     tokenType: 'keyword',
                     tokenModifiers: ['defaultLibrary']
                 });
-            } else if (findSymbolInfo(`.${dotMatch[1]}`, uri, lineNum, documentIndex, caseSensitive)) {
+            } else if (findSymbolInfo(`.${dotMatch[1]}`, uri, lineNum, documentIndex, caseSensitive, true, unit)) {
                 // Resolves to a user-defined symbol: a macro invocation
                 tokens.push({
                     line: lineNum,
@@ -157,7 +159,7 @@ export function buildSemanticTokens(
                 continue;
             }
 
-            const symbol = findSymbolInfo(name, uri, lineNum, documentIndex, caseSensitive);
+            const symbol = findSymbolInfo(name, uri, lineNum, documentIndex, caseSensitive, true, unit);
             if (symbol) {
                 tokens.push({
                     line: lineNum,

@@ -233,6 +233,36 @@ function clearIncludeRefs(rootUri: string): void {
 
 
 /**
+ * Set when the startup scan hit its file limit, so some roots were never read.
+ * Any include graph built from a partial scan can be missing edges.
+ */
+let workspaceScanTruncated = false;
+
+/**
+ * The compilation unit to restrict symbol lookups to, or undefined when the
+ * include graph cannot be trusted to be complete.
+ *
+ * Restricting is what stops a name resolving into an unrelated program - but on a
+ * MISSING edge it would instead turn a perfectly reachable symbol into a false
+ * "undefined symbol". So it is only used when nothing suggests the graph is
+ * partial: the scan ran to completion, and no file in the unit has an
+ * `.include` whose path did not resolve.
+ */
+function unitFor(uri: string): ReadonlySet<string> | undefined {
+    if (workspaceScanTruncated) return undefined;
+    const unit = includeGraph.compilationUnit(uri);
+    for (const member of unit) {
+        if (documentIndex.get(member)?.unresolvedIncludes) {
+            connection.console.info(
+                `64tass: ${member} has an include that does not resolve, so symbol lookups ` +
+                `in this program are not restricted to it.`);
+            return undefined;
+        }
+    }
+    return unit;
+}
+
+/**
  * What the last real assembler run said, by URI. Kept apart from the checks this
  * server does itself so the two can be published together and cleared apart: a
  * build's messages live until the next build, while the live checks are recomputed
@@ -243,7 +273,10 @@ const buildDiagnostics = new Map<string, Diagnostic[]>();
 /** Publish one file's diagnostics: the live checks, plus the last build's. */
 function publishFor(uri: string): void {
     const doc = documents.get(uri);
-    const live = doc ? validateDocument(doc, documentIndex, effectiveCaseSensitive(uri), getDocumentText) : [];
+    const live = doc
+        ? validateDocument(doc, documentIndex, effectiveCaseSensitive(uri),
+            { getText: getDocumentText, unit: unitFor(uri) })
+        : [];
     const unused = doc && globalSettings.unusedSymbols
         ? findUnusedSymbols(uri, documentIndex, includeGraph.compilationUnit(uri), getDocumentText)
         : [];
@@ -393,10 +426,15 @@ async function scanWorkspace(): Promise<void> {
     for (const root of workspaceRoots) {
         files.push(...collectSourceFiles(root, {
             limit: WORKSPACE_SCAN_LIMIT - files.length,
-            onLimit: limit => connection.console.warn(
-                `Workspace scan stopped at ${limit} files; symbols in the rest will only ` +
-                `resolve once their file is opened.`
-            )
+            onLimit: limit => {
+                // Roots that were never read leave holes in the include graph, so
+                // symbol lookups stop being narrowed to a compilation unit.
+                workspaceScanTruncated = true;
+                connection.console.warn(
+                    `Workspace scan stopped at ${limit} files; symbols in the rest will only ` +
+                    `resolve once their file is opened.`
+                );
+            }
         }));
         if (files.length >= WORKSPACE_SCAN_LIMIT) break;
     }
@@ -524,8 +562,7 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     // The compilation unit only ranks the candidates - a name defined in two
     // unrelated programs should resolve to the one being edited.
     return findDefinition(word, params.textDocument.uri, params.position.line, documentIndex,
-        effectiveCaseSensitive(params.textDocument.uri),
-        includeGraph.compilationUnit(params.textDocument.uri));
+        effectiveCaseSensitive(params.textDocument.uri), unitFor(params.textDocument.uri));
 });
 
 connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
@@ -562,7 +599,7 @@ connection.languages.semanticTokens.on((params: SemanticTokensParams): SemanticT
 
     const tokens = buildSemanticTokens(
         document.getText(), params.textDocument.uri, documentIndex,
-        effectiveCaseSensitive(params.textDocument.uri)
+        effectiveCaseSensitive(params.textDocument.uri), unitFor(params.textDocument.uri)
     );
 
     // SemanticTokensBuilder handles the delta encoding the protocol requires
@@ -596,7 +633,7 @@ connection.onHover((params: HoverParams): Hover | null => {
 
     const uri = params.textDocument.uri;
     return buildHover(word, document, params.position.line, documentIndex,
-        effectiveCaseSensitive(uri), documentIndex.get(uri)?.cpu ?? globalSettings.cpu);
+        effectiveCaseSensitive(uri), documentIndex.get(uri)?.cpu ?? globalSettings.cpu, unitFor(uri));
 });
 
 connection.onDocumentLinks((params: DocumentLinkParams): DocumentLink[] => {
@@ -630,12 +667,15 @@ connection.onReferences((params: ReferenceParams): Location[] => {
 
     const uri = params.textDocument.uri;
     const symbol = findSymbolInfo(word, uri, params.position.line, documentIndex, effectiveCaseSensitive(uri),
-        true, includeGraph.compilationUnit(uri));
+        true, unitFor(uri));
     if (!symbol) return [];
 
     return findReferences(
         symbol, documentIndex, getDocumentText,
-        params.context.includeDeclaration, effectiveCaseSensitive(symbol.uri)
+        params.context.includeDeclaration, effectiveCaseSensitive(symbol.uri),
+        // The unit of the file the symbol was FOUND in: a reference in another
+        // program is a different symbol that happens to share a name.
+        unitFor(symbol.uri)
     );
 });
 
@@ -648,10 +688,11 @@ connection.onDocumentHighlight((params: DocumentHighlightParams): DocumentHighli
 
     const uri = params.textDocument.uri;
     const symbol = findSymbolInfo(word, uri, params.position.line, documentIndex, effectiveCaseSensitive(uri),
-        true, includeGraph.compilationUnit(uri));
+        true, unitFor(uri));
     if (!symbol) return [];
 
-    return findDocumentHighlights(symbol, uri, documentIndex, getDocumentText, effectiveCaseSensitive(symbol.uri));
+    return findDocumentHighlights(symbol, uri, documentIndex, getDocumentText,
+        effectiveCaseSensitive(symbol.uri), unitFor(symbol.uri));
 });
 
 // Resolve the symbol under the cursor for a rename request, or null if there
@@ -665,7 +706,7 @@ function resolveRenameTarget(uri: string, position: Position) {
     if (!word) return null;
 
     const symbol = findSymbolInfo(word, uri, position.line, documentIndex, effectiveCaseSensitive(uri),
-        true, includeGraph.compilationUnit(uri));
+        true, unitFor(uri));
     if (!symbol) return null;
 
     return { document, word, symbol };
@@ -710,7 +751,9 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
         params.newName,
         documentIndex,
         getDocumentText,
-        effectiveCaseSensitive(target.symbol.uri)
+        effectiveCaseSensitive(target.symbol.uri),
+        // Renaming must not rewrite a same-named symbol in an unrelated program.
+        unitFor(target.symbol.uri)
     );
 });
 

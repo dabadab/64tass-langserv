@@ -118,9 +118,10 @@ export function symbolHover(
     uri: string,
     line: number,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive: boolean
+    caseSensitive: boolean,
+    unit?: ReadonlySet<string>
 ): Hover | null {
-    const symbol = findSymbolInfo(word, uri, line, documentIndex, caseSensitive);
+    const symbol = findSymbolInfo(word, uri, line, documentIndex, caseSensitive, true, unit);
     if (!symbol) return null;
 
     let content = `**${symbol.originalName}**`;
@@ -172,7 +173,9 @@ export function buildHover(
     line: number,
     documentIndex: Map<string, DocumentIndex>,
     caseSensitive: boolean,
-    cpu: string = DEFAULT_CPU
+    cpu: string = DEFAULT_CPU,
+    /** Documents assembled together with this one; restricts symbol lookups. */
+    unit?: ReadonlySet<string>
 ): Hover | null {
     // The pragma comes first: its line is a comment, so nothing else would answer
     // for it, and a word inside one ("cpu", "root") could otherwise be looked up
@@ -180,6 +183,6 @@ export function buildHover(
     return pragmaHover(document.getText().split('\n')[line] ?? '', line)
         ?? closerHover(word, document.getText(), line, document.uri, documentIndex)
         ?? directiveHover(word)
-        ?? symbolHover(word, document.uri, line, documentIndex, caseSensitive)
+        ?? symbolHover(word, document.uri, line, documentIndex, caseSensitive, unit)
         ?? opcodeHover(word, cpu);
 }
