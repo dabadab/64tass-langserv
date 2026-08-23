@@ -337,7 +337,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   again, then assembled - the output must be BYTE-IDENTICAL to the committed
   file's. That is what catches a moved token rather than a moved space. Its
   scratch copies go to a temp directory, never into `test/fixtures/corpus`, which
-  other suites scan.
+  other suites scan. Two rules the corpus caught the hard way: a trailing colon
+  decides label-vs-instruction BEFORE the word does (`nop:` is a label, and
+  reading the word first produced `nop :`), and a line holding one word is left
+  exactly where it sits - label or no-argument macro call, the assembler reads it
+  the same either way, so moving it would pick a side the author did not.
 - **Cycle inlay hints**: `inlayHints.ts`, behind `64tass.cycleHints` and off by
   default. Unlike hover, which lists every mode, a hint needs the ONE mode the
   line assembles to, so the operand is matched by shape (`operands.ts`) and then
@@ -419,7 +423,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1466 tests); compiles first
+yarn test          # Run all tests (currently 1518 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
@@ -458,7 +462,7 @@ building one literally.
   as a *label* means a mnemonic went unrecognised - which is what
   `all-opcodes.test.ts` asserts. `test/fixtures/64tass-examples/` holds real
   sources from the 64tass distribution.
-  `test/fixtures/corpus/` holds 20 files that BOTH assemble cleanly under real
+  `test/fixtures/corpus/` holds 21 files that BOTH assemble cleanly under real
   64tass and must produce zero error diagnostics here, so a false positive fails
   the build. Add one whenever a new construct is supported; verify it assembles
   before committing (a construct that does not assemble proves nothing), and add

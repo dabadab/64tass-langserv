@@ -33,6 +33,22 @@ describe('formatLine', () => {
         expect(format('*=$1000')).toBe('        *= $1000');
     });
 
+    it('treats a colon as settling it, even on an instruction word', () => {
+        // `nop:` is a label (verified). Reading the word first turned it into
+        // `nop :` - an instruction with a stray operand, and one label fewer.
+        expect(format('nop:')).toBeNull();
+        expect(format('nop:   inx')).toBe('nop:    inx');
+    });
+
+    it('leaves a line holding one word where it is', () => {
+        // A lone word is a label or a no-argument macro call, and the assembler
+        // reads it the same either way - moving it would pick a side.
+        expect(format('    indented_sub')).toBeNull();
+        expect(format('start')).toBeNull();
+        expect(format('    part      ; still lines the comment up'))
+            .toBe('    part'.padEnd(40) + '; still lines the comment up');
+    });
+
     it('keeps a colon on the label it belongs to', () => {
         expect(format('loop:  inx')).toBe('loop:   inx');
     });

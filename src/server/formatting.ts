@@ -55,10 +55,14 @@ function splitFields(body: string): Fields | null {
 
     const word = first[1];
     const after = rest.slice(word.length);
-    const isInstruction = /^[.#*]/.test(word)
-        || OPCODES.has(word.toLowerCase())
-        || ALL_DIRECTIVES.includes(word.toLowerCase());
     const colon = after.startsWith(':') && !after.startsWith(':=');
+    // A trailing colon settles it before anything else does: `nop:` is a label,
+    // even though `nop` is an instruction (verified). Testing the word first
+    // turned that line into `nop :` - an instruction with a stray operand, and a
+    // label the program no longer had.
+    const isInstruction = !colon && (/^[.#*]/.test(word)
+        || OPCODES.has(word.toLowerCase())
+        || ALL_DIRECTIVES.includes(word.toLowerCase()));
     const assigned = /^\s*:?=/.test(after);
 
     if (!isInstruction && (colon || assigned || !indented)) {
@@ -86,6 +90,17 @@ export function formatLine(line: string, columns: FormatColumns): string | null 
     // A blank line, or one that is only a comment: left alone, including its
     // indentation - banner comments are lined up on purpose.
     if (body.trim() === '') return line.trimEnd() === line ? null : line.trimEnd();
+
+    // A line holding one word and nothing else is ambiguous - a label, or a macro
+    // call taking no arguments - and the assembler reads it the same wherever it
+    // sits. Moving it would pick a side the author did not. Its comment still
+    // lines up.
+    const lone = body.trim().match(/^[a-zA-Z_][a-zA-Z0-9_]*:?$|^[-+]+$/);
+    if (lone) {
+        const kept = body.trimEnd();
+        const out = comment === '' ? kept : padTo(kept, columns.comment) + comment;
+        return out === line ? null : out;
+    }
 
     const fields = splitFields(body);
     if (fields === null) return null;

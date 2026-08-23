@@ -809,3 +809,59 @@ describe('same-named instances in different scopes', () => {
         }
     });
 });
+
+describe('same-named struct instances in different scopes', () => {
+    // structInstances is keyed by FULL scope path, so two blocks may each hold an
+    // `item` of their own type without one shadowing the other.
+    const source = [
+        'pt      .struct',
+        'x       .byte 0',
+        '        .endstruct',
+        'sz      .struct',
+        'w       .byte 0',
+        '        .endstruct',
+        'rooma   .block',
+        'item    .dstruct pt',
+        '        .bend',
+        'roomb   .block',
+        'item    .dstruct sz',
+        '        .bend',
+    ].join('\n');
+
+    function setup() {
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///instances.asm' });
+        return { documentIndex, uri: docs[0].uri };
+    }
+
+    it('records one instance per scope path', () => {
+        const { documentIndex, uri } = setup();
+        expect([...documentIndex.get(uri)!.structInstances]).toEqual([
+            ['rooma.item', 'pt'],
+            ['roomb.item', 'sz'],
+        ]);
+    });
+
+    it('resolves each block\'s member to its own type', () => {
+        const { documentIndex, uri } = setup();
+        expect(findSymbolInfo('item.x', uri, 7, documentIndex, false)?.scopePath).toBe('pt');
+        expect(findSymbolInfo('item.w', uri, 10, documentIndex, false)?.scopePath).toBe('sz');
+    });
+
+    it('does not offer the other block\'s member', () => {
+        const { documentIndex, uri } = setup();
+        expect(findSymbolInfo('item.w', uri, 7, documentIndex, false)).toBeNull();
+        expect(findSymbolInfo('item.x', uri, 10, documentIndex, false)).toBeNull();
+    });
+
+    it('reaches an instance of the same path defined in another file', () => {
+        // Deliberate: findSymbolInfo consults every document rather than the
+        // compilation unit, so the answer cannot depend on indexing order - the
+        // cost of scoping it would be false "undefined symbol" reports.
+        const a = 'pt      .struct\nx       .byte 0\n        .endstruct\nitem    .dstruct pt';
+        const b = 'sz      .struct\nw       .byte 0\n        .endstruct\nitem    .dstruct sz';
+        const { documentIndex, docs } = buildIndex(
+            { source: a, uri: 'file:///a.asm' }, { source: b, uri: 'file:///b.asm' });
+        expect(findSymbolInfo('item.x', docs[0].uri, 4, documentIndex, false)?.uri).toBe('file:///a.asm');
+        expect(findSymbolInfo('item.w', docs[0].uri, 4, documentIndex, false)?.uri).toBe('file:///b.asm');
+    });
+});
