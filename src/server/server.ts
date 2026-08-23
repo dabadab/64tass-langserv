@@ -462,7 +462,10 @@ connection.onCompletion((params: CompletionParams): CompletionItem[] => {
     if (!document) return [];
 
     return getCompletions(document, params.position, documentIndex,
-        { visibleUris: includeGraph.compilationUnit(params.textDocument.uri) });
+        {
+            visibleUris: includeGraph.compilationUnit(params.textDocument.uri),
+            searchPaths: searchPaths(),
+        });
 });
 
 connection.onHover((params: HoverParams): Hover | null => {

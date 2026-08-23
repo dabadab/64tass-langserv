@@ -161,6 +161,31 @@ describe('getCompletions - .include file paths', () => {
         expect(items.map(i => i.label)).toContain('nested.asm');
     });
 
+    // Files reachable only through an -I directory used to be invisible here,
+    // even though .include resolves them.
+    const SEARCH_DIR = path.join(FIXTURES_DIR, '..', 'completion-searchpath');
+
+    it('suggests files from a search path as well as the current directory', () => {
+        const doc = docInFixtures('\t.include "');
+        const items = getCompletions(doc, Position.create(0, 11), new Map(), { searchPaths: [SEARCH_DIR] });
+        const labels = items.map(i => i.label);
+        expect(labels).toContain('shared.asm');
+        expect(labels).toContain('other.asm');
+    });
+
+    it('offers a colliding name once, from the directory that would win', () => {
+        const doc = docInFixtures('\t.include "mai');
+        const items = getCompletions(doc, Position.create(0, 14), new Map(), { searchPaths: [SEARCH_DIR] });
+        expect(items.map(i => i.label)).toEqual(['main.asm']);
+    });
+
+    it('ignores a search path that does not exist', () => {
+        const doc = docInFixtures('\t.include "ot');
+        const items = getCompletions(doc, Position.create(0, 13), new Map(),
+            { searchPaths: [path.join(FIXTURES_DIR, 'no-such-dir')] });
+        expect(items.map(i => i.label)).toEqual(['other.asm']);
+    });
+
     it('does not suggest files once the string is already closed', () => {
         const doc = docInFixtures('\t.include "main.asm" ; ');
         const items = getCompletions(doc, Position.create(0, 24), new Map());

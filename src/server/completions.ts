@@ -33,7 +33,11 @@ const FILE_PATH_DIRECTIVES = /\.(include|binclude|binary)\s+"([^"]*)$/i;
  * Suggest filenames/directories for the partial path inside a
  * `.include "..."` / `.binclude "..."` / `.binary "..."` string at the cursor.
  */
-function getFilePathCompletions(document: TextDocument, position: Position): CompletionItem[] | null {
+function getFilePathCompletions(
+    document: TextDocument,
+    position: Position,
+    searchPaths: readonly string[]
+): CompletionItem[] | null {
     const line = document.getText(Range.create(Position.create(position.line, 0), position));
     const match = line.match(FILE_PATH_DIRECTIVES);
     if (!match) return null;
@@ -58,17 +62,39 @@ function getFilePathCompletions(document: TextDocument, position: Position): Com
         return [];
     }
 
-    const targetDir = path.resolve(currentDir, dirPart);
-    let entries: fs.Dirent[];
-    try {
-        entries = fs.readdirSync(targetDir, { withFileTypes: true });
-    } catch {
-        return [];
-    }
-
+    // Offer what an .include would actually find: the including file's own
+    // directory first, then each -I search path, in resolveIncludePath's order.
+    // Listing only the current directory hid every file reachable through the
+    // `64tass.includePaths` setting, so a project keeping its headers in one
+    // shared directory completed nothing.
     const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    for (const dir of [currentDir, ...searchPaths]) {
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(path.resolve(dir, dirPart), { withFileTypes: true });
+        } catch {
+            continue;   // A search path that does not exist just contributes nothing.
+        }
+        collectPathEntries(entries, filePrefix, directive, editRange, seen, items);
+    }
+    return items;
+}
+
+// The earlier directory wins on a name collision, since that is the one the
+// assembler would resolve to.
+function collectPathEntries(
+    entries: fs.Dirent[],
+    filePrefix: string,
+    directive: string,
+    editRange: Range,
+    seen: Set<string>,
+    items: CompletionItem[]
+): void {
     for (const entry of entries) {
         if (!entry.name.toLowerCase().startsWith(filePrefix.toLowerCase())) continue;
+        if (seen.has(entry.name.toLowerCase())) continue;
+        seen.add(entry.name.toLowerCase());
         if (entry.isDirectory()) {
             items.push({
                 label: entry.name + '/',
@@ -88,7 +114,6 @@ function getFilePathCompletions(document: TextDocument, position: Position): Com
             });
         }
     }
-    return items;
 }
 
 /** Suggest directive names (`.proc`, `.include`, ...) when typing a `.`-prefixed word. */
@@ -256,6 +281,12 @@ export interface CompletionOptions {
      * index, which is only right when the include graph is unknown.
      */
     visibleUris?: ReadonlySet<string>;
+
+    /**
+     * Absolute `-I` directories (`64tass.includePaths`), used only by path
+     * completion so it offers the same files an `.include` could resolve.
+     */
+    searchPaths?: readonly string[];
 }
 
 export function getCompletions(
@@ -264,10 +295,10 @@ export function getCompletions(
     documentIndex: Map<string, DocumentIndex>,
     options: CompletionOptions = {}
 ): CompletionItem[] {
-    const { visibleUris } = options;
+    const { visibleUris, searchPaths = [] } = options;
     // File-path completion takes priority: it fires from inside a quoted string,
     // a context none of the other modes should also try to complete in.
-    const fileCompletions = getFilePathCompletions(document, position);
+    const fileCompletions = getFilePathCompletions(document, position, searchPaths);
     if (fileCompletions !== null) return fileCompletions;
 
     const fullLine = document.getText(Range.create(
