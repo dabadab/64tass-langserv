@@ -2,7 +2,8 @@ import {
     Range,
     Position,
     Diagnostic,
-    DiagnosticSeverity
+    DiagnosticSeverity,
+    DiagnosticTag
 } from 'vscode-languageserver/node';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -301,6 +302,18 @@ function crossFileDuplicates(
     return found;
 }
 
+/** Line numbers grouped into [first, last] runs of consecutive lines. */
+function contiguousRuns(lines: ReadonlySet<number>): [number, number][] {
+    const sorted = [...lines].sort((a, b) => a - b);
+    const runs: [number, number][] = [];
+    for (const line of sorted) {
+        const last = runs[runs.length - 1];
+        if (last && line === last[1] + 1) last[1] = line;
+        else runs.push([line, line]);
+    }
+    return runs;
+}
+
 export function validateDocument(
     document: TextDocument,
     documentIndex: Map<string, DocumentIndex>,
@@ -327,6 +340,25 @@ export function validateDocument(
     // Lines in .if branches the assembler provably never evaluates. Undefined-symbol
     // reporting is skipped for these, since the assembler does not resolve them either.
     const deadLines = findDeadLines(lines, document.uri, documentIndex, caseSensitive);
+
+    // Grey out the branches the assembler provably never reaches. findDeadLines
+    // only marks what it can decide - `.if 0`, a condition of resolved constants -
+    // so this can never fade code that does assemble. Reported as contiguous
+    // regions rather than per line, or a fifty-line branch would be fifty
+    // diagnostics saying the same thing.
+    for (const [first, last] of contiguousRuns(deadLines)) {
+        diagnostics.push({
+            severity: DiagnosticSeverity.Hint,
+            range: Range.create(
+                Position.create(first, 0),
+                Position.create(last, lines[last]?.length ?? 0)
+            ),
+            message: 'Not assembled - this branch is never taken',
+            source: '64tass',
+            code: 'inactive-code',
+            tags: [DiagnosticTag.Unnecessary],
+        });
+    }
 
     // Check for duplicate labels (same name, same scopePath, same localScope)
     // All names are stored lowercase, so simple comparison works

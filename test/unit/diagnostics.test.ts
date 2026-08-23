@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DiagnosticSeverity } from 'vscode-languageserver/node';
+import { DiagnosticSeverity, DiagnosticTag } from 'vscode-languageserver/node';
 import { validateDocument } from '../../src/server/diagnostics';
 import { parseDocument } from '../../src/server/parser';
 import { DocumentIndex } from '../../src/server/types';
@@ -1205,5 +1205,64 @@ describe('duplicates across an include', () => {
         ]);
         expect(validateDocument(mainDoc, documentIndex).filter(d => d.message.startsWith('Duplicate')))
             .toHaveLength(1);
+    });
+});
+
+describe('inactive code', () => {
+    function inactive(source: string) {
+        return getDiagnostics(source).filter(d => d.code === 'inactive-code');
+    }
+
+    it('covers the branch the condition rules out, as one region', () => {
+        const found = inactive([
+            'DEBUG   = 0',
+            '        .if DEBUG',
+            '        lda #1',
+            '        sta $d020',
+            '        .else',
+            '        lda #2',
+            '        .endif',
+        ].join('\n'));
+        expect(found).toHaveLength(1);
+        expect(found[0].range.start.line).toBe(2);
+        expect(found[0].range.end.line).toBe(3);
+    });
+
+    it('marks it as a hint the editor fades out', () => {
+        const [first] = inactive('        .if 0\n        nop\n        .endif');
+        expect(first.severity).toBe(DiagnosticSeverity.Hint);
+        expect(first.tags).toEqual([DiagnosticTag.Unnecessary]);
+    });
+
+    it('leaves the directives themselves alone', () => {
+        // The `.if` and `.endif` lines are assembled - only the branch is not.
+        const [first] = inactive('        .if 0\n        nop\n        .endif');
+        expect(first.range.start.line).toBe(1);
+        expect(first.range.end.line).toBe(1);
+    });
+
+    it('says nothing about a branch that is taken', () => {
+        expect(inactive('        .if 1\n        nop\n        .endif')).toEqual([]);
+    });
+
+    it('says nothing when the condition cannot be decided', () => {
+        // The evaluator is conservative on purpose: it may never fade code that
+        // might assemble.
+        expect(inactive('        .if unknown_flag\n        nop\n        .endif')).toEqual([]);
+        expect(inactive('        .if * > $1000\n        nop\n        .endif')).toEqual([]);
+    });
+
+    it('fades the dead half of a chain, not the live one', () => {
+        const found = inactive([
+            'MODE    = 2',
+            '        .if MODE = 1',
+            '        lda #1',
+            '        .elsif MODE = 2',
+            '        lda #2',
+            '        .else',
+            '        lda #3',
+            '        .endif',
+        ].join('\n'));
+        expect(found.map(d => [d.range.start.line, d.range.end.line])).toEqual([[2, 2], [6, 6]]);
     });
 });

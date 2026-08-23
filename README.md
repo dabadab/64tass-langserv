@@ -33,6 +33,7 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
   out through word, operand, operand list, line, each enclosing block, document.
 - **Folding** for `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif` and friends.
 - **Diagnostics** for various problems.
+- **Inactive code** greyed out - the branches of an `.if` chain the conditions rule out.
 
 ## Settings
 

@@ -178,7 +178,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   conditions statically where possible; `findDeadLines` in `diagnostics.ts` uses it to
   skip undefined-symbol reporting inside branches that provably cannot be taken.
   Deliberately conservative - anything undecidable returns `null` and leaves every
-  branch reported, so the evaluator can suppress but never invent. Supports literals,
+  branch reported, so the evaluator can suppress but never invent. The same set is
+  what `validateDocument` greys out: one `Hint` + `DiagnosticTag.Unnecessary` per
+  CONTIGUOUS run of dead lines (a fifty-line branch is one diagnostic, not fifty),
+  covering only the branch body - the `.if`/`.else`/`.endif` lines are assembled.
+  Always on: the conservatism is what makes that safe. Supports literals,
   index-resolved symbols, `!` `&&` `||`, `= == != < > <= >=`, arithmetic and parens;
   the program counter `*` and strings are undecidable.
   `computeBranchPaths`/`areMutuallyExclusive` (same module) record which branch of
@@ -423,7 +427,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1521 tests); compiles first
+yarn test          # Run all tests (currently 1527 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
