@@ -49,7 +49,7 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
             'hoverProvider', 'documentSymbolProvider', 'documentHighlightProvider',
             'semanticTokensProvider', 'workspaceSymbolProvider', 'signatureHelpProvider',
             'completionProvider', 'documentLinkProvider', 'selectionRangeProvider',
-            'codeActionProvider', 'inlayHintProvider',
+            'codeActionProvider',
             'documentFormattingProvider', 'documentRangeFormattingProvider',
         ]) {
             expect(capabilities[capability], capability).toBeTruthy();
@@ -190,6 +190,14 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
             textDocument: { uri, languageId: '64tass', version: 1, text: '        .include "dep.asm"\n        lda depsym\n' },
         });
         expect((await published).map(d => d.code)).not.toContain('undefined-symbol');
+    }, 20000);
+
+    it('answers the cycle-count request the client draws its column from', async () => {
+        const uri = server.uriOf('cycles.asm');
+        await server.open('cycles.asm', '        *= $1000\n        nop\n        rts\n');
+
+        const counts = await server.connection.sendRequest('64tass/cycleCounts', { uri });
+        expect(counts).toEqual([{ line: 1, text: '2' }, { line: 2, text: '6' }]);
     }, 20000);
 
     it('offers a quick fix for a misspelled symbol', async () => {

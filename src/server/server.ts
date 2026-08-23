@@ -45,7 +45,6 @@ import {
     SemanticTokens,
     SemanticTokensBuilder,
     Diagnostic,
-    InlayHint,
     TextEdit,
 } from 'vscode-languageserver/node';
 
@@ -68,7 +67,7 @@ import {
 import { validateDocument } from './diagnostics';
 import { assemble, chooseRoots, mergeDiagnostics } from './assembler';
 import { findUnusedSymbols } from './unused';
-import { computeInlayHints } from './inlayHints';
+import { computeCycleCounts, CycleCount } from './cycleCounts';
 import { formatDocument, FormatColumns, DEFAULT_COLUMNS } from './formatting';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
@@ -119,15 +118,13 @@ interface Settings {
     assemblerPath: string;
     assemblerArgs: string[];
     unusedSymbols: boolean;
-    /** 64tass.inlayHints.cycles */
-    cycleHints: boolean;
     format: FormatColumns;
 }
 
 // Default settings
 let globalSettings: Settings = {
     caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [],
-    assemblerPath: '', assemblerArgs: [], unusedSymbols: true, cycleHints: false,
+    assemblerPath: '', assemblerArgs: [], unusedSymbols: true,
     format: DEFAULT_COLUMNS
 };
 
@@ -147,8 +144,6 @@ function readSettings(config: unknown): Settings {
         assemblerPath: typeof raw.assemblerPath === 'string' ? raw.assemblerPath.trim() : '',
         assemblerArgs: Array.isArray(raw.assemblerArgs) ? raw.assemblerArgs.map(String) : [],
         unusedSymbols: Boolean(raw.unusedSymbols ?? true),
-        // Dotted setting names arrive as a nested object.
-        cycleHints: Boolean(nested(raw.inlayHints).cycles ?? false),
         format: readColumns(raw.format),
     };
 }
@@ -386,9 +381,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
                 full: true
             },
             workspaceSymbolProvider: true,
-            // Declared unconditionally: the setting can be turned on mid-session,
-            // and a capability cannot. The handler returns nothing while it is off.
-            inlayHintProvider: true,
             documentFormattingProvider: true,
             documentRangeFormattingProvider: true,
             signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },
@@ -816,11 +808,17 @@ connection.onDocumentRangeFormatting((params): TextEdit[] => {
     return document ? formatDocument(document.getText(), globalSettings.format, params.range) : [];
 });
 
-connection.languages.inlayHint.on((params): InlayHint[] => {
-    if (!globalSettings.cycleHints) return [];
-    const document = documents.get(params.textDocument.uri);
-    if (!document) return [];
-    return computeInlayHints(document, params.range, documentIndex);
+/**
+ * Cycle counts for a document, for the column the client draws left of the code.
+ *
+ * A custom request rather than an inlay hint: the counts are rendered as editor
+ * decorations, which only the client can do - VS Code's gutter takes images, and
+ * LSP has nothing for either. The client decides whether to ask at all, since it
+ * is the one doing the drawing.
+ */
+connection.onRequest('64tass/cycleCounts', (params: { uri: string }): CycleCount[] => {
+    const document = documents.get(params.uri);
+    return document ? computeCycleCounts(document, documentIndex) : [];
 });
 
 documents.onDidSave(event => {

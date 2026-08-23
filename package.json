@@ -121,10 +121,10 @@
           "default": 40,
           "markdownDescription": "Column a trailing comment is aligned to. Full-line comments are never moved."
         },
-        "64tass.inlayHints.cycles": {
+        "64tass.cycleCounts": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Show each instruction's cycle count at the end of its line, as an inlay hint - `4` plainly, `4*` when an indexed access can cross a page, `2**` for a branch. Only the NMOS targets have timing data, and a line whose addressing mode cannot be pinned down gets no hint rather than a guessed one. Needs VS Code's own `#editor.inlayHints.enabled#` to be on, which it is by default."
+          "markdownDescription": "Show each instruction's cycle count in a column of its own, just left of the code - `4` plainly, `4*` when an indexed access can cross a page, `2**` for a branch. Only the NMOS targets have timing data, and a line whose addressing mode cannot be pinned down gets no count rather than a guessed one."
         }
       }
     }

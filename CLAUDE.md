@@ -7,7 +7,10 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 ```
 64tass-langserv/
 ├── src/
-│   ├── extension.ts              # VS Code extension client entry point
+│   ├── extension.ts              # VS Code extension client: starts the server,
+│   │                             #   draws the cycle-count column
+│   ├── client/
+│   │   └── cycleColumn.ts        # Column layout arithmetic (no `vscode` import)
 │   └── server/
 │       ├── server.ts             # LSP handler registration and capabilities only
 │       ├── types.ts              # Shared interfaces (LabelDefinition, DocumentIndex)
@@ -371,14 +374,25 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   reading the word first produced `nop :`), and a line holding one word is left
   exactly where it sits - label or no-argument macro call, the assembler reads it
   the same either way, so moving it would pick a side the author did not.
-- **Cycle inlay hints**: `inlayHints.ts`, behind `64tass.inlayHints.cycles` and
-  off by default. Unlike hover, which lists every mode, a hint needs the ONE mode the
-  line assembles to, so the operand is matched by shape (`operands.ts`) and then
-  narrowed by value width - `lda ZP` is zeropage where the constant resolves.
-  Where several candidates remain, the hint appears only if they agree on the
-  count. `formatCycles` moved from `hover.ts` into `cycles.ts` so both render the
-  markers the same way. The capability is declared unconditionally: a setting can
-  be switched mid-session, a capability cannot.
+- **Cycle-count column**: `cycleCounts.ts` computes one count per instruction
+  line, behind `64tass.cycleCounts` and off by default. Unlike hover, which lists
+  every mode, a count needs the ONE mode the line assembles to, so the operand is
+  matched by shape (`operands.ts`) and then narrowed by value width - `lda ZP` is
+  zeropage where the constant resolves. Where several candidates remain, a count
+  appears only if they agree. `formatCycles` lives in `cycles.ts` so hover and the
+  column render the markers the same way.
+  The DRAWING is client-side and has to be: VS Code's gutter (the glyph margin) is
+  left of the line numbers and takes an IMAGE, not text, so a number there means an
+  SVG about 20px wide with no theme colours and no hover. `extension.ts` instead
+  attaches a `before` decoration to column 0 of every line, which lands between the
+  folding arrows and the code - real themed text, right-aligned to the widest count
+  by `src/client/cycleColumn.ts` (non-breaking padding: CSS `content` collapses
+  ordinary spaces). Every line gets one, blank ones included, or the code would
+  start further left on lines without a count. LSP has no decoration concept, so
+  the counts travel over a custom `64tass/cycleCounts` request rather than as inlay
+  hints - which also means `editor.inlayHints.enabled` no longer hides them. The
+  arithmetic sits in `cycleColumn.ts` precisely because anything importing `vscode`
+  cannot be unit-tested, the same split that keeps `server.ts` thin.
 - **Unused symbols**: `unused.ts`, behind `64tass.unusedSymbols` (on by default),
   mirroring 64tass's own `-Wunused` (whose messages it also mirrors: unused label
   / const / macro / variable). Shown as a `Hint` with `DiagnosticTag.Unnecessary`
@@ -458,7 +472,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1562 tests); compiles first
+yarn test          # Run all tests (currently 1568 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

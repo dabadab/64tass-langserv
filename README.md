@@ -90,16 +90,22 @@ Formatting only ever changes the whitespace *between* label, mnemonic, operand a
 comment. Full-line comments and `.comment` blocks are never touched, and a line it
 cannot split confidently is left exactly as it is.
 
-### `64tass.inlayHints.cycles`
+### `64tass.cycleCounts`
 
-Default `false`. Shows each instruction's cycle count at the end of its line as
-an inlay hint — `4` plainly, `4*` when an indexed access can cross a page, `2**`
-for a branch. Only the NMOS targets have timing data, and a line whose addressing
-mode cannot be pinned down (`lda elsewhere`, which may be zeropage or absolute)
-gets no hint rather than a guessed one.
+Default `false`. Shows each instruction's cycle count in a column of its own,
+between the folding arrows and the code:
 
-Inlay hints also obey VS Code's own `editor.inlayHints.enabled`, which is on
-unless you turned it off.
+```
+  12  ⌄  4*  lda $1234,x
+  13         sta $d020
+  14     6   jsr sub
+  15     2** beq loop
+```
+
+`4*` means one more if an indexed access crosses a page, `2**` one more if a
+branch is taken and two if it also crosses. Only the NMOS targets have timing
+data, and a line whose addressing mode cannot be pinned down (`lda elsewhere`,
+which may be zeropage or absolute) gets no count rather than a guessed one.
 
 ### `64tass.assemblerPath`
 

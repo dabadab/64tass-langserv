@@ -1,17 +1,19 @@
 /**
- * Cycle counts shown at the end of each instruction line.
+ * Cycle counts, one per instruction line.
  *
  * The numbers come from `cycles.ts`, so they exist only for the NMOS targets -
- * elsewhere there is nothing honest to show and the line gets no hint. Which
+ * elsewhere there is nothing honest to show and the line gets nothing. Which
  * count applies depends on the addressing mode the line actually assembles to,
  * so the operand has to be resolved to ONE opcode byte: `lda $10` is a zeropage
  * load and `lda $1234` an absolute one, and only the latter can cross a page.
  *
  * Where the mode cannot be pinned down - an operand whose value nothing here
- * knows - the hint appears only if every candidate agrees on the count. Guessing
- * a number the code does not take would be worse than showing none.
+ * knows - a count appears only if every candidate agrees on it. Guessing a
+ * number the code does not take would be worse than showing none.
+ *
+ * The client draws these in a column left of the code (see src/client), because
+ * VS Code's own gutter takes images rather than text.
  */
-import { InlayHint, InlayHintKind, Position, Range } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DocumentIndex } from './types';
 import { opcodesForCpu } from './constants';
@@ -60,10 +62,8 @@ function operandBytes(
     return 3;
 }
 
-/**
- * The cycle text for one instruction line, or null when there is none to give.
- */
-export function cycleHintFor(
+/** The cycle text for one instruction line, or null when there is none to give. */
+export function cycleTextFor(
     code: string,
     uri: string,
     line: number,
@@ -106,29 +106,33 @@ export function cycleHintFor(
     return texts.size === 1 ? [...texts][0] : null;
 }
 
-/** Cycle-count hints for the instruction lines inside `range`. */
-export function computeInlayHints(
+/** One line's count, as the client needs it to draw its column. */
+export interface CycleCount {
+    /** Zero-based line number. */
+    line: number;
+    /** `4`, `4*`, `2**`, `--`. */
+    text: string;
+}
+
+/**
+ * The cycle count of every instruction line in the document.
+ *
+ * Whole-document rather than per-range: the client draws a column down the
+ * margin and needs the widest entry before it can align any of it.
+ */
+export function computeCycleCounts(
     document: TextDocument,
-    range: Range,
     documentIndex: Map<string, DocumentIndex>
-): InlayHint[] {
+): CycleCount[] {
     const index = documentIndex.get(document.uri);
     if (!index || !hasCycleData(index.cpu)) return [];
 
+    const counts: CycleCount[] = [];
     const lines = document.getText().split('\n');
-    const hints: InlayHint[] = [];
-    for (let line = range.start.line; line <= Math.min(range.end.line, lines.length - 1); line++) {
+    for (let line = 0; line < lines.length; line++) {
         const { code } = parseLineStructure(lines[line]);
-        const text = cycleHintFor(code, document.uri, line, documentIndex, index);
-        if (text === null) continue;
-        hints.push({
-            // At the end of the code, so a trailing comment stays where it is.
-            position: Position.create(line, code.trimEnd().length),
-            label: text,
-            kind: InlayHintKind.Parameter,
-            paddingLeft: true,
-            tooltip: 'Cycles',
-        });
+        const text = cycleTextFor(code, document.uri, line, documentIndex, index);
+        if (text !== null) counts.push({ line, text });
     }
-    return hints;
+    return counts;
 }
