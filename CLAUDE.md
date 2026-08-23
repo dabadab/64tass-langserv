@@ -188,9 +188,15 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   branch that provably cannot be taken (`.if 0`) is not there at all, and so neither
   collides nor is collided with. Missing the second gave a false duplicate for a
   label defined once inside `.if 0` and once outside it.
-  Cross-file duplicates are NOT detected: the check only looks at the current
-  document's labels, so a name defined in both a file and something it `.include`s
-  goes unreported even though the assembler rejects it.
+  Cross-file duplicates ARE detected, but only down the include TREE:
+  `crossFileDuplicates` compares this document's labels against those of every
+  file it includes, transitively. Never against the whole compilation unit - two
+  independent programs that both include one header are in each other's unit and
+  are never assembled together, so their labels do not collide. Reported against
+  the including file, where the collision becomes real. Two SIBLING includes
+  colliding is a real assembler error (verified) that is deliberately not reported:
+  neither definition is in the file being validated. The `getText` argument exists
+  so the other side's `.if 0` branches can be skipped too.
 - **Build-time defines**: a `; 64tass-langserv: define NAME = VALUE` pragma
   (`detectDefinePragmas` in `utils.ts`) mirrors 64tass's `-D` flag and is indexed by
   `parseDocument` as a normal `kind: 'var'` label, so it resolves like any other
@@ -385,7 +391,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1388 tests); compiles first
+yarn test          # Run all tests (currently 1394 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

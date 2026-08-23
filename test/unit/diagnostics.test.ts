@@ -1145,3 +1145,65 @@ describe('immediates that do not fit', () => {
         expect(on('        lda #$1234', '65816')).toHaveLength(0);
     });
 });
+
+describe('duplicates across an include', () => {
+    // 64tass reports these at the later definition, with a note pointing back at
+    // the include - verified, along with the fact that a different scope is fine.
+    function withInclude(main: string, included: string) {
+        const mainUri = 'file:///proj/main.asm';
+        const incUri = 'file:///proj/sub.inc';
+        const mainDoc = createDoc(main, mainUri);
+        const incDoc = createDoc(included, incUri);
+        const documentIndex = new Map<string, DocumentIndex>([
+            [incUri, parseDocument(incDoc)],
+            // The include list is wired by hand: parseDocument only records targets
+            // it can resolve on disk, and these two files are not on it.
+            [mainUri, { ...parseDocument(mainDoc), includes: [incUri] }],
+        ]);
+        const texts: Record<string, string> = { [mainUri]: main, [incUri]: included };
+        return validateDocument(mainDoc, documentIndex, false, (uri) => texts[uri] ?? null)
+            .filter(d => d.message.startsWith('Duplicate'));
+    }
+
+    it('reports a name defined in both files', () => {
+        const found = withInclude('        .include "sub.inc"\ncounter = 1', 'counter = 2');
+        expect(found).toHaveLength(1);
+        expect(found[0].message).toBe("Duplicate label 'counter', also defined in sub.inc on line 1");
+        expect(found[0].relatedInformation?.[0].location.uri).toBe('file:///proj/sub.inc');
+    });
+
+    it('points at the definition in the file being validated', () => {
+        const found = withInclude('        .include "sub.inc"\ncounter = 1', 'counter = 2');
+        expect(found[0].range.start.line).toBe(1);
+    });
+
+    it('leaves a same name in a different scope alone', () => {
+        expect(withInclude(
+            '        .include "sub.inc"\nouter   .block\ncounter = 1\n        .bend', 'counter = 2'))
+            .toHaveLength(0);
+    });
+
+    it('leaves re-assignable variables alone', () => {
+        expect(withInclude('        .include "sub.inc"\ncounter .var 1', 'counter .var 2')).toHaveLength(0);
+    });
+
+    it('ignores a definition the include never assembles', () => {
+        expect(withInclude(
+            '        .include "sub.inc"\ncounter = 1', '        .if 0\ncounter = 2\n        .endif'))
+            .toHaveLength(0);
+    });
+
+    it('finds one two includes deep', () => {
+        const mainUri = 'file:///proj/main.asm';
+        const midUri = 'file:///proj/mid.inc';
+        const leafUri = 'file:///proj/leaf.inc';
+        const mainDoc = createDoc('        .include "mid.inc"\ncounter = 1', mainUri);
+        const documentIndex = new Map<string, DocumentIndex>([
+            [leafUri, parseDocument(createDoc('counter = 2', leafUri))],
+            [midUri, { ...parseDocument(createDoc('        .include "leaf.inc"', midUri)), includes: [leafUri] }],
+            [mainUri, { ...parseDocument(mainDoc), includes: [midUri] }],
+        ]);
+        expect(validateDocument(mainDoc, documentIndex).filter(d => d.message.startsWith('Duplicate')))
+            .toHaveLength(1);
+    });
+});

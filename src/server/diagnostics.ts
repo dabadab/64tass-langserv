@@ -233,10 +233,82 @@ export function findOversizedImmediate(
     return `${value} does not fit in ${bits} bits`;
 }
 
+/** Every file this one pulls in, directly or through another include. */
+function includeTree(index: DocumentIndex, documentIndex: Map<string, DocumentIndex>): DocumentIndex[] {
+    const seen = new Set<string>();
+    const found: DocumentIndex[] = [];
+    const queue = [...index.includes];
+    while (queue.length > 0) {
+        const uri = queue.shift()!;
+        if (seen.has(uri)) continue;
+        seen.add(uri);
+        const included = documentIndex.get(uri);
+        if (!included) continue;
+        found.push(included);
+        queue.push(...included.includes);
+    }
+    return found;
+}
+
+/**
+ * Labels defined both in this document and in something it includes.
+ *
+ * Reported against the including file, which is where the collision becomes real -
+ * the include on its own is fine. Two labels in two SIBLING includes also collide
+ * for the assembler, but neither definition is in the file being validated, so
+ * they are deliberately not reported here.
+ */
+function crossFileDuplicates(
+    index: DocumentIndex,
+    documentIndex: Map<string, DocumentIndex>,
+    deadLines: ReadonlySet<number>,
+    getText?: (uri: string) => string | null
+): [LabelDefinition, LabelDefinition][] {
+    const found: [LabelDefinition, LabelDefinition][] = [];
+    const included = includeTree(index, documentIndex);
+    if (included.length === 0) return found;
+
+    // Dead branches on the other side too, computed once per file and only when a
+    // candidate collision actually turns up in it.
+    const deadElsewhere = new Map<string, ReadonlySet<number>>();
+    const deadIn = (other: DocumentIndex, uri: string): ReadonlySet<number> => {
+        let lines = deadElsewhere.get(uri);
+        if (lines === undefined) {
+            const text = getText?.(uri) ?? null;
+            lines = text === null
+                ? new Set<number>()
+                : findDeadLines(text.split('\n'), uri, documentIndex, other.caseSensitive);
+            deadElsewhere.set(uri, lines);
+        }
+        return lines;
+    };
+
+    for (const label of index.labels) {
+        if (label.isAnonymous || label.kind === 'var') continue;
+        if (deadLines.has(label.range.start.line)) continue;
+
+        for (const other of included) {
+            for (const candidate of other.labelsByName.get(label.name) ?? []) {
+                if (candidate.kind === 'var' || candidate.isAnonymous) continue;
+                if ((candidate.scopePath ?? null) !== (label.scopePath ?? null)) continue;
+                if ((candidate.localScope ?? null) !== (label.localScope ?? null)) continue;
+                if (deadIn(other, candidate.uri).has(candidate.range.start.line)) continue;
+                found.push([label, candidate]);
+                break;
+            }
+        }
+    }
+    return found;
+}
+
 export function validateDocument(
     document: TextDocument,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive = false
+    caseSensitive = false,
+    // Lets the cross-file duplicate check see whether the OTHER definition sits in
+    // a branch that is never assembled. Without it that check still runs, just
+    // without that filter.
+    getText?: (uri: string) => string | null
 ): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
     const text = document.getText();
@@ -302,6 +374,24 @@ export function validateDocument(
         } else {
             seenLabels.set(key, [label]);
         }
+    }
+
+    // The same name defined here AND in a file this one includes: the assembler
+    // rejects that, and the same-file loop above cannot see it. Only the include
+    // TREE is compared, never the whole compilation unit - two independent
+    // programs that both include one header are in each other's unit but are
+    // never assembled together, so their labels do not collide.
+    for (const [label, other] of crossFileDuplicates(index, documentIndex, deadLines, getText)) {
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: label.range,
+            message: `Duplicate label '${label.originalName}', ${describeLocation(other, document.uri)}`,
+            source: '64tass',
+            relatedInformation: [{
+                location: { uri: other.uri, range: other.range },
+                message: 'first defined here'
+            }]
+        });
     }
 
     // Check for unclosed blocks and undefined symbols in a single pass

@@ -211,7 +211,7 @@ const buildDiagnostics = new Map<string, Diagnostic[]>();
 /** Publish one file's diagnostics: the live checks, plus the last build's. */
 function publishFor(uri: string): void {
     const doc = documents.get(uri);
-    const live = doc ? validateDocument(doc, documentIndex, effectiveCaseSensitive(uri)) : [];
+    const live = doc ? validateDocument(doc, documentIndex, effectiveCaseSensitive(uri), getDocumentText) : [];
     connection.sendDiagnostics({ uri, diagnostics: [...live, ...(buildDiagnostics.get(uri) ?? [])] });
 }
 
