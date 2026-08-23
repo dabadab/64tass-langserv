@@ -1021,6 +1021,24 @@ describe('block directives in comments and strings', () => {
     ])('ignores %s', (_name, source) => {
         expect(parse(source).labels.find(l => l.name === 'inner')?.scopePath).toBe('outer');
     });
+
+    // `.with` and `.endwith` are matched unanchored, so they had the same problem
+    // one layer down: a scope imported by a comment changes what resolves for the
+    // rest of the file, and an `.endwith` in one drops a real import early.
+    it.each([
+        ['a .with in a comment', '        lda #1   ; wrap this in .with MAP later\nlbl     nop'],
+        ['a .with in a string', '        .text "say .with MAP"\nlbl     nop'],
+    ])('ignores %s', (_name, source) => {
+        expect(parse(source).scopeAtLine.get(1)?.withScopes).toEqual([]);
+    });
+
+    it.each([
+        ['an .endwith in a comment', '        .with MAP\n        lda #1   ; ends with .endwith below\n        lda #2\n        .endwith'],
+        ['an .endwith in a string', '        .with MAP\n        .text ".endwith"\n        lda #2\n        .endwith'],
+    ])('ignores %s', (_name, source) => {
+        expect(parse(source).scopeAtLine.get(2)?.withScopes).toEqual(['map']);
+        expect(parse(source).scopeAtLine.get(3)?.withScopes).toEqual([]);
+    });
 });
 
 describe('a leading underscore on any kind of label', () => {

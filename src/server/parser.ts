@@ -5,7 +5,7 @@ import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { SCOPE_OPENERS, CLOSING_DIRECTIVES, ALL_DIRECTIVES, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { blockDirectivesOn } from './blocks';
 import { resolveIncludePath } from './paths';
-import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys } from './utils';
+import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys, parseLineStructure, stripStrings } from './utils';
 
 export type LogFunction = (message: string) => void;
 
@@ -246,7 +246,13 @@ export function parseDocument(
         // `.with scope` imports a scope for unqualified lookups until `.endwith`.
         // Deliberately not pushed onto scopeStack: a label DEFINED inside a .with
         // block belongs to the enclosing scope, not the imported one (verified).
-        const withMatch = line.match(/(?:^|\s)\.with\s+([a-zA-Z_][a-zA-Z0-9_.]*)/i);
+        //
+        // Matched against the code only, never the raw line - these two patterns
+        // are not anchored, so a comment saying "wrap this in .with MAP" imported
+        // a scope that was never opened, and one mentioning `.endwith` closed one
+        // that was. Same trap blockDirectivesOn exists to avoid for the closers.
+        const codeOnly = stripStrings(parseLineStructure(line).code);
+        const withMatch = codeOnly.match(/(?:^|\s)\.with\s+([a-zA-Z_][a-zA-Z0-9_.]*)/i);
         if (withMatch) {
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
@@ -256,7 +262,7 @@ export function parseDocument(
             withScopes.push(normalizeName(withMatch[1]));
             continue;
         }
-        if (/(?:^|\s)\.endwith\b/i.test(lineLower)) {
+        if (/(?:^|\s)\.endwith\b/i.test(codeOnly)) {
             withScopes.pop();
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
