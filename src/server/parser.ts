@@ -88,6 +88,12 @@ export function parseDocument(
         return caseSensitive ? name : name.toLowerCase();
     }
 
+    /** A label's full path: the current scope plus its own name. */
+    function scopedName(name: string): string {
+        const current = getCurrentScopePath();
+        return current ? `${current}.${normalizeName(name)}` : normalizeName(name);
+    }
+
     /** The current scope path, extended by a qualified name's leading segments. */
     function scopeWith(leading: string): string | null {
         const current = getCurrentScopePath();
@@ -688,7 +694,9 @@ export function parseDocument(
                 kind: 'data',
                 comment: getBlockComment(lines, lineNum)
             });
-            structInstances.set(normalizeName(labelName), structName);
+            // Keyed by full path: two same-named instances in different scopes are
+            // different instances, and a bare name would let the later one win.
+            structInstances.set(scopedName(labelName), structName);
             continue;
         }
 
@@ -725,7 +733,7 @@ export function parseDocument(
                     comment: getBlockComment(lines, lineNum)
                 });
                 // Track the macro used to define this label (for sub-label validation)
-                labelDefinedByMacro.set(normalizeName(labelName), macroCalled);
+                labelDefinedByMacro.set(scopedName(labelName), macroCalled);
             }
             continue;
         }
@@ -773,7 +781,7 @@ export function parseDocument(
             // to something that is not a scope simply resolves to nothing.
             const callMatch = value?.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
             if (callMatch && lastDot < 0) {
-                labelDefinedByMacro.set(normalizeName(labelName), normalizeName(callMatch[1]));
+                labelDefinedByMacro.set(scopedName(labelName), normalizeName(callMatch[1]));
             }
 
             // "COLORING = {.MAP: a, .CHAR: c}" makes the keys reachable as

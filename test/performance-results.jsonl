@@ -296,3 +296,5 @@
 {"timestamp":"2026-08-23T15:29:48.258Z","commit":"c240d5d-dirty","iterations":4000,"totalMs":19.1707439999999,"avgMs":0.004792685999999975}
 {"timestamp":"2026-08-23T15:31:37.022Z","commit":"0e3c593-dirty","iterations":4000,"totalMs":10.781520999999998,"avgMs":0.0026953802499999997}
 {"timestamp":"2026-08-23T15:32:21.854Z","commit":"0e3c593-dirty","iterations":4000,"totalMs":11.534167000000025,"avgMs":0.0028835417500000064}
+{"timestamp":"2026-08-23T15:34:05.601Z","commit":"fb44661-dirty","iterations":4000,"totalMs":18.13393099999996,"avgMs":0.00453348274999999}
+{"timestamp":"2026-08-23T15:35:09.251Z","commit":"fb44661-dirty","iterations":4000,"totalMs":24.547426000000087,"avgMs":0.006136856500000022}

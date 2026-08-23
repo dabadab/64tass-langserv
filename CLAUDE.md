@@ -233,14 +233,17 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   lands in and the last as its name - the same shape `findDictKeys` produces.
   Nothing matched these lines before, so the definition vanished; that is what
   made `music.init` read as undefined in 64tass's own `loading_a_sid_file`.
-- **Dynamic members**: `DocumentIndex.labelDefinedByMacro` maps a label to the
+- **Dynamic members**: `DocumentIndex.labelDefinedByMacro` maps a label - by FULL
+  scope path, as `structInstances` and `functionReturnScope` do - to the
   scope its members come from - the macro of a `label #macro` / `label .macro`
   call, or the function of a `label = fn(...)` assignment where the function
   returns `namespace(*)`. Dict literals (`D = {.MAP: 1}`) instead index each key
   as a real label scoped under `D`. All three make members reachable ONLY as
   `label.member`, never bare (verified). `findSymbolInfo` tries the path as
   written FIRST and these substitutions after, so a scope that genuinely carries
-  that name still wins.
+  that name still wins. `substitutionsFor` takes the LONGEST matching prefix of a
+  path and carries the remainder over, and consults every document rather than
+  stopping at the first - stopping made the answer depend on indexing order.
 - **Struct instances**: `name .dstruct type, ...` (and `.dunion`) records
   `DocumentIndex.structInstances[name] = type`, so `name.member` resolves to that
   type's member. A member the type does not declare is still reported, matching the

@@ -179,32 +179,45 @@ function scopeCandidates(
     const reachable = getScopeChain(fromScope)
         .map(scope => (scope ? `${scope}.${targetPath}` : targetPath));
 
-    // Only the FIRST segment can stand for something else - it is the name that
-    // was assigned or instantiated. The rest is a path within whatever that is,
-    // so "MAPDATA.CHARS" substitutes to "ctm7.mapdata" + ".chars".
-    const dot = targetPath.indexOf('.');
-    const head = dot < 0 ? targetPath : targetPath.slice(0, dot);
-    const rest = dot < 0 ? '' : targetPath.slice(dot);
-
-    const substituted: string[] = [];
-    for (const [, index] of documentIndex) {
-        const declaredType = index.structInstances.get(head);
-        if (declaredType) { substituted.push(declaredType + rest); break; }
-    }
-    for (const [, index] of documentIndex) {
-        const memberSource = index.labelDefinedByMacro.get(head);
-        if (memberSource) {
-            // A function whose `.endf` hands back a scope of its own exposes that
-            // scope's members, not the function's top-level ones.
-            for (const [, other] of documentIndex) {
-                const returned = other.functionReturnScope.get(memberSource);
-                if (returned) { substituted.push(returned + rest); break; }
-            }
-            substituted.push(memberSource + rest);
-            break;
-        }
-    }
+    // Both maps are keyed by FULL path, so the lookup happens on each path the
+    // reference could be naming, not on its first segment: two `p1` instances in
+    // different scopes are different instances. Every document is consulted -
+    // stopping at the first would make the answer depend on indexing order.
+    const substituted = reachable.flatMap(full => substitutionsFor(full, documentIndex));
     return { reachable, substituted };
+}
+
+/**
+ * What a full scope path may stand for, if some prefix of it was instantiated or
+ * assigned. The longest matching prefix wins, and the remainder is carried over:
+ * `RESULT.INNER` is the instance `RESULT` plus `.INNER` within it.
+ */
+function substitutionsFor(full: string, documentIndex: Map<string, DocumentIndex>): string[] {
+    const parts = full.split('.');
+    for (let take = parts.length; take > 0; take--) {
+        const prefix = parts.slice(0, take).join('.');
+        const remainder = parts.slice(take).join('.');
+        const suffix = remainder ? `.${remainder}` : '';
+        const found: string[] = [];
+
+        for (const [, index] of documentIndex) {
+            const declaredType = index.structInstances.get(prefix);
+            if (declaredType) found.push(declaredType + suffix);
+
+            const memberSource = index.labelDefinedByMacro.get(prefix);
+            if (memberSource) {
+                // A function whose `.endf` hands back a scope of its own exposes
+                // that scope's members, not its top-level ones.
+                for (const [, other] of documentIndex) {
+                    const returned = other.functionReturnScope.get(memberSource);
+                    if (returned) found.push(returned + suffix);
+                }
+                found.push(memberSource + suffix);
+            }
+        }
+        if (found.length > 0) return found;
+    }
+    return [];
 }
 
 /** Does this label live in one of the scopes a reference may be naming? */

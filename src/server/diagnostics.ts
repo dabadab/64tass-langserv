@@ -535,8 +535,12 @@ export function validateDocument(
                     // If parent is a parameter, skip (we can't validate runtime values)
                     if (isParameter(parentName, currentScopePath, index, caseSensitive)) continue;
 
-                    // Check if parent label was defined via a macro that creates this sub-label
-                    const macroUsed = index.labelDefinedByMacro.get(parentNameNormalized);
+                    // Check if parent label was defined via a macro that creates this
+                    // sub-label. The map is keyed by full path, so the enclosing
+                    // scope is tried before the bare name.
+                    const macroUsed = (currentScopePath
+                        ? index.labelDefinedByMacro.get(`${currentScopePath}.${parentNameNormalized}`)
+                        : undefined) ?? index.labelDefinedByMacro.get(parentNameNormalized);
                     if (macroUsed) {
                         const macroLabels = index.macroSubLabels.get(macroUsed);
                         if (macroLabels && macroLabels.includes(subLabelNormalized)) {

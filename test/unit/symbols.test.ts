@@ -769,3 +769,43 @@ describe('a function that returns one of its own scopes', () => {
             .toBe('build.result.inner');
     });
 });
+
+describe('same-named instances in different scopes', () => {
+    const SOURCE = [
+        'pt      .struct', 'x       .byte 0', '        .endstruct',
+        'qt      .struct', 'y       .byte 0', '        .endstruct',
+        'a       .block', 'p1      .dstruct pt', '        .bend',
+        'b       .block', 'p1      .dstruct qt', '        .bend',
+        '        lda a.p1.x',
+    ].join('\n');
+
+    it('keeps each instance with its own type', () => {
+        // Both used to collapse onto the bare name "p1", last one winning.
+        const { documentIndex, docs } = buildIndex({ source: SOURCE });
+        expect(findSymbolInfo('a.p1.x', docs[0].uri, 12, documentIndex, false)?.scopePath).toBe('pt');
+        expect(findSymbolInfo('b.p1.y', docs[0].uri, 12, documentIndex, false)?.scopePath).toBe('qt');
+    });
+
+    it('does not resolve a member of the other one', () => {
+        const { documentIndex, docs } = buildIndex({ source: SOURCE });
+        expect(findSymbolInfo('a.p1.y', docs[0].uri, 12, documentIndex, false)).toBeNull();
+        expect(findSymbolInfo('b.p1.x', docs[0].uri, 12, documentIndex, false)).toBeNull();
+    });
+
+    it('does not depend on which document is indexed first', () => {
+        // scopeCandidates used to stop at the first document holding the key, so
+        // the answer moved with insertion order.
+        const one = 'pt .struct\nx .byte 0\n.endstruct\na .block\np1 .dstruct pt\n.bend';
+        const two = 'qt .struct\ny .byte 0\n.endstruct\nb .block\np1 .dstruct qt\n.bend';
+        for (const [first, second] of [[one, two], [two, one]]) {
+            const { documentIndex, docs } = buildIndex(
+                { source: first, uri: 'file:///first.asm' },
+                { source: second, uri: 'file:///second.asm' },
+            );
+            void docs;
+            const uri = 'file:///first.asm';
+            expect(findSymbolInfo('a.p1.x', uri, 5, documentIndex, false)?.scopePath).toBe('pt');
+            expect(findSymbolInfo('b.p1.y', uri, 5, documentIndex, false)?.scopePath).toBe('qt');
+        }
+    });
+});
