@@ -15,6 +15,7 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │       ├── utils.ts              # String/comment/numeric helpers, pragma detection
 │       ├── blocks.ts             # blockDirectivesOn — the one block-directive scanner
 │       ├── parser.ts             # parseDocument — label/scope/macro extraction
+│                                 #   (branch ORDER is contractual; see its header)
 │       ├── paths.ts              # .include/.binclude path resolution (-I search paths)
 │       ├── hover.ts              # Symbol and opcode hover
 │       ├── documentLinks.ts      # Clickable .include/.binclude/.binary paths

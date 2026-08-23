@@ -116,6 +116,34 @@ export function parseDocument(
         });
     }
 
+    // One pass over the lines, trying a fixed sequence of branches against each.
+    // THE ORDER IS PART OF THE BEHAVIOUR: several branches would also match a line
+    // that belongs to an earlier one, so moving them changes what gets indexed.
+    // In order, with the constraints that are load-bearing called out:
+    //
+    //   1  `.comment` block interior      skipped wholesale
+    //   2  `.include` / `.binclude`       binclude ends the line, so its label is a
+    //                                     scope rather than a data label (see 12)
+    //   3  `.with` / `.endwith`
+    //   4  scope closers                  before the openers, so a one-line
+    //                                     `.block ... .bend` nets out correctly
+    //   5  scope openers (named + anon)   BEFORE 14: `name .macro` is a scope, not
+    //                                     a macro call
+    //   6  bare code label                BEFORE 10, so `_code` is a code label
+    //   7  code label + opcode            likewise
+    //   8  `.for` / `.bfor` loop variable BEFORE 11: `-  .for i in ...` needs the
+    //                                     loop read first, then falls through so
+    //                                     the anonymous label is still recorded
+    //   9  `.var`                         BEFORE 14, or `.var` reads as a macro call
+    //  10  local `_name`                  BEFORE 15, so `_c = 1` is marked local
+    //  11  anonymous `+` / `-`
+    //  12  data-directive label
+    //  13  `.dstruct` / `.dunion`
+    //  14  macro-call label               skips the scope openers handled at 5
+    //  15  constant / variable assignment last: the loosest pattern of them all
+    //
+    // A branch that fully handles its line ends with `continue`; the exceptions
+    // are noted where they are (8 above, and the `.binclude` label at 2).
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
         const lineLower = line.toLowerCase();
