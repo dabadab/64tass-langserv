@@ -319,6 +319,20 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   semantics cannot be probed, so mnemonics outside the sets whose meaning is
   unambiguous are left undescribed rather than guessed at, and hover degrades to
   showing just their (verified) modes.
+- **Running the real assembler**: `assembler.ts`, off unless
+  `64tass.assemblerPath` is set, run on SAVE only (the assembler reads the file on
+  disk, so an unsaved buffer would report on text nobody can see). Output goes to
+  `os.devNull` so it cannot disturb the user's own build. Messages are parsed
+  `file:line:col: severity: message`, grouped BY FILE - an include's error belongs
+  in the include - and a `note` is folded into the message above it rather than
+  shown separately. `chooseRoot` decides what to assemble: a
+  `; 64tass-langserv: root <file>` pragma, else the single root whose include tree
+  holds the file, else the file itself; several roots deliberately fall back to
+  the file, since assembling the wrong program reports errors about code the user
+  is not looking at. `server.ts` keeps the result in `buildDiagnostics` and
+  `publishFor` merges it with the live checks - the two have different lifetimes,
+  one per build and one per keystroke, so they cannot share a list. `CPU_FLAG`
+  moved into `constants.ts` for this (the test helper re-exports it).
 - **Operand shapes**: `operands.ts` is the one place that reads an operand's
   structure - bracket, index register inside (`($10,x)`), index register outside
   (`($10),y`, `$10,x`), and both at once (the 65816's `($10,s),y`). Completion asks
@@ -371,7 +385,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1375 tests); compiles first
+yarn test          # Run all tests (currently 1388 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

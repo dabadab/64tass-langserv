@@ -71,6 +71,25 @@ workspace root.
 "64tass.includePaths": ["libs", "../shared/asm"]
 ```
 
+### `64tass.assemblerPath`
+
+Path to the real `64tass` binary. When set, **saving a file assembles it** and
+whatever the assembler says is shown alongside the extension's own checks
+(marked `64tass build`). That catches everything the static checks cannot reach —
+expression typing, page and bank arithmetic, branch distance — and errors in an
+`.include` are shown in that file, not in the one that includes it.
+
+The target CPU, `-C` and `64tass.includePaths` are passed automatically from the
+other settings. `64tass.assemblerArgs` adds anything else your build needs.
+
+```json
+"64tass.assemblerPath": "/usr/bin/64tass",
+"64tass.assemblerArgs": ["-D", "DEBUG=1"]
+```
+
+Nothing is written: the run sends its output to the null device, so it cannot
+disturb your own build.
+
 ## Pragmas
 
 **They are ordinary comments to 64tass** — they change only how
@@ -108,6 +127,17 @@ Acts as `-D label=value` for 64tass, for symbols your build supplies on the comm
 
 Defining them stops false "undefined symbol" / "duplicate symbol" reports, and lets the extension decide which
 `.if` branches are inactive.
+
+### Which file to assemble
+
+```asm
+; 64tass-langserv: root ../main.asm
+```
+
+An include usually cannot be assembled on its own. Without this pragma, saving a
+file assembles the one root that includes it, or the file itself when nothing
+does — or when several unrelated programs do, since guessing there would report
+errors about a program you are not editing.
 
 ## Editor defaults
 

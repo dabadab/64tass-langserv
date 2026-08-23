@@ -81,6 +81,19 @@
           },
           "default": [],
           "markdownDescription": "Extra directories to search for `.include` and `.binclude` files, mirroring 64tass's `-I` flag. The directory of the including file is always tried first; these are searched afterwards, in order. Relative paths are taken against the workspace root."
+        },
+        "64tass.assemblerPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the real `64tass` binary. When set, saving a file assembles it and shows what the assembler itself reports, alongside the checks this extension does on its own. Empty (the default) leaves that off."
+        },
+        "64tass.assemblerArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Extra arguments for the assembler run. The target CPU, `-C` and the `64tass.includePaths` directories are passed automatically from the other settings; this is for anything else your build needs, such as `-D` defines."
         }
       }
     }

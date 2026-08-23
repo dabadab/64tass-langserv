@@ -43,7 +43,8 @@ import {
     DocumentHighlight,
     SemanticTokensParams,
     SemanticTokens,
-    SemanticTokensBuilder
+    SemanticTokensBuilder,
+    Diagnostic,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -63,10 +64,11 @@ import {
     isRenameable, isValidSymbolName, findReferences, findDocumentHighlights
 } from './symbols';
 import { validateDocument } from './diagnostics';
+import { assemble, chooseRoot } from './assembler';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
 import { collectSourceFiles, findFilePathAt } from './workspace';
-import { DEFAULT_CPU, isCpuName } from './constants';
+import { CPU_FLAG, DEFAULT_CPU, isCpuName } from './constants';
 import { computeFoldingRanges } from './folding';
 import { indexDocument as indexDocumentWith, clearIncludeRefs as clearIncludeRefsWith, IndexContext } from './indexing';
 
@@ -108,10 +110,15 @@ interface Settings {
     cpu: string;
     /** As configured: relative entries are taken against the first workspace root. */
     includePaths: string[];
+    /** Empty when no real assembler run is wanted. */
+    assemblerPath: string;
+    assemblerArgs: string[];
 }
 
 // Default settings
-let globalSettings: Settings = { caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [] };
+let globalSettings: Settings = {
+    caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [], assemblerPath: '', assemblerArgs: []
+};
 
 /**
  * Read the `64tass` configuration section, falling back to defaults per field.
@@ -126,6 +133,8 @@ function readSettings(config: unknown): Settings {
         caseSensitive: Boolean(raw.caseSensitive ?? false),
         cpu: isCpuName(cpu) ? cpu.toLowerCase() : DEFAULT_CPU,
         includePaths: Array.isArray(raw.includePaths) ? raw.includePaths.map(String) : [],
+        assemblerPath: typeof raw.assemblerPath === 'string' ? raw.assemblerPath.trim() : '',
+        assemblerArgs: Array.isArray(raw.assemblerArgs) ? raw.assemblerArgs.map(String) : [],
     };
 }
 
@@ -192,19 +201,67 @@ function clearIncludeRefs(rootUri: string): void {
 
 
 /**
+ * What the last real assembler run said, by URI. Kept apart from the checks this
+ * server does itself so the two can be published together and cleared apart: a
+ * build's messages live until the next build, while the live checks are recomputed
+ * on every keystroke.
+ */
+const buildDiagnostics = new Map<string, Diagnostic[]>();
+
+/** Publish one file's diagnostics: the live checks, plus the last build's. */
+function publishFor(uri: string): void {
+    const doc = documents.get(uri);
+    const live = doc ? validateDocument(doc, documentIndex, effectiveCaseSensitive(uri)) : [];
+    connection.sendDiagnostics({ uri, diagnostics: [...live, ...(buildDiagnostics.get(uri) ?? [])] });
+}
+
+/**
  * Re-publish diagnostics for `uri` and for every open root whose include tree it
  * participates in. Editing an include changes what its parents can resolve, so
  * publishing only for the edited document leaves the parents showing stale results.
  */
 function publishDiagnosticsFor(uri: string): void {
     for (const affected of includeGraph.affectedRoots(uri)) {
-        const doc = documents.get(affected);
-        if (!doc) continue; // only open documents have diagnostics on screen
-        connection.sendDiagnostics({
-            uri: affected,
-            diagnostics: validateDocument(doc, documentIndex, effectiveCaseSensitive(affected))
-        });
+        if (!documents.get(affected)) continue; // only open documents have diagnostics on screen
+        publishFor(affected);
     }
+}
+
+/**
+ * Assemble the saved file for real and publish what 64tass says.
+ *
+ * The root matters: an include usually cannot stand alone, so `chooseRoot` walks
+ * back up the include graph (or reads a root pragma) and assembles THAT. Messages
+ * come back per file, and any file the previous run complained about is
+ * republished too, or its squiggles would outlive the error.
+ */
+async function runAssembler(uri: string): Promise<void> {
+    if (globalSettings.assemblerPath === '') return;
+    const doc = documents.get(uri);
+    if (!doc) return;
+
+    const root = chooseRoot(uri, doc.getText(), includeGraph.rootsFor(uri));
+    if (root === null) return;
+
+    const index = documentIndex.get(uri);
+    const result = await assemble({
+        assemblerPath: globalSettings.assemblerPath,
+        file: root,
+        includePaths: searchPaths(),
+        caseSensitive: effectiveCaseSensitive(uri),
+        cpuFlag: index?.cpuExplicit ? CPU_FLAG[index.cpu] ?? null : null,
+        extraArgs: globalSettings.assemblerArgs,
+    });
+
+    if (result.failure !== null) {
+        connection.console.warn(`64tass: could not run '${globalSettings.assemblerPath}': ${result.failure}`);
+        return;
+    }
+
+    const stale = [...buildDiagnostics.keys()];
+    buildDiagnostics.clear();
+    for (const [fileUri, diagnostics] of result.diagnostics) buildDiagnostics.set(fileUri, diagnostics);
+    for (const fileUri of new Set([...stale, ...buildDiagnostics.keys()])) publishFor(fileUri);
 }
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
@@ -642,6 +699,10 @@ documents.onDidChangeContent(change => {
         // ...but collapse bursts of typing into a single validation pass
         diagnosticDebouncer.run(change.document.uri, () => publishDiagnosticsFor(change.document.uri));
     });
+});
+
+documents.onDidSave(event => {
+    configReady.then(() => runAssembler(event.document.uri));
 });
 
 documents.onDidClose(event => {

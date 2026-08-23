@@ -129,6 +129,30 @@ export type CpuName = typeof CPU_NAMES[number];
  */
 export const DEFAULT_CPU: CpuName = '6502i';
 
+/**
+ * The command-line flag that selects each target. NOT mechanical, and getting it
+ * wrong is a real bug: `--m6502` is the NMOS set with the undocumented opcodes,
+ * which `.cpu` spells `6502i`, while `.cpu "6502"` is the documented set selected
+ * by `--m65xx` - the same target as `default`.
+ *
+ * The one authoritative copy: the generators, the comparison tests and the
+ * assembler runner all read it from here.
+ */
+export const CPU_FLAG: Record<string, string> = {
+    'default': '--m65xx',
+    '6502': '--m65xx',
+    '6502i': '--m6502',
+    '65c02': '--m65c02',
+    '65ce02': '--m65ce02',
+    '65dtv02': '--m65dtv02',
+    '65el02': '--m65el02',
+    '65816': '--m65816',
+    'r65c02': '--mr65c02',
+    'w65c02': '--mw65c02',
+    '4510': '--m4510',
+    '45gs02': '--m45gs02',
+};
+
 export function isCpuName(name: string): name is CpuName {
     return (CPU_NAMES as readonly string[]).includes(name.toLowerCase());
 }
