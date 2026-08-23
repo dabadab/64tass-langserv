@@ -65,6 +65,7 @@ import {
 } from './symbols';
 import { validateDocument } from './diagnostics';
 import { assemble, chooseRoot } from './assembler';
+import { findUnusedSymbols } from './unused';
 import { getCompletions } from './completions';
 import { IncludeGraph } from './includes';
 import { collectSourceFiles, findFilePathAt } from './workspace';
@@ -113,11 +114,13 @@ interface Settings {
     /** Empty when no real assembler run is wanted. */
     assemblerPath: string;
     assemblerArgs: string[];
+    unusedSymbols: boolean;
 }
 
 // Default settings
 let globalSettings: Settings = {
-    caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [], assemblerPath: '', assemblerArgs: []
+    caseSensitive: false, cpu: DEFAULT_CPU, includePaths: [],
+    assemblerPath: '', assemblerArgs: [], unusedSymbols: false
 };
 
 /**
@@ -135,6 +138,7 @@ function readSettings(config: unknown): Settings {
         includePaths: Array.isArray(raw.includePaths) ? raw.includePaths.map(String) : [],
         assemblerPath: typeof raw.assemblerPath === 'string' ? raw.assemblerPath.trim() : '',
         assemblerArgs: Array.isArray(raw.assemblerArgs) ? raw.assemblerArgs.map(String) : [],
+        unusedSymbols: Boolean(raw.unusedSymbols ?? false),
     };
 }
 
@@ -212,7 +216,13 @@ const buildDiagnostics = new Map<string, Diagnostic[]>();
 function publishFor(uri: string): void {
     const doc = documents.get(uri);
     const live = doc ? validateDocument(doc, documentIndex, effectiveCaseSensitive(uri), getDocumentText) : [];
-    connection.sendDiagnostics({ uri, diagnostics: [...live, ...(buildDiagnostics.get(uri) ?? [])] });
+    const unused = doc && globalSettings.unusedSymbols
+        ? findUnusedSymbols(uri, documentIndex, includeGraph.compilationUnit(uri), getDocumentText)
+        : [];
+    connection.sendDiagnostics({
+        uri,
+        diagnostics: [...live, ...unused, ...(buildDiagnostics.get(uri) ?? [])]
+    });
 }
 
 /**

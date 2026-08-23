@@ -94,6 +94,11 @@
           },
           "default": [],
           "markdownDescription": "Extra arguments for the assembler run. The target CPU, `-C` and the `64tass.includePaths` directories are passed automatically from the other settings; this is for anything else your build needs, such as `-D` defines."
+        },
+        "64tass.unusedSymbols": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Grey out labels, constants and macros that nothing in the same program refers to. Mirrors 64tass's `-Wunused`, and is off by default for the same reason it is there: a library of shared definitions is full of symbols its own file never uses."
         }
       }
     }

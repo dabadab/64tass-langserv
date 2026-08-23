@@ -71,6 +71,13 @@ workspace root.
 "64tass.includePaths": ["libs", "../shared/asm"]
 ```
 
+### `64tass.unusedSymbols`
+
+Default `false`. Greys out labels, constants and macros nothing in the same
+program refers to, the way 64tass's own `-Wunused` reports them. Off by default
+for the same reason it is off there: a file of shared definitions is full of
+symbols it does not use itself.
+
 ### `64tass.assemblerPath`
 
 Path to the real `64tass` binary. When set, **saving a file assembles it** and
