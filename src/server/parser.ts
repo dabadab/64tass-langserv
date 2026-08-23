@@ -2,7 +2,7 @@ import { Range, Position } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
-import { SCOPE_OPENERS, CLOSING_DIRECTIVES, opcodesForCpu, DEFAULT_CPU } from './constants';
+import { SCOPE_OPENERS, CLOSING_DIRECTIVES, ALL_DIRECTIVES, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { blockDirectivesOn } from './blocks';
 import { resolveIncludePath } from './paths';
 import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys } from './utils';
@@ -27,6 +27,12 @@ function findLastIndex<T>(items: T[], predicate: (item: T) => boolean): number {
     }
     return -1;
 }
+
+/**
+ * Directives whose label is handled by a branch of its own further down, so the
+ * general data-label branch must not claim them first.
+ */
+const HAS_OWN_BRANCH = new Set(['dstruct', 'dunion']);
 
 // Compound assignments modify an existing variable rather than defining one.
 const COMPOUND_ASSIGNMENT = /^(?:\.\.|\*\*|<<|>>|[-+*/&|^%])=$/;
@@ -150,13 +156,16 @@ export function parseDocument(
     //   9  `.var`                         BEFORE 14, or `.var` reads as a macro call
     //  10  local `_name`                  BEFORE 15, so `_c = 1` is marked local
     //  11  anonymous `+` / `-`
-    //  12  data-directive label
+    //  12  data-directive label          any known directive, minus those with a
+    //                                    branch of their own (HAS_OWN_BRANCH)
     //  13  `.dstruct` / `.dunion`
     //  14  macro-call label               skips the scope openers handled at 5
     //  15  constant / variable assignment last: the loosest pattern of them all
     //
-    // A branch that fully handles its line ends with `continue`; the exceptions
-    // are noted where they are (8 above, and the `.binclude` label at 2).
+    // A branch that fully handles its line ends with `continue` - `continue
+    // nextLine` from inside the opener loop, which is why the loop is labelled.
+    // The exceptions are noted where they are (8 above, and `.binclude` at 2).
+    nextLine:
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
         const lineLower = line.toLowerCase();
@@ -370,8 +379,10 @@ export function parseDocument(
                     localScope: currentLocalScope,
                     withScopes: [...withScopes]
                 });
-                // A line opens at most one scope, and this was it.
-                break;
+                // The line is a scope opener and nothing else - skip the branches
+                // below, which would otherwise index it a second time as a data
+                // label or a macro call.
+                continue nextLine;
             }
 
             // Safe: directive name from static constant (SCOPE_OPENERS)
@@ -648,8 +659,14 @@ export function parseDocument(
         // Labels with data directives (not scope-creating)
         // Separated by whitespace or a colon: "HI: .byte $00", even "HI:.byte $00"
         // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
-        const dataLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.(byte|word|addr|fill|text|ptext|null)\b/i);
-        if (dataLabelMatch) {
+        // Any known directive after a label puts that label at an address, so it is
+        // a data label - not just the seven that used to be listed here. The rest
+        // fell through to the macro-call branch, which indexed them correctly but
+        // also recorded "tab1 was made by macro rta".
+        const dataLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.([a-zA-Z]+)\b/i);
+        if (dataLabelMatch
+            && ALL_DIRECTIVES.includes(dataLabelMatch[3].toLowerCase())
+            && !HAS_OWN_BRANCH.has(dataLabelMatch[3].toLowerCase())) {
             const labelName = dataLabelMatch[2];
             const startChar = dataLabelMatch[1].length;
             labels.push({
@@ -716,13 +733,11 @@ export function parseDocument(
             const labelName = macroLabelMatch[2];
             const startChar = macroLabelMatch[1].length;
             const macroCalled = normalizeName(macroLabelMatch[4]);
-            // The directive vocabulary is always lowercase; only user symbols are
-            // subject to the case setting. Looking the raw spelling up meant that
-            // under `caseSensitive` a "FOO .PROC" was not recognised as a scope
-            // opener here and got indexed a second time as a macro call.
-            const calledDirective = `.${macroLabelMatch[4].toLowerCase()}`;
             // Skip if this is a scope-creating directive (already handled above)
-            if (!(calledDirective in SCOPE_OPENERS)) {
+            // Every known directive, not only the scope-creating ones: a data
+            // directive reaching here would be recorded as the macro that made
+            // the label.
+            if (!ALL_DIRECTIVES.includes(macroLabelMatch[4].toLowerCase())) {
                 labels.push({
                     name: normalizeName(labelName),
                     originalName: labelName,

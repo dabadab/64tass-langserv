@@ -1207,3 +1207,36 @@ describe('uppercase directives under case sensitivity', () => {
         expect(index.labelDefinedByMacro.get('INST')).toBe('EMIT');
     });
 });
+
+describe('data labels beyond the common directives', () => {
+    // Only seven directive names used to count as data. The rest fell through to
+    // the macro-call branch, which indexed the label but also recorded that a
+    // macro named e.g. "rta" had produced it - harmless only until a user macro
+    // shares that name.
+    it.each(['.rta', '.char', '.long', '.dword', '.sint', '.lint', '.fill', '.binary'])(
+        'indexes a label on %s as data', (directive) => {
+            const index = parse(`tab     ${directive} 1`);
+            expect(index.labels.find(l => l.name === 'tab')?.kind).toBe('data');
+        });
+
+    it('records no macro relationship for any of them', () => {
+        const index = parse('tab1    .rta foo\ntab2    .char 1\ntab3    .long 1');
+        expect([...index.labelDefinedByMacro]).toEqual([]);
+    });
+
+    it('still records a real macro call', () => {
+        const index = parse('emit    .macro\n        .endm\ninst    #emit');
+        expect(index.labelDefinedByMacro.get('inst')).toBe('emit');
+    });
+
+    it('leaves .dstruct to its own branch', () => {
+        const index = parse('pt      .struct\nx       .byte 0\n        .endstruct\np1      .dstruct pt');
+        expect(index.structInstances.get('p1')).toBe('pt');
+    });
+
+    it('indexes a scope opener once, not also as a data label', () => {
+        const index = parse('outer   .proc\n        .pend');
+        expect(index.labels.filter(l => l.name === 'outer')).toHaveLength(1);
+        expect(index.labels[0].kind).toBe('proc');
+    });
+});
