@@ -88,6 +88,13 @@ export function parseDocument(
         return caseSensitive ? name : name.toLowerCase();
     }
 
+    /** The current scope path, extended by a qualified name's leading segments. */
+    function scopeWith(leading: string): string | null {
+        const current = getCurrentScopePath();
+        if (!leading) return current;
+        return current ? `${current}.${leading}` : leading;
+    }
+
     function getCurrentScopePath(): string | null {
         const named = scopeStack.filter(s => s.name !== null).map(s => s.name);
         const parts = baseScope ? [baseScope, ...named] : named;
@@ -721,11 +728,20 @@ export function parseDocument(
         // Constant assignment ("v = 1") or re-assignable variable ("v := 1").
         // The assembler rejects redefining "=" but allows redefining ":=", so the
         // two are tagged differently for the duplicate check.
-        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*(:?)=\s*([^;]+)/);
+        //
+        // The target may be a dotted path - "outer.extra = 5" and "_sid.init = 5"
+        // both assemble (verified) - so the leading segments name the scope the
+        // symbol lands in and only the last segment is its name. That is the same
+        // shape findDictKeys produces for dict-literal keys. Without this the whole
+        // line matched no branch at all and the definition simply vanished.
+        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(:?)=\s*([^;]+)/);
         if (constMatch) {
-            const labelName = constMatch[2];
-            const startChar = constMatch[1].length;
-            const isLocal = labelName.startsWith('_');
+            const writtenPath = constMatch[2];
+            const lastDot = writtenPath.lastIndexOf('.');
+            const labelName = lastDot < 0 ? writtenPath : writtenPath.slice(lastDot + 1);
+            const leadingScope = lastDot < 0 ? '' : normalizeName(writtenPath.slice(0, lastDot));
+            const startChar = constMatch[1].length + (lastDot < 0 ? 0 : lastDot + 1);
+            const isLocal = lastDot < 0 && labelName.startsWith('_');
             const isReassignable = constMatch[3] === ':';
             const value = constMatch[4]?.trim();
 
@@ -737,7 +753,7 @@ export function parseDocument(
                     Position.create(lineNum, startChar),
                     Position.create(lineNum, startChar + labelName.length)
                 ),
-                scopePath: getCurrentScopePath(),
+                scopePath: scopeWith(leadingScope),
                 localScope: isLocal ? currentLocalScope : null,
                 isLocal,
                 kind: isReassignable ? 'var' : 'const',
@@ -751,7 +767,7 @@ export function parseDocument(
             // callee is recorded the same way and resolved at query time - a call
             // to something that is not a scope simply resolves to nothing.
             const callMatch = value?.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
-            if (callMatch) {
+            if (callMatch && lastDot < 0) {
                 labelDefinedByMacro.set(normalizeName(labelName), normalizeName(callMatch[1]));
             }
 
@@ -762,7 +778,7 @@ export function parseDocument(
             // key as well.
             const rawValue = constMatch[4] ?? '';
             const valueStart = constMatch[0].length - rawValue.length;
-            const ownPath = getCurrentScopePath();
+            const ownPath = scopeWith(leadingScope);
             const memberScope = ownPath ? `${ownPath}.${normalizeName(labelName)}` : normalizeName(labelName);
             for (const key of findDictKeys(rawValue)) {
                 // +1 to point at the name rather than the leading dot

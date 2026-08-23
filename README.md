@@ -102,42 +102,6 @@ Acts as `-D label=value` for 64tass, for symbols your build supplies on the comm
 Defining them stops false "undefined symbol" / "duplicate symbol" reports, and lets the extension decide which
 `.if` branches are inactive.
 
-## Known issues
-
-**A function that returns a label with members attached to it loses those
-members.** A `.function` can hand back a namespace in two ways, and only one of
-them is tracked.
-
-This one works — `namespace(*)` returns the function's *own* scope, so its
-top-level labels become the members:
-
-```asm
-split   .function _v
-LOW     = _v & $ff              ; a label of the function itself
-HIGH    = _v >> 8
-        .endf namespace(*)      ; hand back this scope
-
-addr    = split($1234)
-        lda #addr.LOW           ; resolves, completes, go-to-definition works
-```
-
-This one does not — the members are hung on a label inside the function, and
-that label is returned instead:
-
-```asm
-split   .function _v
-_r      .text ""                ; a label...
-_r.LOW  = _v & $ff              ; ...with a member attached to it
-        .endf _r                ; hand back the label
-
-addr    = split($1234)
-        lda #addr.LOW           ; reported as undefined, though it assembles
-```
-
-Both assemble. The second is what 64tass's own `loading_a_sid_file` example does,
-which is why `music.init` reads as undefined there. Dotted assignments onto a
-label are not yet indexed as members of it.
-
 ## Editor defaults
 
 The extension ships two language-scoped defaults for `.asm` files. Both are

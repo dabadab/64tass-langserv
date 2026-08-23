@@ -47,27 +47,18 @@ function diagnose(file: string) {
 }
 
 /**
- * The one construct still unmodelled: loading_a_sid_file's `loadsid` builds its
- * result by assigning `_sid.init` and `_sid.play` inside the function and
- * returning `_sid`, so the members belong to a local namespace rather than to
- * the function's own scope. Listed rather than skipped, so the file is still
- * checked for everything else and this shrinks visibly when it is fixed.
+ * Nothing is expected any more: `loading_a_sid_file` used to report `music.init`
+ * and `music.play`, because its `loadsid` builds the result with dotted
+ * assignments (`_sid.init = ...`) that were indexed nowhere at all.
  */
-const KNOWN_GAPS: Record<string, string[]> = {
-    'loading_a_sid_file.asm': [
-        "L57 warning: Undefined symbol 'music.init'",
-        "L63 warning: Undefined symbol 'music.play'",
-    ],
-};
+const KNOWN_GAPS: Record<string, string[]> = {};
 
 describe('64tass example sources', () => {
     it.each(files)('%s produces no unexpected diagnostics', (file) => {
         expect(diagnose(file)).toEqual(KNOWN_GAPS[file] ?? []);
     });
 
-    it('reports nothing at all in most of them', () => {
-        const clean = files.filter(f => !(f in KNOWN_GAPS));
-        expect(clean.length).toBeGreaterThanOrEqual(7);
-        for (const file of clean) expect(diagnose(file), file).toEqual([]);
+    it('reports nothing at all in any of them', () => {
+        for (const file of files) expect(diagnose(file), file).toEqual([]);
     });
 });

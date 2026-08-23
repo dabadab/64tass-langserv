@@ -223,6 +223,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   `findSymbolInfo`: an incomplete include graph would there turn into false
   "undefined symbol" reports, where the worst it can cost completion is a
   missing suggestion.
+- **Dotted assignment targets**: `outer.extra = 5` and `_sid.init = 5` both
+  assemble, so `constMatch` takes the leading segments as the scope the symbol
+  lands in and the last as its name - the same shape `findDictKeys` produces.
+  Nothing matched these lines before, so the definition vanished; that is what
+  made `music.init` read as undefined in 64tass's own `loading_a_sid_file`.
 - **Dynamic members**: `DocumentIndex.labelDefinedByMacro` maps a label to the
   scope its members come from - the macro of a `label #macro` / `label .macro`
   call, or the function of a `label = fn(...)` assignment where the function

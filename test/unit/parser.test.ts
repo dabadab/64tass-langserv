@@ -1118,3 +1118,42 @@ describe('first token decides label or instruction', () => {
         expect(source.slice(label.range.start.character, label.range.end.character)).toBe('inner');
     });
 });
+
+describe('dotted assignment targets', () => {
+    // "outer.extra = 5", "_sid.init = 5" and "a.b.c = 5" all assemble (verified).
+    // None of them matched any branch before, so the definition vanished entirely.
+    const find = (source: string, name: string) =>
+        parse(source).labels.find(l => l.name === name);
+
+    it('files the symbol under the path it names', () => {
+        const source = 'outer   .block\nval     = 1\n        .bend\nouter.extra = 5';
+        expect(find(source, 'extra')?.scopePath).toBe('outer');
+    });
+
+    it('handles a path several segments deep', () => {
+        const source = 'a       .block\nb       .block\n        .bend\n        .bend\na.b.c = 5';
+        expect(find(source, 'c')?.scopePath).toBe('a.b');
+    });
+
+    it('handles a local leading segment', () => {
+        const source = 'first   nop\n_sid    .text ""\n_sid.init = 5';
+        expect(find(source, 'init')?.scopePath).toBe('_sid');
+    });
+
+    it('nests the path inside the enclosing scope', () => {
+        const source = 'fn      .function v\n_r      .text ""\n_r.init = 5\n        .endf _r';
+        expect(find(source, 'init')?.scopePath).toBe('fn._r');
+    });
+
+    it('points the range at the last segment, which is the name', () => {
+        const source = 'outer.extra = 5';
+        const label = find(source, 'extra')!;
+        expect(source.slice(label.range.start.character, label.range.end.character)).toBe('extra');
+    });
+
+    it('leaves a plain assignment alone', () => {
+        const label = find('counter = 5', 'counter')!;
+        expect(label.scopePath).toBeNull();
+        expect(label.kind).toBe('const');
+    });
+});
