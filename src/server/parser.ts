@@ -371,7 +371,12 @@ export function parseDocument(
             // Safe: directive name from static constant (SCOPE_OPENERS)
             const anonPattern = new RegExp(`^\\s*\\${open}\\b`, 'i');
             if (anonPattern.test(lineLower)) {
-                scopeStack.push({ name: null, directive: open });
+                // An unnamed scope still IS a scope: `.block` with no label hides
+                // its labels from the outside (verified - `lda hidden` after one
+                // fails). A synthetic name keeps them indexed but unreachable,
+                // exactly as the unlabelled `.binclude` branch does. '@' cannot
+                // occur in a user symbol, so it can never collide with one.
+                scopeStack.push({ name: `${open.slice(1)}@${lineNum}`, directive: open });
                 scopeAtLine.set(lineNum, {
                     scopePath: getCurrentScopePath(),
                     localScope: currentLocalScope,

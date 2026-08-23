@@ -1157,3 +1157,27 @@ describe('dotted assignment targets', () => {
         expect(label.kind).toBe('const');
     });
 });
+
+describe('unnamed scope openers', () => {
+    // An unnamed .block still hides its labels: "lda hidden" after one is rejected
+    // by the assembler (verified). They used to be filed in the enclosing scope.
+    it('does not leak a label into the enclosing scope', () => {
+        const index = parse('        .block\nhidden  lda #1\n        .bend');
+        expect(index.labels.find(l => l.name === 'hidden')?.scopePath).not.toBeNull();
+    });
+
+    it('gives the scope a name no user symbol can collide with', () => {
+        const index = parse('        .block\nhidden  lda #1\n        .bend');
+        expect(index.labels.find(l => l.name === 'hidden')?.scopePath).toContain('@');
+    });
+
+    it('still nests inside a named scope', () => {
+        const index = parse('outer   .block\n        .block\nhidden  lda #1\n        .bend\n        .bend');
+        expect(index.labels.find(l => l.name === 'hidden')?.scopePath).toMatch(/^outer\./);
+    });
+
+    it('leaves a named scope alone', () => {
+        const index = parse('named   .block\nvisible lda #1\n        .bend');
+        expect(index.labels.find(l => l.name === 'visible')?.scopePath).toBe('named');
+    });
+});

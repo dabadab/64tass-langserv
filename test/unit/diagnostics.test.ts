@@ -974,3 +974,23 @@ describe('duplicate label message', () => {
         expect(reported.message).toContain('line 2');
     });
 });
+
+describe('openers that require a label', () => {
+    // Verified: the assembler answers "label required" for these four and accepts
+    // the others unnamed.
+    it.each(['.proc', '.macro', '.function', '.segment'])('reports a bare %s', (directive) => {
+        expect(errors(`        ${directive}`).map(d => d.code)).toContain('label-required');
+    });
+
+    it.each(['.block', '.struct', '.union', '.namespace'])('accepts a bare %s', (directive) => {
+        expect(errors(`        ${directive}`).map(d => d.code)).not.toContain('label-required');
+    });
+
+    it('accepts them when they do have a label', () => {
+        expect(errors('name    .proc\n        .pend').map(d => d.code)).not.toContain('label-required');
+    });
+
+    it('is not fooled by one inside a comment', () => {
+        expect(errors('        nop     ; a .proc here').map(d => d.code)).not.toContain('label-required');
+    });
+});

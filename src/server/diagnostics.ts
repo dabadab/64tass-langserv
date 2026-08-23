@@ -22,6 +22,7 @@ import {
 import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { blockDirectivesOn } from './blocks';
+import { LABEL_REQUIRED_OPENERS } from './constants';
 import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
 /**
@@ -273,6 +274,24 @@ export function validateDocument(
         const { opened, closed } = blockDirectivesOn(line);
         for (const directive of opened) {
             blockStack.push({ directive, line: lineNum });
+
+            // Some openers are rejected outright without a label: the assembler
+            // answers "label required" (verified). `.block` and friends are fine.
+            if (!LABEL_REQUIRED_OPENERS.includes(directive)) continue;
+            // Safe: directive name from the static LABEL_REQUIRED_OPENERS list.
+            const unnamed = code.match(new RegExp(`^(\\s*)\\${directive}\\b`, 'i'));
+            if (unnamed) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Error,
+                    range: Range.create(
+                        Position.create(lineNum, unnamed[1].length),
+                        Position.create(lineNum, unnamed[1].length + directive.length)
+                    ),
+                    message: `'${directive}' requires a label`,
+                    source: '64tass',
+                    code: 'label-required'
+                });
+            }
         }
 
         // Check for closing directives

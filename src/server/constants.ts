@@ -419,6 +419,12 @@ export const REGISTER_MODES: Record<string, readonly string[]> = (() => {
  */
 export const INDEX_REGISTERS: ReadonlySet<string> = new Set(['b', 'd', 'k', 'r', 's', 'x', 'y', 'z']);
 
+/**
+ * Scope openers the assembler refuses without a label: "label required"
+ * (verified). `.block`, `.struct`, `.union` and `.namespace` are fine unnamed.
+ */
+export const LABEL_REQUIRED_OPENERS = ['.proc', '.macro', '.function', '.segment'];
+
 // Directives that create new scopes (opener -> primary closer)
 export const SCOPE_OPENERS: Record<string, string> = {
     '.proc': '.pend',

@@ -109,7 +109,12 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   every later label was filed under the wrong one, silently. A `:` counts as a
   boundary (`outer:.proc` is valid) but a letter does not, which is what keeps the
   dotted reference `outer.proc` from reading as an opener.
-- **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`
+- **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`.
+  An UNNAMED one is still a scope - `.block` with no label hides its labels from
+  the outside (verified) - so it gets a synthetic `block@<line>` name rather than
+  null, the same trick the unlabelled `.binclude` uses. `@` cannot occur in a user
+  symbol, so it never collides. `LABEL_REQUIRED_OPENERS` lists the four the
+  assembler refuses unnamed (`.proc`, `.macro`, `.function`, `.segment`)
 - **Label vs instruction**: decided by the FIRST TOKEN, never by the column
   (verified): an indented `inner lda #1` defines `inner`, while `jsr rts` defines
   nothing at either column - `jsr` is the instruction and `rts` its operand - and a
@@ -260,7 +265,7 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   with it (`£` and `↑` are not letters and are still caught).
 - **Diagnostic codes**: diagnostics that a quick fix can act on carry a `code`
   (`undefined-symbol`, `undefined-macro`, `unclosed-block`, plus
-  `invalid-symbol-character` and `expression-expected`); `codeActions.ts`
+  `invalid-symbol-character`, `expression-expected` and `label-required`); `codeActions.ts`
   matches on that rather than on message text, so wording can change freely. An
   `unclosed-block` also carries the closer to insert in `data`.
 - **Symbol lookup cost**: `findSymbolInfo` filters by name first via
