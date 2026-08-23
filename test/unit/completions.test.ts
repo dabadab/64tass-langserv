@@ -429,3 +429,21 @@ describe('completion carries documentation', () => {
         expect(item?.documentation).toBe('how many trees');
     });
 });
+
+describe('getCompletions - semicolons inside strings', () => {
+    // A ';' in a string literal is not a comment. indexOf(';') treated it as one
+    // and silently killed completion for the rest of the line.
+    it('still completes after a string containing a semicolon', () => {
+        const source = 'counter = 1\nmsg     .text "a;b", ';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///semi.asm' });
+        const items = getCompletions(docs[0], Position.create(1, source.split('\n')[1].length), documentIndex);
+        expect(items.map(i => i.label)).toContain('counter');
+    });
+
+    it('still suppresses completion in a real comment', () => {
+        const source = 'counter = 1\n        lda #0 ; set c';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///semi2.asm' });
+        const items = getCompletions(docs[0], Position.create(1, source.split('\n')[1].length), documentIndex);
+        expect(items).toHaveLength(0);
+    });
+});

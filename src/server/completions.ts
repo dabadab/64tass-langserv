@@ -14,6 +14,7 @@ import { DocumentIndex, LabelKind } from './types';
 import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES, DEFAULT_CPU, opcodesForCpu } from './constants';
 import { addressingModesFor } from './addressing';
 import { collectVisibleLabels, collectVisibleParameters, collectScopeMembers } from './symbols';
+import { parseLineStructure } from './utils';
 
 // Label kinds that represent something addressable, i.e. valid as a bare opcode
 // operand (branch/jump target, or the address a data label points at).
@@ -273,8 +274,11 @@ export function getCompletions(
         Position.create(position.line, 0),
         Position.create(position.line + 1, 0)
     ));
-    // Don't offer keyword/opcode/symbol completions inside comments or strings
-    const commentIdx = fullLine.indexOf(';');
+    // Don't offer keyword/opcode/symbol completions inside comments or strings.
+    // parseLineStructure, not indexOf: a ';' inside a string literal is not a
+    // comment, and treating it as one killed completion for the rest of a line
+    // like `msg .text "a;b"`. Same bug class as extractComment in utils.ts.
+    const commentIdx = parseLineStructure(fullLine).commentStart;
     if (commentIdx >= 0 && commentIdx < position.character) return [];
 
     const { before, prefix } = splitAtCursor(document, position);
