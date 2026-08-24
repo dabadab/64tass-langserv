@@ -32,9 +32,14 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Expand selection** (<kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>→</kbd>) stepping
   out through word, operand, operand list, line, each enclosing block, document.
 - **Folding** for `.proc`/`.pend`, `.macro`/`.endm`, `.if`/`.endif` and friends.
-- **Diagnostics** for various problems.
-- **Inactive code** greyed out - the branches of an `.if` chain the conditions rule out.
-- **Directive help** on hover, quoting the 64tass manual.
+- **Diagnostics** for various problems, and from the real assembler on save when
+  `64tass.assemblerPath` is set.
+- **Inactive code** greyed out - the branches of an `.if` chain the conditions rule out,
+  and symbols nothing refers to.
+- **Directive help** on hover, quoting the 64tass manual. Pragmas are completed and
+  documented too.
+- **Formatting** (Format Document) aligning label, mnemonic, operand and comment.
+- **Cycle counts** in a column left of the code.
 
 ## Settings
 

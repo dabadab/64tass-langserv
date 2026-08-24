@@ -2,6 +2,37 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [0.11.0] - 2026-08-25
+
+### Added
+- **Real Assembler Diagnostics** - set `64tass.assemblerPath` to the 64tass binary to get
+  additional diagnostics from real assembler runs.
+- **Which File To Assemble** - a `; 64tass-langserv: root ../main.asm` pragma says which
+  program an include belongs to. Without it, saving assembles every root that includes the
+  file - a header shared by two programs is part of both builds - or the file itself when
+  nothing does
+- **Formatting** - Format Document aligns label, mnemonic, operand and comment to
+  configurable columns (`64tass.format.mnemonicColumn`, `operandColumn`, `commentColumn`,
+  defaulting to 8, 12 and 40).
+- **Cycle Counts** - `64tass.cycleCounts` shows each instruction's cycles in a column of
+  its own. 65xx only.
+- **Unused Symbols** - unused symbols are greyed. On by default;
+  `64tass.unusedSymbols` turns it off
+- **Inactive Code** - Inactive code (disabled by `.if` and similar directives) are
+  greyed out.
+- **Pragma Help** - typing `; 64t` completes the pragma prefix, then the pragma names,
+  then the values each one takes; hovering a pragma line says what it does. Ordinary
+  comments raise no popup - the prefix has to be under way first
+- **Directive Help** - hovering `.byte`, `.proc`, `.for` and the rest shows the syntax and
+  description from the 64tass reference manual, quoted rather than rewritten. All 132
+  directives the extension knows are covered
+
+### Improved
+- **Better error reporting** - Mnemonics from wrong CPUs, wrong indexed addressing modes,
+  oversized immediates are reported now.
+- **Duplicate Labels Across Includes** - a name defined both in a file and in something it
+  `.include`s is now reported.
+
 ## [0.10.3] - 2026-08-20
 
 ### Improved
