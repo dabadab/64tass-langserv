@@ -200,6 +200,27 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
         expect(counts).toEqual([{ line: 1, text: '2' }, { line: 2, text: '6' }]);
     }, 20000);
 
+    it('points at the parameter being typed in a macro call', async () => {
+        // Against the BUILT server, which is what the editor talks to: the popup
+        // reads as the call is written, and the active parameter advances.
+        const uri = server.uriOf('macro.asm');
+        await server.open('macro.asm',
+            'PTR_SET .macro ptr, val\n        lda #<val\n        .endm\n        #PTR_SET $c000, 1234\n');
+
+        const at = async (character: number) => {
+            const help = await server.connection.sendRequest('textDocument/signatureHelp', {
+                textDocument: { uri }, position: { line: 3, character },
+            }) as { signatures: { label: string; parameters: { label: [number, number] }[] }[]; activeParameter: number } | null;
+            if (!help) return null;
+            const signature = help.signatures[0];
+            const [start, end] = signature.parameters[help.activeParameter].label;
+            return { label: signature.label, bold: signature.label.slice(start, end) };
+        };
+
+        expect(await at(17)).toEqual({ label: 'PTR_SET ptr, val', bold: 'ptr' });   // "#PTR_SET "
+        expect(await at(24)).toEqual({ label: 'PTR_SET ptr, val', bold: 'val' });   // past the comma
+    }, 20000);
+
     it('offers a quick fix for a misspelled symbol', async () => {
         const uri = server.uriOf('typo.asm');
         await server.open('typo.asm', 'counter = 1\nstart\n        lda countor\n');
