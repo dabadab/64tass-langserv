@@ -1,19 +1,28 @@
 import { SignatureHelp, SignatureInformation, ParameterInformation } from 'vscode-languageserver/node';
 import { DocumentIndex } from './types';
 import { parseLineStructure } from './utils';
+import { OPCODES } from './constants';
 
 /**
  * A call being typed on the current line: which callable, and which argument the
  * cursor is in.
  *
- * Recognises the three call forms 64tass accepts (all verified against the
- * assembler): "#name arg, arg" and ".name arg, arg" for macros, and
- * "name(arg, arg)" for functions.
+ * Recognises every call form 64tass accepts, all verified against the assembler
+ * and all four legal for a `.function` as much as a `.macro`: "#name arg, arg",
+ * ".name arg, arg", a bare "name arg, arg" as the statement on the line, and
+ * "name(arg, arg)" inside an expression.
  */
 export interface CallContext {
     name: string;
     /** Zero-based index of the argument the cursor sits in. */
     argumentIndex: number;
+    /**
+     * How this call is being written. The popup follows the CALL rather than the
+     * declaration: `PTR_SET` may be a `.function` and still be invoked as a
+     * statement, which is how whole projects use them, and showing parentheses
+     * there describes a line the user is not typing.
+     */
+    form: 'paren' | 'statement';
 }
 
 /**
@@ -34,7 +43,7 @@ export function findCallContext(linePrefix: string): CallContext | null {
                 const before = code.slice(0, i);
                 const name = before.match(/([a-zA-Z_][a-zA-Z0-9_]*)$/);
                 if (name) {
-                    return { name: name[1], argumentIndex: countArguments(code.slice(i + 1)) };
+                    return { name: name[1], argumentIndex: countArguments(code.slice(i + 1)), form: 'paren' };
                 }
                 return null;
             }
@@ -42,10 +51,23 @@ export function findCallContext(linePrefix: string): CallContext | null {
         }
     }
 
-    // Macro call: "#name args" or ".name args" as the statement on this line
-    const macro = code.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s*:?\s+)?[#.]([a-zA-Z_][a-zA-Z0-9_]*)(\s+[\s\S]*)?$/);
-    if (macro && macro[2] !== undefined) {
-        return { name: macro[1], argumentIndex: countArguments(macro[2]) };
+    // Prefixed call: "#name args" or ".name args" as the statement on this line
+    const prefixed = code.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s*:?\s+)?[#.]([a-zA-Z_][a-zA-Z0-9_]*)(\s+[\s\S]*)?$/);
+    if (prefixed && prefixed[2] !== undefined) {
+        return { name: prefixed[1], argumentIndex: countArguments(prefixed[2]), form: 'statement' };
+    }
+
+    // Bare call: "name args", the form 64tass warns about with -Wmacro-prefix and
+    // accepts all the same. Whether the name IS callable is mostly the caller's
+    // business - `start lda #1` looks identical and finds no parameters, so
+    // nothing is shown - but an instruction is filtered out here, since the
+    // assembler reads `nop ` as one whatever a macro of that name might say.
+    const bare = code.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)(\s+[\s\S]*)$/);
+    // A directive after the name makes it a definition (`PTR_SET .function a, b`)
+    // or a data label, and `=` an assignment: never a call.
+    if (bare && !/^\s*[.#]/.test(bare[2]) && !/^\s*:?=/.test(bare[2])
+        && !OPCODES.has(bare[1].toLowerCase())) {
+        return { name: bare[1], argumentIndex: countArguments(bare[2]), form: 'statement' };
     }
 
     return null;
@@ -77,10 +99,10 @@ function countArguments(args: string): number {
 export function callSignature(
     name: string,
     parameters: readonly string[],
-    kind: 'macro' | 'function' | string
+    form: 'paren' | 'statement'
 ): { label: string; parameters: ParameterInformation[] } {
-    const open = kind === 'function' ? '(' : ' ';
-    const close = kind === 'function' ? ')' : '';
+    const open = form === 'paren' ? '(' : ' ';
+    const close = form === 'paren' ? ')' : '';
 
     let label = `${name}${open}`;
     const marks: ParameterInformation[] = [];
@@ -117,7 +139,7 @@ export function getSignatureHelp(
         // matching, which is not what a caller wants to read.
         const definition = index.labels.find(l => l.name === lookup);
         const declared = index.parameterTextAtScope.get(lookup) ?? parameters;
-        const built = callSignature(definition?.originalName ?? call.name, declared, definition?.kind ?? 'macro');
+        const built = callSignature(definition?.originalName ?? call.name, declared, call.form);
 
         const signature: SignatureInformation = {
             label: built.label,

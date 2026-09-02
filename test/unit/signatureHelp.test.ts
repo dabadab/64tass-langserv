@@ -4,33 +4,34 @@ import { buildIndex, createDoc } from '../helpers/doc';
 import { parseDocument } from '../../src/server/parser';
 import { DocumentIndex } from '../../src/server/types';
 
-// All three call forms are accepted by the assembler (verified)
+// Every call form here is accepted by the assembler (verified), and all of
+// them work for a .function as much as a .macro.
 const DEFS = 'mac .macro a, b\n.endm\nfn .function x, y\n.endf\nnoargs .macro\n.endm';
 const index = () => buildIndex({ source: DEFS, uri: 'file:///s.asm' }).documentIndex;
 
 describe('findCallContext', () => {
     it('recognises a function call and the active argument', () => {
-        expect(findCallContext('        lda #fn(')).toEqual({ name: 'fn', argumentIndex: 0 });
-        expect(findCallContext('        lda #fn(1, ')).toEqual({ name: 'fn', argumentIndex: 1 });
-        expect(findCallContext('        lda #fn(1, 2')).toEqual({ name: 'fn', argumentIndex: 1 });
+        expect(findCallContext('        lda #fn(')).toEqual({ name: 'fn', argumentIndex: 0, form: 'paren' });
+        expect(findCallContext('        lda #fn(1, ')).toEqual({ name: 'fn', argumentIndex: 1, form: 'paren' });
+        expect(findCallContext('        lda #fn(1, 2')).toEqual({ name: 'fn', argumentIndex: 1, form: 'paren' });
     });
 
     it('recognises both macro call forms', () => {
-        expect(findCallContext('        #mac ')).toEqual({ name: 'mac', argumentIndex: 0 });
-        expect(findCallContext('        .mac 1, ')).toEqual({ name: 'mac', argumentIndex: 1 });
+        expect(findCallContext('        #mac ')).toEqual({ name: 'mac', argumentIndex: 0, form: 'statement' });
+        expect(findCallContext('        .mac 1, ')).toEqual({ name: 'mac', argumentIndex: 1, form: 'statement' });
     });
 
     it('recognises a macro call after a label', () => {
-        expect(findCallContext('lbl     #mac 1, ')).toEqual({ name: 'mac', argumentIndex: 1 });
-        expect(findCallContext('lbl:    .mac ')).toEqual({ name: 'mac', argumentIndex: 0 });
+        expect(findCallContext('lbl     #mac 1, ')).toEqual({ name: 'mac', argumentIndex: 1, form: 'statement' });
+        expect(findCallContext('lbl:    .mac ')).toEqual({ name: 'mac', argumentIndex: 0, form: 'statement' });
     });
 
     it('ignores commas nested inside parentheses', () => {
-        expect(findCallContext('        lda #fn(g(1, 2), ')).toEqual({ name: 'fn', argumentIndex: 1 });
+        expect(findCallContext('        lda #fn(g(1, 2), ')).toEqual({ name: 'fn', argumentIndex: 1, form: 'paren' });
     });
 
     it('uses the innermost unclosed call', () => {
-        expect(findCallContext('        lda #fn(1, g(')).toEqual({ name: 'g', argumentIndex: 0 });
+        expect(findCallContext('        lda #fn(1, g(')).toEqual({ name: 'g', argumentIndex: 0, form: 'paren' });
     });
 
     it('returns null once the call is closed', () => {
@@ -96,7 +97,7 @@ describe('getSignatureHelp', () => {
 
 describe('a macro call as it is typed', () => {
     // What the popup does keystroke by keystroke, which is the point of it.
-    const SOURCE = 'PTR_SET .macro ptr, val\n        lda #<val\n        .endm';
+    const SOURCE = 'STORE16 .macro dest, value\n        lda #<value\n        .endm';
 
     function typed(text: string) {
         const doc = createDoc(SOURCE, 'file:///typed.asm');
@@ -109,25 +110,68 @@ describe('a macro call as it is typed', () => {
     }
 
     it('says nothing until the name is finished', () => {
-        expect(typed('        #PTR_SET')).toBeNull();
+        expect(typed('        #STORE16')).toBeNull();
     });
 
     it('points at the first parameter as soon as one is expected', () => {
-        expect(typed('        #PTR_SET ')).toEqual({ label: 'PTR_SET ptr, val', bold: 'ptr' });
+        expect(typed('        #STORE16 ')).toEqual({ label: 'STORE16 dest, value', bold: 'dest' });
     });
 
     it('stays on it while that argument is being written', () => {
-        expect(typed('        #PTR_SET $c000')?.bold).toBe('ptr');
+        expect(typed('        #STORE16 $c000')?.bold).toBe('dest');
     });
 
     it('moves on at the comma', () => {
-        // 64tass separates macro arguments with commas - `#PTR_SET $c000 1234`
+        // 64tass separates macro arguments with commas - `#STORE16 $c000 1234`
         // does not assemble ("2nd argument is missing").
-        expect(typed('        #PTR_SET $c000,')?.bold).toBe('val');
-        expect(typed('        #PTR_SET $c000, 1234')?.bold).toBe('val');
+        expect(typed('        #STORE16 $c000,')?.bold).toBe('value');
+        expect(typed('        #STORE16 $c000, 1234')?.bold).toBe('value');
     });
 
     it('keeps pointing at the last one past the end', () => {
-        expect(typed('        #PTR_SET $c000, 1234, 5')?.bold).toBe('val');
+        expect(typed('        #STORE16 $c000, 1234, 5')?.bold).toBe('value');
+    });
+});
+
+describe('a function called as a statement', () => {
+    // Every one of these assembles (verified): a .function may be invoked with
+    // `#name`, `.name`, bare, or as `name(...)` in an expression. The popup
+    // follows the call being written, not the declaration - showing parentheses
+    // for a line that has none describes something the user is not typing.
+    const SOURCE = 'SETPTR  .function ptr, val\n        lda #<val\n        .endf';
+
+    function typed(text: string) {
+        const doc = createDoc(SOURCE, 'file:///fn.asm');
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, parseDocument(doc)]]);
+        const help = getSignatureHelp(text, documentIndex);
+        if (!help) return null;
+        const signature = help.signatures[0];
+        const [start, end] = signature.parameters![help.activeParameter!].label as [number, number];
+        return { label: signature.label, bold: signature.label.slice(start, end) };
+    }
+
+    it('drops the parentheses when the call has none', () => {
+        expect(typed('        #SETPTR ')).toEqual({ label: 'SETPTR ptr, val', bold: 'ptr' });
+        expect(typed('        .SETPTR ')?.label).toBe('SETPTR ptr, val');
+    });
+
+    it('follows a bare call, which is how whole projects write them', () => {
+        expect(typed('        SETPTR ')).toEqual({ label: 'SETPTR ptr, val', bold: 'ptr' });
+        expect(typed('        SETPTR $c000, ')?.bold).toBe('val');
+    });
+
+    it('keeps the parentheses for a call that has them', () => {
+        expect(typed('        lda #SETPTR(')).toEqual({ label: 'SETPTR(ptr, val)', bold: 'ptr' });
+        expect(typed('        lda #SETPTR($c000, ')?.bold).toBe('val');
+    });
+
+    it('says nothing on the definition line itself', () => {
+        expect(typed('SETPTR  .function ptr, val')).toBeNull();
+    });
+
+    it('says nothing after an instruction', () => {
+        // `nop ` is an instruction whatever a macro of that name might say.
+        expect(typed('        nop ')).toBeNull();
+        expect(typed('        lda #1 ')).toBeNull();
     });
 });

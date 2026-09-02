@@ -153,7 +153,11 @@ function signatureOf(symbol: LabelDefinition, documentIndex: Map<string, Documen
     const path = symbol.scopePath ? `${symbol.scopePath}.${symbol.name}` : symbol.name;
     const parameters = documentIndex.get(symbol.uri)?.parameterTextAtScope.get(path);
     if (!parameters || parameters.length === 0) return null;
-    return callSignature(symbol.originalName, parameters, symbol.kind).label;
+    // No call site to follow here, so the canonical form for each: a function is
+    // written `f(a, b)` in an expression, a macro `#mac a, b`. Either may also be
+    // called the other way, which is the signature popup's business, not this.
+    return callSignature(symbol.originalName, parameters,
+        symbol.kind === 'function' ? 'paren' : 'statement').label;
 }
 
 /**

@@ -20,9 +20,10 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
 - **Workspace symbol search** (Ctrl+T) by fuzzy name, including files you have
   not opened.
 - **Completion** for mostly everything.
-- **Signature help** while typing a macro or function call — `#mac a, b`,
-  `.mac a, b` and `fn(a, b)` — with the parameter you are on in bold, from the
-  space after the name onwards.
+- **Signature help** while typing a call, in any of the four forms 64tass takes —
+  `#mac a, b`, `.mac a, b`, a bare `mac a, b` and `fn(a, b)` — with the parameter
+  you are on in bold, from the space after the name onwards. The popup follows the
+  form you are writing, so a `.function` invoked as a statement is shown as one.
 - **Hover** on symbols and mnemonics, on a block closer like `.pend` to see which
   scope it ends, and on a macro or function to see the parameters it takes.
 - **Document links** on the quoted paths of `.include`, `.binclude` and

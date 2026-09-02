@@ -205,7 +205,7 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
         // reads as the call is written, and the active parameter advances.
         const uri = server.uriOf('macro.asm');
         await server.open('macro.asm',
-            'PTR_SET .macro ptr, val\n        lda #<val\n        .endm\n        #PTR_SET $c000, 1234\n');
+            'STORE16 .macro dest, value\n        lda #<value\n        .endm\n        #STORE16 $c000, 1234\n');
 
         const at = async (character: number) => {
             const help = await server.connection.sendRequest('textDocument/signatureHelp', {
@@ -217,8 +217,8 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
             return { label: signature.label, bold: signature.label.slice(start, end) };
         };
 
-        expect(await at(17)).toEqual({ label: 'PTR_SET ptr, val', bold: 'ptr' });   // "#PTR_SET "
-        expect(await at(24)).toEqual({ label: 'PTR_SET ptr, val', bold: 'val' });   // past the comma
+        expect(await at(17)).toEqual({ label: 'STORE16 dest, value', bold: 'dest' });   // "#STORE16 "
+        expect(await at(24)).toEqual({ label: 'STORE16 dest, value', bold: 'value' });   // past the comma
     }, 20000);
 
     it('offers a quick fix for a misspelled symbol', async () => {

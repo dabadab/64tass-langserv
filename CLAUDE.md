@@ -302,8 +302,15 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   `ParameterInformation.label` carries OFFSETS into the signature, not the
   parameter's text: a substring match would find `val` inside `value` and would
   always bold the first of two same-named parameters. And ' ' is a signature-help
-  trigger character, or a macro call would show nothing until its first comma -
-  `#PTR_SET ` is exactly when the first parameter wants pointing at.
+  trigger character, or a call would show nothing until its first comma - the
+  space after the name is exactly when the first parameter wants pointing at.
+  Which FORM to show is decided by the call being typed (`CallContext.form`),
+  never by the declaration: all four ways of calling assemble for a `.function`
+  as much as for a `.macro` (verified) - `#name a, b`, `.name a, b`, a bare
+  `name a, b`, and `name(a, b)` in an expression - and whole projects write a
+  `.function` as a bare statement. Hover has no call site to follow and so shows
+  each in its canonical form. The bare form filters out `OPCODES`, since the
+  assembler reads `nop ` as an instruction whatever a macro of that name says.
 - **Documentation comments**: `getBlockComment` (`utils.ts`) takes the same-line
   comment, else a run of comment-only lines directly above, else one directly
   below, and `LabelDefinition.comment` carries it to hover and completion. It
