@@ -104,3 +104,43 @@ describe('findSymbolOccurrences', () => {
         expect(all.filter(o => o.isDefinition)).toHaveLength(1);
     });
 });
+
+describe('a dotted reference is not a macro call', () => {
+    // Shape of a real bug: a top-level block named `setup`, and inside it a call
+    // to a `setup` belonging to another scope. The `.setup` of `helper.setup` was
+    // being read as a macro call, resolved as a bare name up the scope chain, and
+    // so counted as a use of the top-level block - which rename then rewrote.
+    const SOURCE = [
+        'setup   .block',            // 0: the top-level scope
+        '        jsr helper.setup',  // 1: a different symbol entirely
+        '        .bend',             // 2
+        'helper  .proc',             // 3
+        'setup:',                    // 4: helper's own
+        '        rts',               // 5
+        '        .pend',             // 6
+    ].join('\n');
+    const FILES = [{ source: SOURCE, uri: 'file:///dotted.asm' }];
+
+    function topLevelSetup() {
+        const { documentIndex, getText } = withText(FILES);
+        const symbol = findSymbolInfo('setup', 'file:///dotted.asm', 0, documentIndex)!;
+        expect(symbol.range.start.line).toBe(0);   // the block, not helper's label
+        return { symbol, documentIndex, getText };
+    }
+
+    it('does not report the tail of a dotted name as a reference', () => {
+        const { symbol, documentIndex, getText } = topLevelSetup();
+        const refs = findReferences(symbol, documentIndex, getText, false, false);
+        expect(refs.map(r => r.range.start.line)).toEqual([]);
+    });
+
+    it('still finds a genuine macro call', () => {
+        const { documentIndex, getText } = withText([{
+            source: 'shout   .macro\n        .endm\n        .shout\n',
+            uri: 'file:///macro.asm',
+        }]);
+        const symbol = findSymbolInfo('shout', 'file:///macro.asm', 0, documentIndex)!;
+        const refs = findReferences(symbol, documentIndex, getText, false, false);
+        expect(refs.map(r => r.range.start.line)).toEqual([2]);
+    });
+});

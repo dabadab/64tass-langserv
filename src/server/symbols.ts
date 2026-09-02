@@ -644,9 +644,15 @@ export function findSymbolOccurrences(
                         ), false);
                     }
                 } else {
-                    // Macro-call style reference: ".name" (leading dot, single segment)
+                    // Macro-call style reference: ".name" (leading dot, single segment).
+                    // The dot must not follow an identifier character: in
+                    // `jsr scope.name` the `.name` is the tail of a dotted
+                    // reference, not a call. Treating it as one made a top-level
+                    // `name` match, which find-all-references reported and rename
+                    // rewrote. Same guard diagnostics.ts applies to its own
+                    // macro-call scan.
                     // Safe: symbol name from user file, sanitized via escapeRegex()
-                    const macroCallPattern = new RegExp(`\\.${escapedName}\\b(?!\\.[a-zA-Z_])`, 'g');
+                    const macroCallPattern = new RegExp(`(?<![a-zA-Z0-9_])\\.${escapedName}\\b(?!\\.[a-zA-Z_])`, 'g');
                     let macroMatch;
                     while ((macroMatch = macroCallPattern.exec(code)) !== null) {
                         const startCol = macroMatch.index + 1; // skip the leading dot

@@ -1,1 +1,3 @@
+2. "sty $c000,x" is accepted as valid even though it's not
 
+3. for functions and macros a float showing the parameters would be nice

@@ -302,3 +302,29 @@ describe('computeRenameEdits - invalid new names', () => {
         expect(codeChanges(edit, docs[0].uri)).toHaveLength(2);
     });
 });
+
+describe('computeRenameEdits - a same-named symbol behind a dot', () => {
+    // The dangerous half of the dotted-reference bug: `.setup` inside
+    // `helper.setup` read as a macro call, resolved as a bare name up the scope
+    // chain to the top-level block, and got rewritten with it.
+    const source = [
+        'setup   .block',
+        '        jsr helper.setup',
+        '        .bend',
+        'helper  .proc',
+        'setup:',
+        '        rts',
+        '        .pend',
+    ].join('\n');
+
+    it('renaming the top-level scope leaves the dotted member alone', () => {
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///dotted.asm' });
+        const symbol = findSymbolInfo('setup', docs[0].uri, 0, documentIndex)!;
+        expect(symbol.range.start.line).toBe(0);
+
+        const edits = codeChanges(computeRenameEdits(symbol, 'boot', documentIndex, textLookup(docs), false), docs[0].uri);
+
+        // Only its own definition: nothing on the line that says helper.setup.
+        expect(edits.map(e => e.range.start.line)).toEqual([0]);
+    });
+});
