@@ -311,6 +311,20 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   `.function` as a bare statement. Hover has no call site to follow and so shows
   each in its canonical form. The bare form filters out `OPCODES`, since the
   assembler reads `nop ` as an instruction whatever a macro of that name says.
+- **Call arguments**: the arguments of a macro or function call are expressions in
+  the CALLER's scope, and `callArguments` in `diagnostics.ts` feeds them through
+  the ordinary undefined-symbol scan - `#SETPTR qwe,asd` reports both names, which
+  is what the assembler does. All four call forms are covered, the bare one being
+  recognised by the first word RESOLVING to a macro or function, since nothing
+  else tells it apart from a label plus an instruction.
+  Arguments the callee never reads are blanked out first (spaces, so columns stay
+  exact - the `stripStrings` trick): 64tass works an argument out only where the
+  body asks for it, so passing an undefined name to an unused parameter is no
+  error at all, and neither is passing one to a macro that takes its arguments
+  positionally as `\1` (both verified). That is what
+  `DocumentIndex.usedParametersAtScope` is for - the declared parameters the body
+  actually mentions, collected by the same body capture that finds a macro's
+  sub-labels, now run for `.function` too.
 - **Documentation comments**: `getBlockComment` (`utils.ts`) takes the same-line
   comment, else a run of comment-only lines directly above, else one directly
   below, and `LabelDefinition.comment` carries it to hover and completion. It

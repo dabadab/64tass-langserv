@@ -1332,3 +1332,58 @@ describe('symbols from another program', () => {
             .filter(d => d.code === 'inactive-code')).toEqual([]);
     });
 });
+
+describe('symbols passed to a macro or function', () => {
+    // Every expectation checked against the assembler: `#SETPTR qwe,asd` reports
+    // both names undefined, and an argument going to a parameter the body never
+    // reads reports nothing at all - 64tass works an argument out only where it
+    // is used.
+    const DEFS = [
+        '        *= $1000',
+        'SETPTR  .function ptr, val',
+        '        lda #<val',
+        '        sta ptr',
+        '.endf',
+        'HALF    .macro kept, ignored',
+        '        lda #kept',
+        '        .endm',
+        'known   = $10',
+    ].join('\n');
+
+    // Undefined symbols are warnings, so this looks at every diagnostic.
+    const on = (call: string) => getDiagnostics(`${DEFS}\n${call}`)
+        .filter(d => d.code === 'undefined-symbol')
+        .map(d => d.message);
+
+    it('reports an undefined argument', () => {
+        expect(on('        #SETPTR qwe,asd')).toEqual([
+            "Undefined symbol 'qwe'", "Undefined symbol 'asd'",
+        ]);
+    });
+
+    it('points at the argument itself', () => {
+        const [first] = getDiagnostics(`${DEFS}\n        #SETPTR qwe,asd`).filter(d => d.code === 'undefined-symbol');
+        expect(first.range.start.character).toBe('        #SETPTR '.length);
+    });
+
+    it('covers every call form', () => {
+        expect(on('        .SETPTR qwe, known')).toEqual(["Undefined symbol 'qwe'"]);
+        expect(on('        SETPTR qwe, known')).toEqual(["Undefined symbol 'qwe'"]);
+        expect(on('        lda #SETPTR(qwe, known)')).toEqual(["Undefined symbol 'qwe'"]);
+    });
+
+    it('accepts arguments that do resolve', () => {
+        expect(on('        #SETPTR known, known')).toEqual([]);
+    });
+
+    it('says nothing about an argument the body never reads', () => {
+        // `ignored` is declared and unused, so 64tass never evaluates it.
+        expect(on('        #HALF qwe, asd')).toEqual(["Undefined symbol 'qwe'"]);
+    });
+
+    it('says nothing when the callee takes its arguments positionally', () => {
+        // A macro with no declared parameters uses `\1`, which is text, not a value.
+        const source = 'SETL    .macro\n\\1      = \\2\n        .endm\n        #SETL newthing, 5';
+        expect(getDiagnostics(source).filter(d => d.code === 'undefined-symbol')).toEqual([]);
+    });
+});

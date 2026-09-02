@@ -21,7 +21,7 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN
 } from './constants';
-import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys } from './utils';
+import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys, splitTopLevel } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { blockDirectivesOn } from './blocks';
 import { addressExpressionOf, findAddressingProblem, immediateBytesFor } from './operands';
@@ -332,6 +332,50 @@ export interface ValidateOptions {
     unit?: ReadonlySet<string>;
 }
 
+/**
+ * The arguments of a call, with the ones the callee never reads blanked out.
+ *
+ * 64tass works an argument out only where the body asks for it: passing an
+ * undefined name to a parameter nothing reads is no error (verified, for a
+ * `.macro` and a `.function` alike), and neither is passing one to a macro that
+ * takes its arguments positionally as `\1`. Blanking keeps every column right,
+ * the same trick stripStrings uses, so what survives can go through the ordinary
+ * symbol scan.
+ *
+ * Null when the line is not a call this can account for.
+ */
+function callArguments(
+    code: string,
+    uri: string,
+    lineNum: number,
+    documentIndex: Map<string, DocumentIndex>,
+    caseSensitive: boolean,
+    unit?: ReadonlySet<string>
+): { text: string; start: number } | null {
+    // `#name args` / `.name args`, or a bare `name args` - all four call forms
+    // assemble for either kind (verified). A leading label is allowed on the
+    // prefixed forms only; bare, the first word IS the callee.
+    const call = code.match(/^(\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s*:?\s+)?[#.]([a-zA-Z_][a-zA-Z0-9_]*)\s+)(\S[\s\S]*)$/)
+        ?? code.match(/^(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+)(\S[\s\S]*)$/);
+    if (!call) return null;
+
+    const callee = findSymbolInfo(call[2], uri, lineNum, documentIndex, caseSensitive, true, unit);
+    if (!callee || (callee.kind !== 'macro' && callee.kind !== 'function')) return null;
+
+    const path = callee.scopePath ? `${callee.scopePath}.${callee.name}` : callee.name;
+    const definition = documentIndex.get(callee.uri);
+    const parameters = definition?.parametersAtScope.get(path) ?? [];
+    const used = new Set(definition?.usedParametersAtScope.get(path) ?? []);
+
+    const kept: string[] = [];
+    splitTopLevel(call[3]).forEach((argument, i) => {
+        const evaluated = i < parameters.length && used.has(parameters[i]);
+        kept.push(evaluated ? argument : ' '.repeat(argument.length));
+    });
+    // splitTopLevel drops the commas; they are separators, never symbols.
+    return { text: kept.join(' '), start: call[1].length };
+}
+
 export function validateDocument(
     document: TextDocument,
     documentIndex: Map<string, DocumentIndex>,
@@ -626,6 +670,8 @@ export function validateDocument(
         // Look for symbols after data directives like .text, .byte, .word, etc.
         const dataDirectiveMatch = codeForRefs.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|char|dint|lint|sint)\s+(.+)$/i);
 
+        const callArgs = callArguments(codeForRefs, document.uri, lineNum, documentIndex, caseSensitive, unit);
+
         let operand: string | null = null;
         let operandStart = 0;
 
@@ -683,6 +729,11 @@ export function validateDocument(
         } else if (dataDirectiveMatch) {
             operand = dataDirectiveMatch[2];
             operandStart = dataDirectiveMatch[0].length - operand.length;
+        } else if (callArgs !== null) {
+            // A macro or function call: its arguments are expressions in the
+            // CALLER's scope, so they are checked like any other operand.
+            operand = callArgs.text;
+            operandStart = callArgs.start;
         } else if (assignmentRhs) {
             // "foo = undef + 1": the right-hand side is an expression whose symbols
             // should be checked, but there is no opcode or directive to anchor on.

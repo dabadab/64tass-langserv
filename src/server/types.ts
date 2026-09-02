@@ -59,6 +59,11 @@ export interface DocumentIndex {
     // the declaration; matching still goes through the normalized names. Kept as
     // a list rather than one string so signature help can point at one of them.
     parameterTextAtScope: Map<string, string[]>;
+    // Which of those parameters the body actually mentions. 64tass evaluates a
+    // call's argument only where the body reads it, so passing an undefined name
+    // to a parameter nothing uses is not an error (verified) - and the argument
+    // check has to know the difference.
+    usedParametersAtScope: Map<string, string[]>;
     // Maps macro name to list of sub-labels it defines in its body
     macroSubLabels: Map<string, string[]>;
     // Maps a label to the scope its members come from: the macro of a

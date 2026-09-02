@@ -74,6 +74,7 @@ export function parseDocument(
     const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null; withScopes: string[] }> = new Map();
     const parametersAtScope: Map<string, string[]> = new Map();
     const parameterTextAtScope: Map<string, string[]> = new Map();
+    const usedParametersAtScope: Map<string, string[]> = new Map();
     const macroSubLabels: Map<string, string[]> = new Map();
     const labelDefinedByMacro: Map<string, string> = new Map();
     const functionReturnScope: Map<string, string> = new Map();
@@ -92,7 +93,7 @@ export function parseDocument(
     // written and resolved at query time, since the target may live in another file.
     const withScopes: string[] = [];
     // Track macro bodies for extracting sub-labels: { name, startLine }
-    let currentMacroCapture: { name: string; startLine: number } | null = null;
+    let currentMacroCapture: { name: string; startLine: number; scopePath: string } | null = null;
 
     // Helper to normalize names based on case sensitivity
     function normalizeName(name: string): string {
@@ -291,16 +292,32 @@ export function parseDocument(
             if (index < 0) continue;
             const open = scopeStack[index].directive;
 
-            // Closing a macro: collect the sub-labels its body defines (normalized)
-            if (open === '.macro' && currentMacroCapture) {
+            // Closing a macro or function: what its body defines, and which of its
+            // parameters it actually mentions.
+            if ((open === '.macro' || open === '.function') && currentMacroCapture) {
                 const subLabels: string[] = [];
+                const mentioned = new Set<string>();
                 for (let i = currentMacroCapture.startLine; i < lineNum; i++) {
                     // Look for label definitions at start of line: "name" or "name =" or "name .byte", etc.
                     const labelMatch = lines[i].match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:$|:|=|\.)/);
-                    if (labelMatch) subLabels.push(normalizeName(labelMatch[1]));
+                    if (labelMatch && open === '.macro') subLabels.push(normalizeName(labelMatch[1]));
+
+                    // Every identifier the body uses, so a caller can be told which
+                    // arguments are evaluated: 64tass works an argument out only
+                    // where the body asks for it, and passing an undefined name to
+                    // a parameter nothing reads is no error at all (verified).
+                    const code = stripStrings(parseLineStructure(lines[i]).code);
+                    for (const word of code.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) ?? []) {
+                        mentioned.add(normalizeName(word));
+                    }
                 }
                 if (subLabels.length > 0) {
                     macroSubLabels.set(currentMacroCapture.name, subLabels);
+                }
+                const declared = parametersAtScope.get(currentMacroCapture.scopePath);
+                if (declared) {
+                    usedParametersAtScope.set(
+                        currentMacroCapture.scopePath, declared.filter(name => mentioned.has(name)));
                 }
                 currentMacroCapture = null;
             }
@@ -387,9 +404,14 @@ export function parseDocument(
                     }
                 }
 
-                // Start capturing macro body to extract sub-labels
-                if (open === '.macro') {
-                    currentMacroCapture = { name: normalizeName(labelName), startLine: lineNum + 1 };
+                // Capture the body: a macro's sub-labels, and for both kinds which
+                // parameters it reads (see the closer, and usedParametersAtScope).
+                if (open === '.macro' || open === '.function') {
+                    currentMacroCapture = {
+                        name: normalizeName(labelName),
+                        startLine: lineNum + 1,
+                        scopePath: getCurrentScopePath() || normalizeName(labelName),
+                    };
                 }
 
                 // Update scope for this line after opening
@@ -860,6 +882,6 @@ export function parseDocument(
         else labelsByName.set(label.name, [label]);
     }
 
-    return { labels, labelsByName, scopeAtLine, parametersAtScope, parameterTextAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu, cpuExplicit: declaredCpu !== null || cpuExplicit,
+    return { labels, labelsByName, scopeAtLine, parametersAtScope, parameterTextAtScope, usedParametersAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu, cpuExplicit: declaredCpu !== null || cpuExplicit,
         unresolvedIncludes };
 }
