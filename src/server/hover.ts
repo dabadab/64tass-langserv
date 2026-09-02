@@ -1,6 +1,6 @@
 import { Hover, MarkupKind } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { DocumentIndex } from './types';
+import { DocumentIndex, LabelDefinition } from './types';
 import { findSymbolInfo } from './symbols';
 import { opcodesForCpu, DEFAULT_CPU, CLOSING_DIRECTIVES } from './constants';
 import { addressingModesFor } from './addressing';
@@ -126,6 +126,8 @@ export function symbolHover(
 
     let content = `**${symbol.originalName}**`;
     if (symbol.scopePath) content += ` *(in ${symbol.scopePath})*`;
+    const signature = signatureOf(symbol, documentIndex);
+    if (signature) content += `\n\n\`${signature}\``;
     if (symbol.comment) content += `\n\n\`\`\`text\n${symbol.comment}\n\`\`\``;
     if (symbol.value) {
         const numValue = parseNumericValue(symbol.value);
@@ -136,6 +138,23 @@ export function symbolHover(
     }
 
     return { contents: { kind: MarkupKind.Markdown, value: content } };
+}
+
+/**
+ * How a macro or function is called, from the parameters it declares.
+ *
+ * Written the way the thing is actually invoked - `fn(a, b)` for a function,
+ * `mac a, b` for a macro, which 64tass calls as `#mac 1, 2` - and with the
+ * parameters as the source declares them, so a `: type` or `= default` shows.
+ */
+function signatureOf(symbol: LabelDefinition, documentIndex: Map<string, DocumentIndex>): string | null {
+    if (symbol.kind !== 'macro' && symbol.kind !== 'function') return null;
+    const path = symbol.scopePath ? `${symbol.scopePath}.${symbol.name}` : symbol.name;
+    const parameters = documentIndex.get(symbol.uri)?.parameterTextAtScope.get(path);
+    if (!parameters) return null;
+    return symbol.kind === 'function'
+        ? `${symbol.originalName}(${parameters})`
+        : `${symbol.originalName} ${parameters}`;
 }
 
 /**

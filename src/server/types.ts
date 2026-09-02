@@ -54,6 +54,10 @@ export interface DocumentIndex {
     scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null; withScopes: string[] }>;
     // Maps scope path to list of parameter names (for .function and .macro)
     parametersAtScope: Map<string, string[]>;
+    // The same parameters as WRITTEN, keeping the casing and any `: type` or
+    // `= default` the names above are stripped of. Hover shows the declaration;
+    // matching still goes through the normalized names.
+    parameterTextAtScope: Map<string, string>;
     // Maps macro name to list of sub-labels it defines in its body
     macroSubLabels: Map<string, string[]>;
     // Maps a label to the scope its members come from: the macro of a

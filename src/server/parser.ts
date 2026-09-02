@@ -73,6 +73,7 @@ export function parseDocument(
     const labels: LabelDefinition[] = [];
     const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null; withScopes: string[] }> = new Map();
     const parametersAtScope: Map<string, string[]> = new Map();
+    const parameterTextAtScope: Map<string, string> = new Map();
     const macroSubLabels: Map<string, string[]> = new Map();
     const labelDefinedByMacro: Map<string, string> = new Map();
     const functionReturnScope: Map<string, string> = new Map();
@@ -373,12 +374,16 @@ export function parseDocument(
                     const newScopePath = getCurrentScopePath() || normalizeName(labelName);
                     // A .function parameter may carry a `: type` and an `= default`,
                     // and a default may itself contain commas.
+                    const declared = splitTopLevel(paramsStr).map(part => part.trim()).filter(part => part !== '');
                     const params = splitTopLevel(paramsStr)
                         .map(parameterName)
                         .filter((name): name is string => name !== null)
                         .map(name => normalizeName(name));
                     if (params.length > 0) {
                         parametersAtScope.set(newScopePath, params);
+                        // Kept as written, for hover: the names above are lowercased
+                        // and stripped of their type and default.
+                        parameterTextAtScope.set(newScopePath, declared.join(', '));
                     }
                 }
 
@@ -855,6 +860,6 @@ export function parseDocument(
         else labelsByName.set(label.name, [label]);
     }
 
-    return { labels, labelsByName, scopeAtLine, parametersAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu, cpuExplicit: declaredCpu !== null || cpuExplicit,
+    return { labels, labelsByName, scopeAtLine, parametersAtScope, parameterTextAtScope, macroSubLabels, labelDefinedByMacro, functionReturnScope, structInstances, includes, includeScopes, caseSensitive, cpu: effectiveCpu, cpuExplicit: declaredCpu !== null || cpuExplicit,
         unresolvedIncludes };
 }

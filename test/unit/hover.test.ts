@@ -206,3 +206,52 @@ describe('closerHover', () => {
         expect(hoverOn(source, '.pend', 2)).toContain('Closes **myproc**');
     });
 });
+
+describe('parameters on a macro or function', () => {
+    // The source below assembles (verified), types, defaults and all.
+    const SOURCE = [
+        'math    .block',
+        'MUL8    .function a, b: int, round = 1',
+        '        .endf a * b + round',
+        '        .bend',
+        'Shout   .macro Text, times',
+        '        .byte times',
+        '        .endm',
+        'plain   .macro',
+        '        .endm',
+        'counter = 5',
+        '        lda #math.MUL8(2, 3)',
+    ].join('\n');
+
+    function hoverOn(word: string, line = 10) {
+        const { documentIndex, docs } = buildIndex({ source: SOURCE, uri: 'file:///params.asm' });
+        const hover = buildHover(word, docs[0], line, documentIndex, false, '6502i');
+        return hover === null ? null : String((hover.contents as { value: string }).value);
+    }
+
+    it('shows a function call the way it is written, types and defaults included', () => {
+        expect(hoverOn('math.MUL8')).toContain('`MUL8(a, b: int, round = 1)`');
+    });
+
+    it('shows a macro without parentheses, which is how 64tass calls one', () => {
+        expect(hoverOn('Shout')).toContain('`Shout Text, times`');
+    });
+
+    it('keeps the casing the declaration used', () => {
+        // parametersAtScope normalizes for matching; this comes from the raw text.
+        expect(hoverOn('Shout')).toContain('Text');
+    });
+
+    it('adds nothing for a macro that takes no parameters', () => {
+        expect(hoverOn('plain')).toBe('**plain**');
+    });
+
+    it('leaves an ordinary symbol as it was', () => {
+        expect(hoverOn('counter')).not.toContain('(');
+    });
+
+    it('answers at a call site as well as at the definition', () => {
+        // Same symbol either way - the signature comes from the definition.
+        expect(hoverOn('math.MUL8', 10)).toContain('MUL8(a, b: int, round = 1)');
+    });
+});
