@@ -8,6 +8,7 @@ import { opcodeDoc } from './opcodeDocs';
 import { cyclesFor, hasCycleData, formatCycles, CycleVariance } from './cycles';
 import { parseNumericValue, formatNumericValue, stripStrings, parseLineStructure } from './utils';
 import { computeFoldingRanges } from './folding';
+import { callSignature } from './signatureHelp';
 import { pragmaHover } from './pragmas';
 import { DIRECTIVE_DOCS } from './directiveDocs';
 
@@ -151,10 +152,8 @@ function signatureOf(symbol: LabelDefinition, documentIndex: Map<string, Documen
     if (symbol.kind !== 'macro' && symbol.kind !== 'function') return null;
     const path = symbol.scopePath ? `${symbol.scopePath}.${symbol.name}` : symbol.name;
     const parameters = documentIndex.get(symbol.uri)?.parameterTextAtScope.get(path);
-    if (!parameters) return null;
-    return symbol.kind === 'function'
-        ? `${symbol.originalName}(${parameters})`
-        : `${symbol.originalName} ${parameters}`;
+    if (!parameters || parameters.length === 0) return null;
+    return callSignature(symbol.originalName, parameters, symbol.kind).label;
 }
 
 /**

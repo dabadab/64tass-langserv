@@ -288,14 +288,22 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   type's member. A member the type does not declare is still reported, matching the
   assembler.
 - **Document indexing**: `DocumentIndex` stores labels, scope info, parameters, macro sub-labels; `.include` files are recursively indexed
-- **Macro and function signatures**: hover shows how the thing is called, from
+- **Macro and function signatures**: `callSignature` in `signatureHelp.ts` builds
+  the one form both hover and the signature popup show, from
   `DocumentIndex.parameterTextAtScope` - the parameters exactly as the source
   declares them, casing, `: type` and `= default` included. That is a second map
   beside `parametersAtScope`, which normalizes names for MATCHING and so cannot
   answer this. Written the way each is invoked: `fn(a, b)` for a function,
-  `mac a, b` for a macro, since 64tass calls one as `#mac 1, 2`. Both are keyed by
-  full scope path, so a nested macro's parameters are found by
-  `<scopePath>.<name>` in the index of the DEFINING document.
+  `mac a, b` for a macro, since 64tass calls one as `#mac 1, 2` - and it does NOT
+  take arguments separated by spaces (verified: `#mac 1 2` is "2nd argument is
+  missing"). Both maps are keyed by full scope path, so a nested macro's
+  parameters are found by `<scopePath>.<name>` in the index of the DEFINING
+  document.
+  `ParameterInformation.label` carries OFFSETS into the signature, not the
+  parameter's text: a substring match would find `val` inside `value` and would
+  always bold the first of two same-named parameters. And ' ' is a signature-help
+  trigger character, or a macro call would show nothing until its first comma -
+  `#PTR_SET ` is exactly when the first parameter wants pointing at.
 - **Documentation comments**: `getBlockComment` (`utils.ts`) takes the same-line
   comment, else a run of comment-only lines directly above, else one directly
   below, and `LabelDefinition.comment` carries it to hover and completion. It

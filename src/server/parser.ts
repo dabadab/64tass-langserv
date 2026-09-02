@@ -73,7 +73,7 @@ export function parseDocument(
     const labels: LabelDefinition[] = [];
     const scopeAtLine: Map<number, { scopePath: string | null; localScope: string | null; withScopes: string[] }> = new Map();
     const parametersAtScope: Map<string, string[]> = new Map();
-    const parameterTextAtScope: Map<string, string> = new Map();
+    const parameterTextAtScope: Map<string, string[]> = new Map();
     const macroSubLabels: Map<string, string[]> = new Map();
     const labelDefinedByMacro: Map<string, string> = new Map();
     const functionReturnScope: Map<string, string> = new Map();
@@ -383,7 +383,7 @@ export function parseDocument(
                         parametersAtScope.set(newScopePath, params);
                         // Kept as written, for hover: the names above are lowercased
                         // and stripped of their type and default.
-                        parameterTextAtScope.set(newScopePath, declared.join(', '));
+                        parameterTextAtScope.set(newScopePath, declared);
                     }
                 }
 

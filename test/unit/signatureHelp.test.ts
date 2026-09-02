@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { findCallContext, getSignatureHelp } from '../../src/server/signatureHelp';
-import { buildIndex } from '../helpers/doc';
+import { buildIndex, createDoc } from '../helpers/doc';
+import { parseDocument } from '../../src/server/parser';
+import { DocumentIndex } from '../../src/server/types';
 
 // All three call forms are accepted by the assembler (verified)
 const DEFS = 'mac .macro a, b\n.endm\nfn .function x, y\n.endf\nnoargs .macro\n.endm';
@@ -49,9 +51,17 @@ describe('findCallContext', () => {
 describe('getSignatureHelp', () => {
     it('reports the signature and active parameter for a function', () => {
         const help = getSignatureHelp('        lda #fn(', index())!;
-        expect(help.signatures[0].label).toBe('fn(x, y)');
-        expect(help.signatures[0].parameters!.map(p => p.label)).toEqual(['x', 'y']);
+        const signature = help.signatures[0];
+        expect(signature.label).toBe('fn(x, y)');
         expect(help.activeParameter).toBe(0);
+
+        // Offsets into the label, not substrings: a substring match finds `val`
+        // inside `value`, and always highlights the first of two same-named ones.
+        const sliced = signature.parameters!.map(p => {
+            const [start, end] = p.label as [number, number];
+            return signature.label.slice(start, end);
+        });
+        expect(sliced).toEqual(['x', 'y']);
     });
 
     it('advances the active parameter past a comma', () => {
@@ -63,8 +73,11 @@ describe('getSignatureHelp', () => {
         expect(getSignatureHelp('        lda #fn(1, 2, 3', index())!.activeParameter).toBe(1);
     });
 
-    it('works for macro calls', () => {
-        expect(getSignatureHelp('        #mac ', index())!.signatures[0].label).toBe('mac(a, b)');
+    it('works for macro calls, written the way one is called', () => {
+        // 64tass takes `#mac 1, 2` - no parentheses, and commas between the
+        // arguments (verified: `#mac 1 2` is "2nd argument is missing").
+        expect(getSignatureHelp('        #mac ', index())!.signatures[0].label).toBe('mac a, b');
+        expect(getSignatureHelp('        #mac ', index())!.activeParameter).toBe(0);
         expect(getSignatureHelp('        .mac 1, ', index())!.activeParameter).toBe(1);
     });
 
@@ -78,5 +91,43 @@ describe('getSignatureHelp', () => {
 
     it('matches case-insensitively by default', () => {
         expect(getSignatureHelp('        lda #FN(', index())!.signatures[0].label).toBe('fn(x, y)');
+    });
+});
+
+describe('a macro call as it is typed', () => {
+    // What the popup does keystroke by keystroke, which is the point of it.
+    const SOURCE = 'PTR_SET .macro ptr, val\n        lda #<val\n        .endm';
+
+    function typed(text: string) {
+        const doc = createDoc(SOURCE, 'file:///typed.asm');
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, parseDocument(doc)]]);
+        const help = getSignatureHelp(text, documentIndex);
+        if (!help) return null;
+        const signature = help.signatures[0];
+        const [start, end] = signature.parameters![help.activeParameter!].label as [number, number];
+        return { label: signature.label, bold: signature.label.slice(start, end) };
+    }
+
+    it('says nothing until the name is finished', () => {
+        expect(typed('        #PTR_SET')).toBeNull();
+    });
+
+    it('points at the first parameter as soon as one is expected', () => {
+        expect(typed('        #PTR_SET ')).toEqual({ label: 'PTR_SET ptr, val', bold: 'ptr' });
+    });
+
+    it('stays on it while that argument is being written', () => {
+        expect(typed('        #PTR_SET $c000')?.bold).toBe('ptr');
+    });
+
+    it('moves on at the comma', () => {
+        // 64tass separates macro arguments with commas - `#PTR_SET $c000 1234`
+        // does not assemble ("2nd argument is missing").
+        expect(typed('        #PTR_SET $c000,')?.bold).toBe('val');
+        expect(typed('        #PTR_SET $c000, 1234')?.bold).toBe('val');
+    });
+
+    it('keeps pointing at the last one past the end', () => {
+        expect(typed('        #PTR_SET $c000, 1234, 5')?.bold).toBe('val');
     });
 });

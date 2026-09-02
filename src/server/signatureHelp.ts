@@ -64,6 +64,35 @@ function countArguments(args: string): number {
 }
 
 /**
+ * How a call is written, and where each parameter sits in that text.
+ *
+ * The way the thing is actually invoked: `fn(a, b)` for a function, `mac a, b`
+ * for a macro, which 64tass calls as `#mac 1, 2` - it does NOT take arguments
+ * separated by spaces (verified: `#mac 1 2` is "2nd argument is missing").
+ *
+ * The parameter positions are offsets rather than substrings because that is
+ * what makes the client bold the RIGHT one: a substring match would find `val`
+ * inside `value`, and a parameter written twice would always highlight the first.
+ */
+export function callSignature(
+    name: string,
+    parameters: readonly string[],
+    kind: 'macro' | 'function' | string
+): { label: string; parameters: ParameterInformation[] } {
+    const open = kind === 'function' ? '(' : ' ';
+    const close = kind === 'function' ? ')' : '';
+
+    let label = `${name}${open}`;
+    const marks: ParameterInformation[] = [];
+    parameters.forEach((parameter, i) => {
+        if (i > 0) label += ', ';
+        marks.push({ label: [label.length, label.length + parameter.length] });
+        label += parameter;
+    });
+    return { label: label + close, parameters: marks };
+}
+
+/**
  * Build signature help for the call under the cursor (LSP textDocument/signatureHelp).
  *
  * Parameter names come from parametersAtScope, which the parser already fills in
@@ -83,12 +112,16 @@ export function getSignatureHelp(
         const parameters = index.parametersAtScope.get(lookup);
         if (!parameters || parameters.length === 0) continue;
 
-        // Prefer the definition's own casing for the label
-        const label = index.labels.find(l => l.name === lookup)?.originalName ?? call.name;
+        // Prefer the definition's own casing for the label, and its own wording
+        // for the parameters - `parametersAtScope` has them normalized for
+        // matching, which is not what a caller wants to read.
+        const definition = index.labels.find(l => l.name === lookup);
+        const declared = index.parameterTextAtScope.get(lookup) ?? parameters;
+        const built = callSignature(definition?.originalName ?? call.name, declared, definition?.kind ?? 'macro');
 
         const signature: SignatureInformation = {
-            label: `${label}(${parameters.join(', ')})`,
-            parameters: parameters.map((p): ParameterInformation => ({ label: p }))
+            label: built.label,
+            parameters: built.parameters,
         };
 
         return {

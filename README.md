@@ -21,7 +21,8 @@ for the MOS 6502 family. Handles `.asm`, `.s`, `.inc` and `.src`.
   not opened.
 - **Completion** for mostly everything.
 - **Signature help** while typing a macro or function call — `#mac a, b`,
-  `.mac a, b` and `fn(a, b)`.
+  `.mac a, b` and `fn(a, b)` — with the parameter you are on in bold, from the
+  space after the name onwards.
 - **Hover** on symbols and mnemonics, on a block closer like `.pend` to see which
   scope it ends, and on a macro or function to see the parameters it takes.
 - **Document links** on the quoted paths of `.include`, `.binclude` and

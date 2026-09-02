@@ -383,7 +383,11 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
             workspaceSymbolProvider: true,
             documentFormattingProvider: true,
             documentRangeFormattingProvider: true,
-            signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },
+            // A space triggers too, or a macro call would show nothing until its
+            // first comma - `#PTR_SET ` is exactly when the first parameter wants
+            // pointing at. The handler answers null off a call, so the extra
+            // firings cost a lookup and show nothing.
+            signatureHelpProvider: { triggerCharacters: ['(', ',', ' '], retriggerCharacters: [',', ' '] },
             completionProvider: {
                 triggerCharacters: ['.', '"', '/']
             }
