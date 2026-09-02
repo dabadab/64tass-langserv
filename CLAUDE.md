@@ -130,6 +130,17 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   null, the same trick the unlabelled `.binclude` uses. `@` cannot occur in a user
   symbol, so it never collides. `LABEL_REQUIRED_OPENERS` lists the four the
   assembler refuses unnamed (`.proc`, `.macro`, `.function`, `.segment`)
+- **Bare word vs macro call**: a word alone on a line is a label definition until
+  a macro or function of that name exists, and then it is a CALL - verified twice
+  over: the bytes are the macro's, and `jmp <name>` is "can't get integer value of
+  macro". The parser cannot decide it (the macro is usually in an include, read
+  after the file that calls it), so it marks such labels `fromBareWord` and
+  `settleBareWords` in `indexing.ts` drops them once the whole tree is in the
+  index, rebuilding `labelsByName`. Before that, every no-argument macro call was
+  a phantom label: it polluted the outline and Ctrl+T, answered go-to-definition
+  with itself, and collided with the real macro - 44 false "Duplicate label"
+  errors in one real project, all of them calls. A colon (`name:`) still defines,
+  whatever exists.
 - **Label vs instruction**: decided by the FIRST TOKEN, never by the column
   (verified): an indented `inner lda #1` defines `inner`, while `jsr rts` defines
   nothing at either column - `jsr` is the instruction and `rts` its operand - and a

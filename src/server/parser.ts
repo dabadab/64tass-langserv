@@ -474,6 +474,8 @@ export function parseDocument(
                 localScope: isLocalName(labelName) ? currentLocalScope : null,
                 isLocal: isLocalName(labelName),
                 kind: 'code',
+                // No colon means this may turn out to be a no-argument macro call.
+                fromBareWord: codeLabelMatch[3] !== ':',
                 comment: getBlockComment(lines, lineNum)
             });
             continue;

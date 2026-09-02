@@ -28,6 +28,11 @@ export interface LabelDefinition {
     kind: LabelKind;
     // Whether this is an anonymous label (+ or -)
     isAnonymous?: boolean;
+    // Set for a bare word alone on its line, with no colon. That is a label
+    // definition UNLESS a macro of the name exists, in which case the assembler
+    // expands it (verified: the bytes are the macro's). Which macros exist is not
+    // known until the include tree is read, so indexing.ts settles it afterwards.
+    fromBareWord?: boolean;
     // For anonymous labels: count of symbols in definition (+++  = 3)
     anonymousCount?: number;
     value?: string;

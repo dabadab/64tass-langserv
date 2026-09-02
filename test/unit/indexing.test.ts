@@ -395,3 +395,54 @@ describe('include search paths', () => {
         } finally { w.cleanup(); }
     });
 });
+
+describe('a bare word that names a macro', () => {
+    // Verified: with `inc_d020 .macro` in scope, a bare `inc_d020` on its own line
+    // assembles to the macro's bytes, and `jmp inc_d020` is "can't get integer
+    // value of macro" - it is a call, not a label. Which macros exist is only
+    // known once the include tree is read, hence the pass after indexing.
+    const MACRO = 'inc_d020 .macro\n        inc $d020\n        .endm';
+
+    it('is not indexed as a label when the macro comes from an include', () => {
+        const w = makeContext({
+            'main.asm': '        .include "macros.inc"\nstart\n        inc_d020\n        rts',
+            'macros.inc': MACRO,
+        });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const main = w.context.documentIndex.get(w.uriOf('main.asm'))!;
+            expect(main.labels.map(l => l.name)).toEqual(['start']);
+            expect(main.labelsByName.has('inc_d020')).toBe(false);
+        } finally { w.cleanup(); }
+    });
+
+    it('is not indexed as a label when the macro is in the same file', () => {
+        const w = makeContext({ 'main.asm': `${MACRO}\nstart\n        inc_d020` });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const labels = w.context.documentIndex.get(w.uriOf('main.asm'))!.labels;
+            expect(labels.filter(l => l.name === 'inc_d020').map(l => l.kind)).toEqual(['macro']);
+        } finally { w.cleanup(); }
+    });
+
+    it('leaves a bare word alone when nothing of the name is callable', () => {
+        const w = makeContext({ 'main.asm': 'start\n        rts\nloop\n        jmp loop' });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            expect(w.context.documentIndex.get(w.uriOf('main.asm'))!.labels.map(l => l.name))
+                .toEqual(['start', 'loop']);
+        } finally { w.cleanup(); }
+    });
+
+    it('keeps a definition that says so with a colon', () => {
+        // `inc_d020:` is a label definition whatever else exists - and one the
+        // assembler then rejects as a duplicate, which is a different report.
+        const w = makeContext({ 'main.asm': `${MACRO}\ninc_d020:\n        rts` });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const kinds = w.context.documentIndex.get(w.uriOf('main.asm'))!
+                .labels.filter(l => l.name === 'inc_d020').map(l => l.kind);
+            expect(kinds).toEqual(['macro', 'code']);
+        } finally { w.cleanup(); }
+    });
+});

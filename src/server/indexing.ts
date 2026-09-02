@@ -1,5 +1,5 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { DocumentIndex } from './types';
+import { DocumentIndex, LabelDefinition } from './types';
 import { IncludeGraph } from './includes';
 import { parseDocument } from './parser';
 import { detectCaseSensitivityPragma, detectCpu } from './utils';
@@ -107,6 +107,46 @@ export function indexDocument(
         const childScope = index.includeScopes.get(includeUri) ?? baseScope;
         indexDocument(includeDoc, context, indexedUris, effectiveRootUri, effectiveCaseSensitive,
             effectiveCpu, index.cpuExplicit, childScope);
+    }
+
+    // Only the outermost call, once every file of the tree is in the index.
+    if (rootUri === undefined) settleBareWords(indexedUris, context.documentIndex);
+}
+
+/**
+ * Drop the "labels" that are really no-argument macro calls.
+ *
+ * A bare word alone on a line is a label definition until a macro of that name
+ * turns up, and then it is a CALL - the assembler expands it, and the name cannot
+ * even be used as an address ("can't get integer value of macro", both verified).
+ * Which macros exist is only known once the include tree has been read, which is
+ * why this runs here rather than in the parser.
+ *
+ * Left as a definition when nothing of the name is callable, so a plain
+ * `loop`-style label keeps working.
+ */
+function settleBareWords(uris: Set<string>, documentIndex: Map<string, DocumentIndex>): void {
+    const callable = new Set<string>();
+    for (const uri of uris) {
+        for (const label of documentIndex.get(uri)?.labels ?? []) {
+            if (label.kind === 'macro' || label.kind === 'function') callable.add(label.name);
+        }
+    }
+    if (callable.size === 0) return;
+
+    for (const uri of uris) {
+        const index = documentIndex.get(uri);
+        if (!index) continue;
+        const kept = index.labels.filter(label => !(label.fromBareWord && callable.has(label.name)));
+        if (kept.length === index.labels.length) continue;
+
+        const byName = new Map<string, LabelDefinition[]>();
+        for (const label of kept) {
+            const list = byName.get(label.name);
+            if (list) list.push(label);
+            else byName.set(label.name, [label]);
+        }
+        documentIndex.set(uri, { ...index, labels: kept, labelsByName: byName });
     }
 }
 
