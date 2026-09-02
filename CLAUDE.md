@@ -95,11 +95,14 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   Decides `opcodesForCpu()` and `registerModesForCpu()`.
   `DocumentIndex.cpuExplicit` records whether anyone actually SAID so - a `.cpu`
   directive or pragma (cascading like the value itself), or a `64tass.cpu` setting
-  holding anything but the default. Diagnostics that would call good code wrong on
-  a bad guess gate on it: `findUnsupportedMnemonic` reports `bra` on a 6502 only
-  when the target was declared, since it can also come from a flag the server
-  never sees. Note the OPERAND of such a line is checked either way - the narrow
-  gate used to disable symbol validation for the whole line. Only the FIRST `.cpu` in a
+  holding anything but the default. It no longer gates the diagnostics: they are
+  judged against the target IN FORCE, declared or defaulted, because staying
+  silent otherwise means saying nothing about most real sources (verified: the
+  user's own file declares nothing). The cost is real and was accepted - a project
+  on a wider CPU that declares nothing is reported against `6502i` until it says
+  otherwise, which is what `FILE_CPU` in `examples.test.ts` supplies for the
+  45GS02 example that names its target nowhere. `cpuExplicit` survives only to
+  decide whether to pass a `--m...` flag to the real assembler. Only the FIRST `.cpu` in a
   file is used: 64tass allows switching mid-file, which the index does not model.
   The name -> flag mapping is NOT mechanical, and getting it wrong is the bug the
   all-opcodes fixtures caught: `--m6502` is "NMOS 65xx", which `.cpu` spells
@@ -472,7 +475,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1571 tests); compiles first
+yarn test          # Run all tests (currently 1582 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

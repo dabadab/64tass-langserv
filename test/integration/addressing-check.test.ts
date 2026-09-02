@@ -5,7 +5,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { TASS_PATH, TASS_EXISTS, TABLES_MATCH_TASS, CPU_FLAG } from '../helpers/compiler';
 import { CPU_NAMES, opcodesForCpu } from '../../src/server/constants';
-import { findAddressingProblem } from '../../src/server/operands';
+import { addressExpressionOf, findAddressingProblem } from '../../src/server/operands';
 import { findOversizedImmediate } from '../../src/server/diagnostics';
 import { DocumentIndex } from '../../src/server/types';
 
@@ -22,11 +22,22 @@ import { DocumentIndex } from '../../src/server/types';
  * verdicts come from `addressing.ts`, which describes one specific build.
  */
 const OPERANDS = [
-    '$10', '$1234', '$10,x', '$10,y', '$10,z', '$10,s',
+    '$10', '$1234', '$123456', '$10,x', '$10,y', '$10,z', '$10,s',
+    // Wide indexed forms: these are what the width check decides. `sty $1234,x`
+    // has no mode even though `sty $10,x` does, and the battery carried nothing
+    // like it until that turned up in real code.
+    '$1234,x', '$1234,y', '$1234,z',
     '($10)', '($10),x', '($10),y', '($10),z', '($10),s',
+    '($1234)', '($1234),y', '($1234,x)',
     '($10,x)', '($10,y)', '($10,s)', '($10,s),y', '($10,x),y',
     '[$10]', '[$10],x', '[$10],y', '[$10],z',
 ];
+
+/** The literal an operand carries, so the width check is exercised as it is in use. */
+function valueOf(operand: string): number | null {
+    const text = addressExpressionOf(operand);
+    return text && /^\$[0-9a-f]+$/i.test(text) ? parseInt(text.slice(1), 16) : null;
+}
 
 /** Lines 64tass rejected, by line number, with the message. */
 function assemble(cpu: string, lines: string[], dir: string): Map<number, string> {
@@ -63,7 +74,7 @@ describe.skipIf(!TASS_EXISTS || !TABLES_MATCH_TASS)('addressing diagnostic again
         const falsePositives = cases
             .map(([mnemonic, operand], i) => ({ mnemonic, operand, error: rejected.get(i + 3) }))
             .filter(({ mnemonic, operand, error }) =>
-                error === undefined && findAddressingProblem(cpu, mnemonic, operand) !== null)
+                error === undefined && findAddressingProblem(cpu, mnemonic, operand, valueOf(operand)) !== null)
             .map(({ mnemonic, operand }) => `${mnemonic} ${operand}`);
 
         expect(falsePositives).toEqual([]);
@@ -98,6 +109,8 @@ describe.skipIf(!TASS_EXISTS || !TABLES_MATCH_TASS)('addressing diagnostic again
             .toBe("no indirect x indexed addressing mode for opcode 'lda'");
         expect(findAddressingProblem('6502i', 'ldx', '$10,x')?.message)
             .toBe("no x indexed addressing mode for opcode 'ldx'");
+        expect(findAddressingProblem('6502i', 'sty', '$c000,x', 0xc000)?.message)
+            .toBe("not a direct page address '$c000'");
         expect(findOversizedImmediate('6502i', 'lda', '#$1234', 'file:///x.asm', 0, new Map(), false))
             .toBe('4660 does not fit in 8 bits');
     });

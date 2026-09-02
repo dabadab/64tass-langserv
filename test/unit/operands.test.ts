@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseOperand, indexRegistersFor, findAddressingProblem } from '../../src/server/operands';
+import { parseOperand, indexRegistersFor, findAddressingProblem, addressExpressionOf, bytesForValue } from '../../src/server/operands';
 
 describe('parseOperand', () => {
     it('reads a plain address', () => {
@@ -94,13 +94,85 @@ describe('findAddressingProblem', () => {
         expect(findAddressingProblem('6502i', 'bra', '($10),x')).toBeNull();
     });
 
-    it('marks a form no target accepts, so the CPU guess cannot excuse it', () => {
-        expect(findAddressingProblem('6502i', 'lda', '($10),x')?.universal).toBe(true);
+    it('judges against the target it is given, whatever other targets have', () => {
+        // `lda $10,s` is a real 65816 mode and no 6502 one, and a 6502i file is
+        // told so: the checks follow the target in force rather than waiting for
+        // one to be declared.
+        expect(findAddressingProblem('6502i', 'lda', '$10,s')).not.toBeNull();
+        expect(findAddressingProblem('65816', 'lda', '$10,s')).toBeNull();
+    });
+});
+
+describe('addressExpressionOf', () => {
+    it('takes the address out of the operand', () => {
+        expect(addressExpressionOf('$c000,x')).toBe('$c000');
+        expect(addressExpressionOf('($10),y')).toBe('$10');
+        expect(addressExpressionOf('[label],z')).toBe('label');
+        expect(addressExpressionOf(' $1234 ')).toBe('$1234');
     });
 
-    it('marks a form another target does accept', () => {
-        // `lda $10,s` is a real 65816 mode, so on a guessed target it must not be
-        // reported at all - only the declared-CPU path may.
-        expect(findAddressingProblem('6502i', 'lda', '$10,s')?.universal).toBe(false);
+    it('leaves immediates to the immediate check', () => {
+        expect(addressExpressionOf('#$12')).toBeNull();
+        expect(addressExpressionOf('')).toBeNull();
+    });
+});
+
+describe('bytesForValue', () => {
+    it('counts the bytes a value needs', () => {
+        expect(bytesForValue(0xff)).toBe(1);
+        expect(bytesForValue(0x100)).toBe(2);
+        expect(bytesForValue(0xffff)).toBe(2);
+        expect(bytesForValue(0x10000)).toBe(3);
+    });
+
+    it('has nothing to say about a negative or fractional value', () => {
+        expect(bytesForValue(-1)).toBeNull();
+        expect(bytesForValue(1.5)).toBeNull();
+    });
+});
+
+describe('findAddressingProblem - operand width', () => {
+    // `sty` has $hh,x but no $hhhh,x, so the shape is right and the width is not.
+    // All of these were checked against the assembler.
+    it('reports an address too wide for the only form of its shape', () => {
+        expect(findAddressingProblem('6502i', 'sty', '$c000,x', 0xc000)?.message)
+            .toBe("not a direct page address '$c000'");
+        expect(findAddressingProblem('6502i', 'stx', '$c000,y', 0xc000)?.message)
+            .toBe("not a direct page address '$c000'");
+    });
+
+    it('accepts the same shape at a width the mnemonic has', () => {
+        expect(findAddressingProblem('6502i', 'sty', '$10,x', 0x10)).toBeNull();
+        expect(findAddressingProblem('6502i', 'ldy', '$c000,x', 0xc000)).toBeNull();
+        expect(findAddressingProblem('6502i', 'lda', '$c000,x', 0xc000)).toBeNull();
+    });
+
+    it('says nothing when the value is unknown', () => {
+        // A forward reference or an external symbol: the width cannot be judged.
+        expect(findAddressingProblem('6502i', 'sty', 'screen,x')).toBeNull();
+        expect(findAddressingProblem('6502i', 'sty', 'screen,x', null)).toBeNull();
+    });
+
+    it('accepts a value narrower than the mode, which the assembler pads', () => {
+        expect(findAddressingProblem('6502i', 'jsr', '$10', 0x10)).toBeNull();
+    });
+
+    it('reports a value past every form the mnemonic has', () => {
+        expect(findAddressingProblem('6502i', 'lda', '$123456', 0x123456)?.message)
+            .toBe("'$123456' does not fit in 16 bits");
+    });
+
+    it('says nothing on a target whose direct page can be moved', () => {
+        // `.dpage $c000` makes `sty $c010,x` assemble on the 65816 (verified), so
+        // the value alone cannot decide there.
+        expect(findAddressingProblem('65816', 'sty', '$c000,x', 0xc000)).toBeNull();
+    });
+
+    it('leaves a relative branch alone, which carries no address width', () => {
+        expect(findAddressingProblem('6502i', 'beq', '$c000', 0xc000)).toBeNull();
+    });
+
+    it('is per target: the 65CE02 has the absolute form the 6502 lacks', () => {
+        expect(findAddressingProblem('65ce02', 'sty', '$c000,x', 0xc000)).toBeNull();
     });
 });

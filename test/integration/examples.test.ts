@@ -24,6 +24,18 @@ import { DEFAULT_CPU } from '../../src/server/constants';
 const DIR = path.join(__dirname, '..', 'fixtures', '64tass-examples');
 const files = fs.readdirSync(DIR).filter(f => f.endsWith('.asm')).sort();
 
+/**
+ * The target a file is written for, where it is not the default. These are the
+ * flags the source needs to assemble at all - `45gs02-compatibility.asm` is a
+ * pile of 45GS02 mnemonics and says so nowhere in its text - and a user opening
+ * one would supply the same fact through `64tass.cpu` or a cpu pragma. Now that
+ * CPU-dependent checks are judged against the target in force rather than only a
+ * declared one, the suite has to supply it too.
+ */
+const FILE_CPU: Record<string, string> = {
+    '45gs02-compatibility.asm': '45gs02',
+};
+
 /** Index a file with its include tree, exactly as the server does. */
 function diagnose(file: string) {
     const full = path.join(DIR, file);
@@ -38,8 +50,8 @@ function diagnose(file: string) {
             try { return fs.readFileSync(new URL(u), 'utf-8'); } catch { return null; }
         },
         defaultCaseSensitive: false,
-        defaultCpu: DEFAULT_CPU,
-        defaultCpuExplicit: false,
+        defaultCpu: FILE_CPU[file] ?? DEFAULT_CPU,
+        defaultCpuExplicit: file in FILE_CPU,
         includePaths: [],
     };
     indexDocument(doc, context);

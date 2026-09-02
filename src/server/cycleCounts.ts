@@ -19,7 +19,7 @@ import { DocumentIndex } from './types';
 import { opcodesForCpu } from './constants';
 import { addressingModesFor } from './addressing';
 import { cyclesFor, hasCycleData, formatCycles } from './cycles';
-import { parseOperand } from './operands';
+import { addressExpressionOf, bytesForValue, parseOperand } from './operands';
 import { parseLineStructure } from './utils';
 import { evaluateExpression } from './conditions';
 
@@ -53,13 +53,12 @@ function operandBytes(
     documentIndex: Map<string, DocumentIndex>,
     caseSensitive: boolean
 ): number | null {
-    const text = operand.trim().replace(/^[#([]+/, '').replace(/[)\],].*$/, '').trim();
-    if (text === '') return null;
+    // An immediate is stripped of its `#` here on purpose: the narrowing below
+    // only cares how wide the value is, whichever form carries it.
+    const text = addressExpressionOf(operand.replace(/^\s*#/, ''));
+    if (text === null) return null;
     const value = evaluateExpression(text, uri, line, documentIndex, caseSensitive);
-    if (value === null || value < 0) return null;
-    if (value <= 0xff) return 1;
-    if (value <= 0xffff) return 2;
-    return 3;
+    return value === null ? null : bytesForValue(value);
 }
 
 /** The cycle text for one instruction line, or null when there is none to give. */

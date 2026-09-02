@@ -24,7 +24,7 @@ import {
 import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { blockDirectivesOn } from './blocks';
-import { findAddressingProblem, immediateBytesFor } from './operands';
+import { addressExpressionOf, findAddressingProblem, immediateBytesFor } from './operands';
 import { LABEL_REQUIRED_OPENERS } from './constants';
 import { evaluateCondition, evaluateExpression, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
@@ -507,11 +507,11 @@ export function validateDocument(
             }
         }
 
-        // A mnemonic this CPU does not have. Reported only when the target was
-        // actually declared: on the default guess the real target may have come
-        // from a command-line flag, and flagging `bra` in a 65c02 project that
-        // never said so would be an error on correct code.
-        if (index.cpuExplicit) {
+        // A mnemonic this CPU does not have, judged against the target in force -
+        // declared, or the default when nothing said. A 65c02 project that never
+        // declares itself is reported against the 6502i default and should say so
+        // with a `.cpu` directive, a pragma or the setting.
+        {
             const unsupported = findUnsupportedMnemonic(code, opcodes);
             // A macro of that name makes the line a macro call, and legal (verified).
             if (unsupported && !findSymbolInfo(unsupported.name, document.uri, lineNum, documentIndex, caseSensitive, true, unit)) {
@@ -657,11 +657,18 @@ export function validateDocument(
             }
 
             // Does that operand have an addressing mode at all? `lda ($10),x` and
-            // `ldx $10,x` are errors the probed table already knows about.
-            const problem = findAddressingProblem(index.cpu, opcodeMatch[1], operand);
-            // A form no target accepts is wrong whatever the real CPU is; one that
-            // exists elsewhere is only reportable once the target was declared.
-            if (problem && (problem.universal || index.cpuExplicit)) {
+            // `ldx $10,x` are errors the probed table already knows about - and
+            // where the address resolves, so is `sty $c000,x`, whose shape exists
+            // only as a zeropage form.
+            const address = addressExpressionOf(operand);
+            const addressValue = address === null
+                ? null
+                : evaluateExpression(address, document.uri, lineNum, documentIndex, caseSensitive, unit);
+            const problem = findAddressingProblem(index.cpu, opcodeMatch[1], operand, addressValue);
+            // Judged against the target in force, declared or defaulted: a file
+            // that never says which CPU it is for is taken at its default, since
+            // staying silent there means saying nothing about most real sources.
+            if (problem) {
                 diagnostics.push({
                     severity: DiagnosticSeverity.Error,
                     range: Range.create(

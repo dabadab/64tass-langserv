@@ -60,12 +60,11 @@ recognised, mirroring 64tass's CPU selection flags. Accepts the same names as th
 A `.cpu "..."` directive in a file is honoured automatically, and overrides the
 setting for that file and everything it `.include`s.
 
-Saying which target you are on also turns on some checks: a mnemonic that belongs
-to some other CPU (`bra` on a plain 6502) is reported, as is an addressing mode
-that exists elsewhere but not here (`lda $10,s`). A form no CPU has at all
-(`lda ($10),x`) is reported either way. Left at the default, that
-check stays off — the target can also come from a command-line flag, and guessing
-wrong would mean errors on correct code.
+The target decides what counts as an error: a mnemonic another CPU has (`bra` on
+a plain 6502), an addressing mode it does not (`lda $10,s`), or an address too
+wide for the form (`sty $c000,x`, which has no absolute,x). These are judged
+against the target in force — so a file for a wider CPU should say so, with the
+setting, a `.cpu` directive or the pragma below, or it is read as `6502i`.
 
 ### `64tass.includePaths`
 

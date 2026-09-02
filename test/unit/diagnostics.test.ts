@@ -1040,14 +1040,15 @@ describe('mnemonics the target CPU does not have', () => {
         expect(onCpu('lbl\n        bra lbl', '65c02')).toHaveLength(0);
     });
 
-    it('says nothing when the target was never declared', () => {
-        // The real target can come from a command-line flag the server cannot see,
-        // so on the default guess this would be an error on correct code.
+    it('reports against the default target when a file declares none', () => {
+        // Judged against the target in force. A project on a wider CPU says so
+        // with a `.cpu` directive, a pragma or the setting - staying silent here
+        // would mean saying nothing about most real sources.
         const doc = createDoc('lbl\n        bra lbl');
         const index = parseDocument(doc);
         const documentIndex = new Map<string, DocumentIndex>([[doc.uri, index]]);
         expect(validateDocument(doc, documentIndex)
-            .filter(d => d.code === 'unsupported-mnemonic')).toHaveLength(0);
+            .filter(d => d.code === 'unsupported-mnemonic')).toHaveLength(1);
     });
 
     it('says nothing when a macro of that name exists', () => {
@@ -1091,9 +1092,32 @@ describe('operands with no addressing mode', () => {
         expect(onCpu('        lda ($10),y\n        lda ($10,x)\n        lda $1234,y')).toHaveLength(0);
     });
 
-    it('reports a form another target has only once this one was declared', () => {
-        // `lda $10,s` is a 65816 mode: on a guessed target it stays silent.
-        expect(onCpu('        lda $10,s')).toHaveLength(0);
+    it('reports an address too wide for the only form of its shape', () => {
+        // `sty` has zeropage,x and no absolute,x, so the shape is right and the
+        // width is not - verified: 64tass says "not a direct page address".
+        const found = onCpu('        sty $c000,x');
+        expect(found).toHaveLength(1);
+        expect(found[0].message).toBe("not a direct page address '$c000'");
+        expect(onCpu('        sty $10,x')).toHaveLength(0);
+        expect(onCpu('        ldy $c000,x')).toHaveLength(0);
+    });
+
+    it('resolves the address before judging its width', () => {
+        expect(onCpu('screen  = $c000\n        sty screen,x')).toHaveLength(1);
+    });
+
+    it('says nothing about an address it cannot compute', () => {
+        expect(onCpu('        sty elsewhere,x')).toHaveLength(0);
+    });
+
+    it('says nothing where the direct page can be moved', () => {
+        // `.dpage $c000` makes `sty $c010,x` assemble on the 65816 (verified).
+        expect(onCpu('        sty $c000,x', '65816')).toHaveLength(0);
+    });
+
+    it('reports a form another target has, judged against this one', () => {
+        // `lda $10,s` is a 65816 mode and no 6502 one.
+        expect(onCpu('        lda $10,s')).toHaveLength(1);
         expect(onCpu('        lda $10,s', '6502i')).toHaveLength(1);
         expect(onCpu('        lda $10,s', '65816')).toHaveLength(0);
     });

@@ -9,7 +9,7 @@
  * Both sides derive everything from `addressing.ts`, which is probed from the
  * assembler, so neither carries a hand-written list of what is legal.
  */
-import { addressingModesFor } from './addressing';
+import { addressingModesFor, AddressingMode } from './addressing';
 import { CPU_NAMES, OPCODES, REGISTER_MODES, opcodesForCpu } from './constants';
 
 /**
@@ -175,8 +175,70 @@ function describeOutside(bracket: string, register: string): string {
 
 export interface AddressingProblem {
     message: string;
-    /** True when no target at all accepts this form, so the CPU guess cannot be at fault. */
-    universal: boolean;
+}
+
+/**
+ * The part of an operand that carries the address, for a caller that wants to
+ * evaluate it: brackets and any index register stripped off. Null for an
+ * immediate, whose width is `findOversizedImmediate`'s business.
+ */
+export function addressExpressionOf(operand: string): string | null {
+    const text = operand.trim();
+    if (text === '' || text.startsWith('#')) return null;
+    const stripped = text.replace(/^[([]+/, '').replace(/[)\],].*$/, '').trim();
+    return stripped === '' ? null : stripped;
+}
+
+/** How many bytes a value needs, or null when it needs none we can reason about. */
+export function bytesForValue(value: number): number | null {
+    if (!Number.isInteger(value) || value < 0) return null;
+    if (value <= 0xff) return 1;
+    if (value <= 0xffff) return 2;
+    return 3;
+}
+
+/** The address bytes one probed pattern holds, or null when it holds no address. */
+function patternBytes(pattern: string): number | null {
+    const digits = pattern.match(/\$h+/);
+    // `<label>` is a relative branch and `a`/`` are register or implied forms:
+    // none of them carries an address whose width could be wrong.
+    return digits ? (digits[0].length - 1) / 2 : null;
+}
+
+/** The modes of this mnemonic whose shape is exactly the one written. */
+function modesMatchingShape(cpu: string, mnemonic: string, shape: OperandShape): readonly AddressingMode[] {
+    const wanted = shapeKey(shape);
+    return addressingModesFor(cpu, mnemonic).filter(([pattern]) => {
+        const parsed = parseOperand(pattern);
+        return parsed.kind === 'address' && shapeKey(parsed.shape) === wanted;
+    });
+}
+
+/**
+ * Targets whose direct (base) page can be moved: `.dpage $c000` makes `$c010`
+ * a direct-page address there, and `sty $c010,x` assembles (verified). The value
+ * alone cannot decide the width on those, so the width check stands down.
+ */
+const MOVABLE_PAGE_CPUS: ReadonlySet<string> = new Set(['65816', '65el02', '4510', '45gs02']);
+
+/** Whether the value fits the widest mode of this shape - null when it does. */
+function tooWideFor(
+    cpu: string,
+    mnemonic: string,
+    shape: OperandShape,
+    valueBytes: number
+): number | null {
+    if (MOVABLE_PAGE_CPUS.has(cpu.toLowerCase())) return null;
+    const matching = modesMatchingShape(cpu, mnemonic, shape);
+    if (matching.length === 0) return null;
+
+    let widest = 0;
+    for (const [pattern] of matching) {
+        const bytes = patternBytes(pattern);
+        if (bytes === null) return null;   // no fixed-width address in this form
+        widest = Math.max(widest, bytes);
+    }
+    return valueBytes > widest ? widest : null;
 }
 
 /**
@@ -185,7 +247,17 @@ export interface AddressingProblem {
  * families and register operands (`asl a`) are all deliberately left alone, as is
  * any mnemonic the target does not have at all.
  */
-export function findAddressingProblem(cpu: string, mnemonic: string, operand: string): AddressingProblem | null {
+export function findAddressingProblem(
+    cpu: string,
+    mnemonic: string,
+    operand: string,
+    /**
+     * The operand's value, where the caller could work it out. A shape the
+     * mnemonic HAS may still be wrong at this width: `sty $10,x` assembles and
+     * `sty $c000,x` does not, because sty has no absolute,x form.
+     */
+    value?: number | null
+): AddressingProblem | null {
     const name = mnemonic.toLowerCase();
     const modes = shapesFor(cpu, name);
     if (modes.size === 0 || hasUnmodelledForm(cpu, name)) return null;
@@ -201,24 +273,34 @@ export function findAddressingProblem(cpu: string, mnemonic: string, operand: st
     // A register operand rather than an address: `asl a`, `ldx s`.
     if (shape.bracket === '' && shape.outside === null
         && (REGISTER_MODES[name] ?? []).includes(operand.trim().toLowerCase())) return null;
-    // Nothing to say about a plain address: every mnemonic that takes an operand
-    // at all takes one of those, and an operand on an implied-only mnemonic is
-    // reported by the caller as a mnemonic the target does not have.
+    // The shape exists; the only thing left that can be wrong is its width.
+    if (modes.has(shapeKey(shape))) {
+        const valueBytes = value === undefined || value === null ? null : bytesForValue(value);
+        if (valueBytes === null) return null;
+        const widest = tooWideFor(cpu, name, shape, valueBytes);
+        if (widest === null) return null;
+        const written = `$${(value as number).toString(16)}`;
+        // Both are 64tass's own distinctions: a form that only reaches page zero
+        // is described differently from one the value simply overflows. The
+        // opcode is not named - it is right there on the line.
+        return {
+            message: widest === 1
+                ? `not a direct page address '${written}'`
+                : `'${written}' does not fit in ${widest * 8} bits`,
+        };
+    }
+    // Nothing to say about a plain address whose shape is missing: every mnemonic
+    // that takes an operand at all takes one of those, and an operand on an
+    // implied-only mnemonic is reported by the caller as a mnemonic the target
+    // does not have.
     if (shape.bracket === '' && shape.outside === null) return null;
-    if (modes.has(shapeKey(shape))) return null;
 
     // Which half is at fault. When each half is fine on its own and only the
     // combination is missing, say nothing rather than invent a description of it.
     const message = wrongPart(cpu, name, shape);
     if (message === null) return null;
 
-    return {
-        message: `${message} for opcode '${name}'`,
-        universal: CPU_NAMES.every(other => {
-            const others = shapesFor(other, name);
-            return others.size === 0 || !others.has(shapeKey(shape));
-        })
-    };
+    return { message: `${message} for opcode '${name}'` };
 }
 
 /** The part of the shape no mode of this mnemonic has, described 64tass's way. */
