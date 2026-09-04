@@ -1106,6 +1106,11 @@ describe('operands with no addressing mode', () => {
         expect(onCpu('screen  = $c000\n        sty screen,x')).toHaveLength(1);
     });
 
+    it('reads a parenthesised address as the assembler does', () => {
+        // `sty ($100)/2,x` is $80, a direct page address, and assembles (verified).
+        expect(onCpu('        sty ($100)/2,x')).toHaveLength(0);
+    });
+
     it('says nothing about an address it cannot compute', () => {
         expect(onCpu('        sty elsewhere,x')).toHaveLength(0);
     });

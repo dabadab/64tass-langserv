@@ -183,10 +183,28 @@ export interface AddressingProblem {
  * immediate, whose width is `findOversizedImmediate`'s business.
  */
 export function addressExpressionOf(operand: string): string | null {
-    const text = operand.trim();
+    let text = operand.trim();
     if (text === '' || text.startsWith('#')) return null;
-    const stripped = text.replace(/^[([]+/, '').replace(/[)\],].*$/, '').trim();
-    return stripped === '' ? null : stripped;
+
+    // Peel the operand's own punctuation and nothing else. Cutting at the first
+    // `)` instead took `sty ($100)/2,x` for `$100` - a two-byte value where the
+    // expression is $80, and the line was reported as an addressing error the
+    // assembler accepts.
+    for (;;) {
+        const { commas, wrapped } = scan(text);
+        // A trailing index register belongs to the operand, not the address.
+        if (commas.length === 1 && registerAfter(text.slice(commas[0] + 1)) !== null) {
+            text = text.slice(0, commas[0]).trim();
+            continue;
+        }
+        // Brackets are only the operand's when they wrap the WHOLE expression;
+        // `($100)/2` is arithmetic that happens to start with one.
+        if (wrapped) {
+            text = text.slice(1, -1).trim();
+            continue;
+        }
+        return text === '' ? null : text;
+    }
 }
 
 /** How many bytes a value needs, or null when it needs none we can reason about. */

@@ -107,8 +107,17 @@ describe('addressExpressionOf', () => {
     it('takes the address out of the operand', () => {
         expect(addressExpressionOf('$c000,x')).toBe('$c000');
         expect(addressExpressionOf('($10),y')).toBe('$10');
+        expect(addressExpressionOf('($10,x)')).toBe('$10');
         expect(addressExpressionOf('[label],z')).toBe('label');
         expect(addressExpressionOf(' $1234 ')).toBe('$1234');
+    });
+
+    it('keeps brackets that are arithmetic rather than the operand\'s', () => {
+        // `sty ($100)/2,x` assembles - the address is $80. Cutting at the first
+        // `)` evaluated `$100` and reported a line the assembler takes.
+        expect(addressExpressionOf('($100)/2,x')).toBe('($100)/2');
+        expect(addressExpressionOf('(lbl+1)*2')).toBe('(lbl+1)*2');
+        expect(addressExpressionOf('($1234)')).toBe('$1234');
     });
 
     it('leaves immediates to the immediate check', () => {
