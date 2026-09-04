@@ -116,6 +116,12 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   addressing-size and bank suffixes. These are not symbol references, so the
   undefined-symbol check skips them. Kept per-opcode rather than as a blanket list
   of short names, so `lda i` is still reported.
+- **`.comment` blocks**: `findCommentBlockLines` (`utils.ts`) is consulted by
+  everything that reads lines as code - the parser, both conditional scanners,
+  diagnostics, the formatter, folding, semantic tokens and the unused-symbol scan.
+  The assembler ignores such a block wholesale, so an opener written in one opens
+  nothing (folding paired it with a real closer, and closer hover inherited that),
+  a name in one is not a use, and a `.if 0` in one is not a conditional.
 - **Block directives**: `blockDirectivesOn` (`blocks.ts`) is the ONE place that
   decides which openers and closers a line carries; the parser, the unclosed-block
   check in `diagnostics.ts` and `folding.ts` all consume it. They used to have
@@ -550,7 +556,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1652 tests); compiles first
+yarn test          # Run all tests (currently 1654 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

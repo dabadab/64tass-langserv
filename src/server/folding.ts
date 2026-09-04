@@ -1,6 +1,7 @@
 import { FoldingRange, FoldingRangeKind } from 'vscode-languageserver/node';
 import { CLOSING_DIRECTIVES } from './constants';
 import { blockDirectivesOn } from './blocks';
+import { findCommentBlockLines } from './utils';
 
 /**
  * Foldable regions of a document: each block-opening directive paired with the
@@ -13,8 +14,13 @@ export function computeFoldingRanges(text: string): FoldingRange[] {
     const lines = text.split('\n');
 
     const stack: { directive: string; line: number }[] = [];
+    // The assembler ignores a `.comment` block wholesale, so an opener written in
+    // one opens nothing - pairing it with a real closer left the enclosing scope
+    // unfolded and misnamed the closer's hover, which takes its pairing from here.
+    const commentBlockLines = findCommentBlockLines(lines);
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        if (commentBlockLines.has(lineNum)) continue;
         const { opened, closed } = blockDirectivesOn(lines[lineNum]);
 
         for (const directive of opened) {

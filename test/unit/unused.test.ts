@@ -76,3 +76,11 @@ describe('findUnusedSymbols', () => {
         expect(found).toEqual([]);
     });
 });
+
+describe('mentions inside a .comment block', () => {
+    it('are not uses', () => {
+        // The assembler never reads them, no more than a trailing comment.
+        const source = 'shared  = 1\n        .comment\nuses shared here\n        .endc';
+        expect(inOneFile(source).map(d => d.message)).toEqual(["Unused const 'shared'"]);
+    });
+});

@@ -1,6 +1,6 @@
 import { DocumentIndex, LabelKind } from './types';
 import { OPCODES, BUILTINS, ALL_DIRECTIVES } from './constants';
-import { parseLineStructure, stripStrings } from './utils';
+import { parseLineStructure, stripStrings, findCommentBlockLines } from './utils';
 import { findSymbolInfo, isParameter } from './symbols';
 
 /**
@@ -92,7 +92,11 @@ export function buildSemanticTokens(
         declarations.set(`${label.range.start.line}:${label.range.start.character}`, label.kind);
     }
 
+    // Nothing inside a `.comment` block is code, so none of it is coloured.
+    const commentBlockLines = findCommentBlockLines(lines);
+
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        if (commentBlockLines.has(lineNum)) continue;
         // Strings blanked (offsets preserved) so text inside a literal is not classified
         const code = stripStrings(parseLineStructure(lines[lineNum]).code);
         const scope = index.scopeAtLine.get(lineNum);

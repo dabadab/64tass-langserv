@@ -98,3 +98,21 @@ describe('computeFoldingRanges - .logical', () => {
         expect(pairs('        .virtual $2000\n        nop\n        .endv')).toEqual([[0, 2]]);
     });
 });
+
+describe('openers inside a .comment block', () => {
+    it('pairs the real opener with the real closer', () => {
+        // The assembler ignores a comment block wholesale, so an opener written in
+        // one opens nothing. Pairing it with the real `.pend` left the enclosing
+        // `.proc` unfolded - and misnamed the closer's hover, which pairs from here.
+        const source = [
+            'outer   .proc',
+            '        .comment',
+            'commented out: inner .proc',
+            '        .endc',
+            '        nop',
+            '        .pend',
+        ].join('\n');
+        expect(computeFoldingRanges(source).map(r => [r.startLine, r.endLine]))
+            .toEqual([[1, 3], [0, 5]]);
+    });
+});
