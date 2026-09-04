@@ -1423,3 +1423,46 @@ describe('conditionals written in comment-block prose', () => {
         expect(getDiagnostics(real).filter(d => d.code === 'inactive-code')).toHaveLength(1);
     });
 });
+
+describe('symbols in a directive operand', () => {
+    // Undefined-symbol checking used to cover opcodes and fifteen data
+    // directives; every position below is one the assembler resolves and fails
+    // on (each verified).
+    const on = (line: string) => getDiagnostics(`        *= $1000\n${line}`)
+        .filter(d => d.code === 'undefined-symbol').map(d => d.message);
+
+    it.each([
+        ['        .align undefined_sym'],
+        ['        .if undefined_sym\n        .endif'],
+        ['        .for i = 0, i < undefined_sym, i = i + 1\n        .next'],
+        ['        .rept undefined_sym\n        .next'],
+        ['        .cerror undefined_sym > 3, "x"'],
+        ['        .check undefined_sym, 2'],
+        ['        .logical undefined_sym\n        .here'],
+        ['        *= undefined_sym'],
+    ])('reports one in %j', (line) => {
+        expect(on(line)).toEqual(["Undefined symbol 'undefined_sym'"]);
+    });
+
+    it('leaves the operands that name something else alone', () => {
+        // `.section` names a section, `.macro` DECLARES parameters, and a
+        // `.dstruct`s extra arguments are lazy - all verified silent.
+        expect(on('        .section mysec')).toEqual([]);
+        expect(on('shout   .macro a, b\n        .endm')).toEqual([]);
+    });
+
+    it('does not read a for-in loop\'s `in` as a symbol', () => {
+        // `in` is an operator (`1 in [1,2]` assembles), though it is a legal name.
+        expect(on('list    = [1, 2]\n        .for i in list\n        .next')).toEqual([]);
+    });
+
+    it('does not read a macro argument substitution as a symbol', () => {
+        // `\name` substitutes the argument as text; the name is the parameter.
+        expect(on('        .cerror 1 != 2, "x", (\\name), "y"')).toEqual([]);
+    });
+
+    it('checks the right-hand side of a dotted assignment', () => {
+        expect(on('outer   .block\n        .bend\nouter.extra = undefined_sym'))
+            .toEqual(["Undefined symbol 'undefined_sym'"]);
+    });
+});

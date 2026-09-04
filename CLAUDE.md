@@ -368,6 +368,18 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   LETTERS are deliberately allowed: the manual permits them under `-a`, a flag the
   extension cannot see, so a missed error without it beats reporting good code
   with it (`£` and `↑` are not letters and are still caught).
+- **Which lines get a symbol scan**: opcodes, `DATA_DIRECTIVES`,
+  `EXPRESSION_DIRECTIVES`, `*=` and the right-hand side of an assignment (dotted
+  targets included). The two directive lists are separate because the
+  missing-operator check applies to the data ones only: `.if linking = 1` and
+  `.for i = 0, ...` are good lines it would read as two values in a row. Every
+  name on both lists was probed - the assembler resolves a symbol there and fails
+  on an undefined one - and the ones deliberately left off were probed too:
+  `.section`/`.dsection`/`.lbl` name their own things, `.macro`/`.function`
+  operands DECLARE parameters, and `.dstruct`'s extra arguments are lazy like a
+  macro's. The scan skips `in` (an operator, `1 in [1,2]`, and every `.for x in
+  list`) and anything after a `\` (a macro argument substituted as text) - both
+  found by real sources the moment the lists grew.
 - **Diagnostic codes**: diagnostics that a quick fix can act on carry a `code`
   (`undefined-symbol`, `undefined-macro`, `unclosed-block`, plus
   `invalid-symbol-character`, `expression-expected` and `label-required`); `codeActions.ts`
@@ -538,7 +550,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1640 tests); compiles first
+yarn test          # Run all tests (currently 1652 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

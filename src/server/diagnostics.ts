@@ -12,6 +12,8 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { LabelDefinition, DocumentIndex } from './types';
 import {
     OPCODES,
+    DATA_DIRECTIVES,
+    EXPRESSION_DIRECTIVES,
     opcodesForCpu,
     registerModesForCpu,
     INDEX_REGISTERS,
@@ -310,6 +312,18 @@ function crossFileDuplicates(
     }
     return found;
 }
+
+/**
+ * A directive whose operand carries symbol references (`OPERAND_DIRECTIVES`),
+ * with an optional label in front. Only 15 data directives used to be listed
+ * here, so a typo in `.if`, `.for`, `.align` or `.check` went unreported while
+ * the assembler resolves - and fails on - every one of them.
+ */
+const withOperand = (names: readonly string[]) => new RegExp(
+    `^\\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\\s+)?\\.(${names.join('|')})\\s+(.+)$`, 'i');
+
+const DATA_OPERAND = withOperand(DATA_DIRECTIVES);
+const EXPRESSION_OPERAND = withOperand(EXPRESSION_DIRECTIVES);
 
 /** Line numbers grouped into [first, last] runs of consecutive lines. */
 function contiguousRuns(lines: ReadonlySet<number>): [number, number][] {
@@ -616,7 +630,10 @@ export function validateDocument(
         // the REST of the line still references symbols: both "loop: lda undef" and
         // "foo = undef + 1" need checking. Blank out just the defined name and its
         // ":" / "=" / ":=", keeping the line length so reported columns stay right.
-        const defPrefix = code.match(/^(\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(?::=|=|:))/);
+        // Dotted targets too (`outer.extra = ...`): the parser indexes those, and
+        // without them here the whole line - definition and right-hand side alike -
+        // was invisible to the reference scan.
+        const defPrefix = code.match(/^(\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*\s*(?::=|=|:))/);
         const assignmentRhs = defPrefix && /[:=]=?$/.test(defPrefix[1]) && defPrefix[1].trimEnd().endsWith('=');
         // Dict-literal keys are blanked too: "{.MAP: 1}" names a key, not a macro.
         const codeForRefs = stripDictKeys(defPrefix
@@ -675,7 +692,10 @@ export function validateDocument(
         // Look for symbols after opcodes
         const opcodeMatch = codeForRefs.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?([a-zA-Z]{3})\s+(.+)$/i);
         // Look for symbols after data directives like .text, .byte, .word, etc.
-        const dataDirectiveMatch = codeForRefs.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|char|dint|lint|sint)\s+(.+)$/i);
+        const dataDirectiveMatch = codeForRefs.match(DATA_OPERAND);
+        const expressionDirectiveMatch = codeForRefs.match(EXPRESSION_OPERAND);
+        // `*= start+2` is an expression too, and the assembler resolves it.
+        const programCounterMatch = codeForRefs.match(/^(\s*\*\s*=\s*)(\S.*)$/);
 
         const callArgs = callArguments(codeForRefs, document.uri, lineNum, documentIndex, caseSensitive, unit);
 
@@ -741,6 +761,12 @@ export function validateDocument(
             // CALLER's scope, so they are checked like any other operand.
             operand = callArgs.text;
             operandStart = callArgs.start;
+        } else if (expressionDirectiveMatch) {
+            operand = expressionDirectiveMatch[2];
+            operandStart = expressionDirectiveMatch[0].length - operand.length;
+        } else if (programCounterMatch) {
+            operand = programCounterMatch[2];
+            operandStart = programCounterMatch[1].length;
         } else if (assignmentRhs) {
             // "foo = undef + 1": the right-hand side is an expression whose symbols
             // should be checked, but there is no opcode or directive to anchor on.
@@ -840,6 +866,13 @@ export function validateDocument(
 
                 // Skip if it's a register, opcode, or builtin
                 if (BUILTINS.has(symLower) || opcodes.has(symLower)) continue;
+                // `in` is an operator - `1 in [1,2]`, and every `.for x in list`.
+                // It is a legal symbol name too (verified), so skipping it can cost
+                // at most a missed report on a symbol actually called `in`.
+                if (symLower === 'in') continue;
+                // `\name` and `\1` substitute a macro's argument as TEXT; the name
+                // after the backslash is the parameter, not a symbol here.
+                if (match.index > 0 && operandNoStrings[match.index - 1] === '\\') continue;
                 // Skip numbers (might be caught as identifiers if they have letters like in hex)
                 if (/^[0-9]/.test(symName)) continue;
                 // Skip hex numbers like $FE - if preceded by $ and only contains hex digits

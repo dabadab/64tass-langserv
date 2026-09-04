@@ -447,6 +447,35 @@ export const INDEX_REGISTERS: ReadonlySet<string> = new Set(['b', 'd', 'k', 'r',
  * Scope openers the assembler refuses without a label: "label required"
  * (verified). `.block`, `.struct`, `.union` and `.namespace` are fine unnamed.
  */
+/**
+ * Directives whose operand is an ordinary expression, so the symbols in it are
+ * references worth checking. Every entry was probed: the assembler reports an
+ * undefined symbol in each of these positions.
+ *
+ * Deliberately out, all verified silent or a different namespace: `.section`,
+ * `.dsection` and `.lbl` name their own things rather than referring to a symbol;
+ * `.goto` names a `.lbl`, which nothing indexes yet; `.macro`/`.function` operands
+ * DECLARE parameters; and `.dstruct`'s extra arguments are worked out lazily, as
+ * a macro's are.
+ */
+export const DATA_DIRECTIVES = [
+    'byte', 'word', 'long', 'dword', 'addr', 'rta', 'text', 'ptext', 'null',
+    'fill', 'char', 'dint', 'lint', 'sint',
+];
+
+/**
+ * The rest: their operand is an expression too, but a list of VALUES is not what
+ * it is, so the missing-operator check stays off them - `.if linking = 1` and
+ * `.for i = 0, ...` are perfectly good lines that it would read as two values in
+ * a row.
+ */
+export const EXPRESSION_DIRECTIVES = [
+    'if', 'ifeq', 'ifne', 'ifmi', 'ifpl', 'elsif', 'elif',
+    'for', 'bfor', 'rept', 'brept', 'while', 'bwhile',
+    'align', 'alignblk', 'alignind', 'alignpageind', 'offs', 'logical', 'virtual',
+    'page', 'check', 'cerror', 'cwarn', 'error', 'warn', 'enc', 'binary',
+];
+
 export const LABEL_REQUIRED_OPENERS = ['.proc', '.macro', '.function', '.segment'];
 
 // Directives that create new scopes (opener -> primary closer)
