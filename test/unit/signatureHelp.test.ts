@@ -7,7 +7,8 @@ import { DocumentIndex } from '../../src/server/types';
 // Every call form here is accepted by the assembler (verified), and all of
 // them work for a .function as much as a .macro.
 const DEFS = 'mac .macro a, b\n.endm\nfn .function x, y\n.endf\nnoargs .macro\n.endm';
-const index = () => buildIndex({ source: DEFS, uri: 'file:///s.asm' }).documentIndex;
+const DEFS_URI = 'file:///s.asm';
+const index = () => buildIndex({ source: DEFS, uri: DEFS_URI }).documentIndex;
 
 describe('findCallContext', () => {
     it('recognises a function call and the active argument', () => {
@@ -51,7 +52,7 @@ describe('findCallContext', () => {
 
 describe('getSignatureHelp', () => {
     it('reports the signature and active parameter for a function', () => {
-        const help = getSignatureHelp('        lda #fn(', index())!;
+        const help = getSignatureHelp('        lda #fn(', DEFS_URI, 6, index())!;
         const signature = help.signatures[0];
         expect(signature.label).toBe('fn(x, y)');
         expect(help.activeParameter).toBe(0);
@@ -66,32 +67,32 @@ describe('getSignatureHelp', () => {
     });
 
     it('advances the active parameter past a comma', () => {
-        expect(getSignatureHelp('        lda #fn(1, ', index())!.activeParameter).toBe(1);
+        expect(getSignatureHelp('        lda #fn(1, ', DEFS_URI, 6, index())!.activeParameter).toBe(1);
     });
 
     it('clamps the active parameter to the last one', () => {
         // typing a third argument to a two-parameter callable
-        expect(getSignatureHelp('        lda #fn(1, 2, 3', index())!.activeParameter).toBe(1);
+        expect(getSignatureHelp('        lda #fn(1, 2, 3', DEFS_URI, 6, index())!.activeParameter).toBe(1);
     });
 
     it('works for macro calls, written the way one is called', () => {
         // 64tass takes `#mac 1, 2` - no parentheses, and commas between the
         // arguments (verified: `#mac 1 2` is "2nd argument is missing").
-        expect(getSignatureHelp('        #mac ', index())!.signatures[0].label).toBe('mac a, b');
-        expect(getSignatureHelp('        #mac ', index())!.activeParameter).toBe(0);
-        expect(getSignatureHelp('        .mac 1, ', index())!.activeParameter).toBe(1);
+        expect(getSignatureHelp('        #mac ', DEFS_URI, 6, index())!.signatures[0].label).toBe('mac a, b');
+        expect(getSignatureHelp('        #mac ', DEFS_URI, 6, index())!.activeParameter).toBe(0);
+        expect(getSignatureHelp('        .mac 1, ', DEFS_URI, 6, index())!.activeParameter).toBe(1);
     });
 
     it('returns null for an unknown callable', () => {
-        expect(getSignatureHelp('        lda #nope(', index())).toBeNull();
+        expect(getSignatureHelp('        lda #nope(', DEFS_URI, 6, index())).toBeNull();
     });
 
     it('returns null for a callable with no parameters', () => {
-        expect(getSignatureHelp('        #noargs ', index())).toBeNull();
+        expect(getSignatureHelp('        #noargs ', DEFS_URI, 6, index())).toBeNull();
     });
 
     it('matches case-insensitively by default', () => {
-        expect(getSignatureHelp('        lda #FN(', index())!.signatures[0].label).toBe('fn(x, y)');
+        expect(getSignatureHelp('        lda #FN(', DEFS_URI, 6, index())!.signatures[0].label).toBe('fn(x, y)');
     });
 });
 
@@ -102,7 +103,7 @@ describe('a macro call as it is typed', () => {
     function typed(text: string) {
         const doc = createDoc(SOURCE, 'file:///typed.asm');
         const documentIndex = new Map<string, DocumentIndex>([[doc.uri, parseDocument(doc)]]);
-        const help = getSignatureHelp(text, documentIndex);
+        const help = getSignatureHelp(text, doc.uri, 3, documentIndex);
         if (!help) return null;
         const signature = help.signatures[0];
         const [start, end] = signature.parameters![help.activeParameter!].label as [number, number];
@@ -143,7 +144,7 @@ describe('a function called as a statement', () => {
     function typed(text: string) {
         const doc = createDoc(SOURCE, 'file:///fn.asm');
         const documentIndex = new Map<string, DocumentIndex>([[doc.uri, parseDocument(doc)]]);
-        const help = getSignatureHelp(text, documentIndex);
+        const help = getSignatureHelp(text, doc.uri, 3, documentIndex);
         if (!help) return null;
         const signature = help.signatures[0];
         const [start, end] = signature.parameters![help.activeParameter!].label as [number, number];
@@ -173,5 +174,36 @@ describe('a function called as a statement', () => {
         // `nop ` is an instruction whatever a macro of that name might say.
         expect(typed('        nop ')).toBeNull();
         expect(typed('        lda #1 ')).toBeNull();
+    });
+});
+
+describe('a callee inside a scope', () => {
+    // The maps are keyed by full scope path, so a bare-name lookup found nothing
+    // for anything defined inside a .proc - and taking the first document that
+    // carried the name made the answer depend on indexing order.
+    const SOURCE = [
+        'outer   .proc',
+        'mac     .macro a, b',
+        '        .endm',
+        '        #mac ',
+        '        .pend',
+    ].join('\n');
+
+    it('finds the parameters of a macro defined in a .proc', () => {
+        const doc = createDoc(SOURCE, 'file:///scoped.asm');
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, parseDocument(doc)]]);
+        const help = getSignatureHelp('        #mac ', doc.uri, 3, documentIndex);
+        expect(help?.signatures[0].label).toBe('mac a, b');
+    });
+
+    it('resolves the callee rather than taking whichever document is first', () => {
+        const mine = 'mac     .macro a, b\n        .endm';
+        const other = 'mac     .macro x, y, z\n        .endm';
+        const { documentIndex, docs } = buildIndex(
+            { source: other, uri: 'file:///other.asm' },
+            { source: mine, uri: 'file:///mine.asm' });
+        const help = getSignatureHelp('        #mac ', docs[1].uri, 2, documentIndex,
+            false, new Set([docs[1].uri]));
+        expect(help?.signatures[0].label).toBe('mac a, b');
     });
 });

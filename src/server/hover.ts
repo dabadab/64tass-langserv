@@ -8,7 +8,7 @@ import { opcodeDoc } from './opcodeDocs';
 import { cyclesFor, hasCycleData, formatCycles, CycleVariance } from './cycles';
 import { parseNumericValue, formatNumericValue, stripStrings, parseLineStructure } from './utils';
 import { computeFoldingRanges } from './folding';
-import { callSignature } from './signatureHelp';
+import { callSignature, calleeScopePath } from './signatureHelp';
 import { pragmaHover } from './pragmas';
 import { DIRECTIVE_DOCS } from './directiveDocs';
 
@@ -150,8 +150,7 @@ export function symbolHover(
  */
 function signatureOf(symbol: LabelDefinition, documentIndex: Map<string, DocumentIndex>): string | null {
     if (symbol.kind !== 'macro' && symbol.kind !== 'function') return null;
-    const path = symbol.scopePath ? `${symbol.scopePath}.${symbol.name}` : symbol.name;
-    const parameters = documentIndex.get(symbol.uri)?.parameterTextAtScope.get(path);
+    const parameters = documentIndex.get(symbol.uri)?.parameterTextAtScope.get(calleeScopePath(symbol));
     if (!parameters || parameters.length === 0) return null;
     // No call site to follow here, so the canonical form for each: a function is
     // written `f(a, b)` in an expression, a macro `#mac a, b`. Either may also be

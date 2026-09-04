@@ -1,5 +1,6 @@
 import { SignatureHelp, SignatureInformation, ParameterInformation } from 'vscode-languageserver/node';
-import { DocumentIndex } from './types';
+import { DocumentIndex, LabelDefinition } from './types';
+import { findSymbolInfo } from './symbols';
 import { parseLineStructure } from './utils';
 import { OPCODES } from './constants';
 
@@ -86,6 +87,15 @@ function countArguments(args: string): number {
 }
 
 /**
+ * Where a macro's or function's parameters are keyed: `parametersAtScope` and its
+ * two companions are all keyed by FULL scope path, so a bare name finds nothing
+ * for anything defined inside a `.proc`, `.block` or `.namespace`.
+ */
+export function calleeScopePath(symbol: LabelDefinition): string {
+    return symbol.scopePath ? `${symbol.scopePath}.${symbol.name}` : symbol.name;
+}
+
+/**
  * How a call is written, and where each parameter sits in that text.
  *
  * The way the thing is actually invoked: `fn(a, b)` for a function, `mac a, b`
@@ -122,37 +132,41 @@ export function callSignature(
  */
 export function getSignatureHelp(
     linePrefix: string,
+    uri: string,
+    line: number,
     documentIndex: Map<string, DocumentIndex>,
-    caseSensitive = false
+    caseSensitive = false,
+    unit?: ReadonlySet<string>
 ): SignatureHelp | null {
     const call = findCallContext(linePrefix);
     if (!call) return null;
 
-    const lookup = caseSensitive ? call.name : call.name.toLowerCase();
+    // Resolved like any other reference, rather than looked up by bare name in
+    // whichever document came first: the maps are keyed by full scope path, so a
+    // macro inside a `.proc` never matched - and taking the first document to
+    // carry the name made the answer depend on indexing order.
+    const callee = findSymbolInfo(call.name, uri, line, documentIndex, caseSensitive, true, unit);
+    if (!callee || (callee.kind !== 'macro' && callee.kind !== 'function')) return null;
 
-    for (const [, index] of documentIndex) {
-        const parameters = index.parametersAtScope.get(lookup);
-        if (!parameters || parameters.length === 0) continue;
+    const index = documentIndex.get(callee.uri);
+    const path = calleeScopePath(callee);
+    const parameters = index?.parametersAtScope.get(path);
+    if (!parameters || parameters.length === 0) return null;
 
-        // Prefer the definition's own casing for the label, and its own wording
-        // for the parameters - `parametersAtScope` has them normalized for
-        // matching, which is not what a caller wants to read.
-        const definition = index.labels.find(l => l.name === lookup);
-        const declared = index.parameterTextAtScope.get(lookup) ?? parameters;
-        const built = callSignature(definition?.originalName ?? call.name, declared, call.form);
+    // The definition's own wording for the parameters - `parametersAtScope` has
+    // them normalized for matching, which is not what a caller wants to read.
+    const declared = index?.parameterTextAtScope.get(path) ?? parameters;
+    const built = callSignature(callee.originalName, declared, call.form);
 
-        const signature: SignatureInformation = {
-            label: built.label,
-            parameters: built.parameters,
-        };
+    const signature: SignatureInformation = {
+        label: built.label,
+        parameters: built.parameters,
+    };
 
-        return {
-            signatures: [signature],
-            activeSignature: 0,
-            // Clamp: typing past the last parameter should keep highlighting it
-            activeParameter: Math.min(call.argumentIndex, parameters.length - 1)
-        };
-    }
-
-    return null;
+    return {
+        signatures: [signature],
+        activeSignature: 0,
+        // Clamp: typing past the last parameter should keep highlighting it
+        activeParameter: Math.min(call.argumentIndex, parameters.length - 1)
+    };
 }

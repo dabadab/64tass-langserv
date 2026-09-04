@@ -27,6 +27,7 @@ import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockL
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { blockDirectivesOn } from './blocks';
 import { addressExpressionOf, findAddressingProblem, immediateBytesFor } from './operands';
+import { calleeScopePath } from './signatureHelp';
 import { LABEL_REQUIRED_OPENERS } from './constants';
 import { evaluateCondition, evaluateExpression, computeBranchPaths, areMutuallyExclusive } from './conditions';
 
@@ -383,7 +384,7 @@ function callArguments(
     const callee = findSymbolInfo(call[2], uri, lineNum, documentIndex, caseSensitive, true, unit);
     if (!callee || (callee.kind !== 'macro' && callee.kind !== 'function')) return null;
 
-    const path = callee.scopePath ? `${callee.scopePath}.${callee.name}` : callee.name;
+    const path = calleeScopePath(callee);
     const definition = documentIndex.get(callee.uri);
     const parameters = definition?.parametersAtScope.get(path) ?? [];
     const used = new Set(definition?.usedParametersAtScope.get(path) ?? []);

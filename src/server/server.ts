@@ -588,7 +588,9 @@ connection.onSignatureHelp((params: SignatureHelpParams): SignatureHelp | null =
         Position.create(params.position.line, 0),
         params.position
     ));
-    return getSignatureHelp(linePrefix, documentIndex, effectiveCaseSensitive(params.textDocument.uri));
+    const uri = params.textDocument.uri;
+    return getSignatureHelp(linePrefix, uri, params.position.line, documentIndex,
+        effectiveCaseSensitive(uri), unitFor(uri));
 });
 
 connection.languages.semanticTokens.on((params: SemanticTokensParams): SemanticTokens => {
