@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { DocumentHighlightKind } from 'vscode-languageserver/node';
 import { findReferences, findDocumentHighlights, findSymbolOccurrences, findSymbolInfo } from '../../src/server/symbols';
-import { buildIndex } from '../helpers/doc';
+import { buildIndex, BuildIndexSource } from '../helpers/doc';
 
-function withText(sources: { source: string; uri: string }[]) {
+function withText(sources: BuildIndexSource[]) {
     const built = buildIndex(...sources);
     const texts = new Map(sources.map(s => [s.uri, s.source]));
     return { ...built, getText: (uri: string) => texts.get(uri) ?? null };
@@ -181,5 +181,26 @@ describe('a name with a capital in it', () => {
         const found = findSymbolOccurrences(symbol, documentIndex, getText, true);
         // `_LOOP` is a different symbol under -C, and stays untouched.
         expect(found.map(o => `${o.range.start.line}:${o.range.start.character}`)).toEqual(['1:0', '3:12']);
+    });
+});
+
+describe('a name inside a string literal', () => {
+    // Text, not a reference: rename was rewriting the contents of a .text.
+    const SOURCE = 'counter = 1\nmsg     .text "counter here"\n        lda counter';
+
+    it('is not an occurrence', () => {
+        const { documentIndex, getText } = withText([{ source: SOURCE, uri: 'file:///str.asm' }]);
+        const symbol = findSymbolInfo('counter', 'file:///str.asm', 2, documentIndex)!;
+        expect(findSymbolOccurrences(symbol, documentIndex, getText, false)
+            .map(o => `${o.range.start.line}:${o.range.start.character}`))
+            .toEqual(['0:0', '2:12']);
+    });
+
+    it('leaves a real reference on the same line alone', () => {
+        const source = 'counter = 1\nmsg     .text "counter", counter';
+        const { documentIndex, getText } = withText([{ source, uri: 'file:///str2.asm' }]);
+        const symbol = findSymbolInfo('counter', 'file:///str2.asm', 1, documentIndex)!;
+        expect(findSymbolOccurrences(symbol, documentIndex, getText, false)
+            .map(o => o.range.start.character)).toEqual([0, 25]);
     });
 });

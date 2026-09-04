@@ -14,7 +14,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex } from './types';
-import { parseLineStructure, escapeRegex } from './utils';
+import { parseLineStructure, escapeRegex, stripStrings } from './utils';
 
 /**
  * Normalize a name for matching based on case sensitivity
@@ -626,7 +626,11 @@ export function findSymbolOccurrences(
 
         for (let lineNum = 0; lineNum < lines.length; lineNum++) {
             const line = lines[lineNum];
-            const { code, commentStart } = parseLineStructure(line);
+            const { code: rawCode, commentStart } = parseLineStructure(line);
+            // A name inside a string literal is text, not a reference - rename was
+            // rewriting `.text "counter here"`. stripStrings blanks the contents
+            // and keeps every offset, which is what every other scanner here does.
+            const code = stripStrings(rawCode);
 
             if (code.trim() !== '') {
                 if (symbol.isLocal) {
