@@ -198,9 +198,11 @@ export function parseDocument(
         // a block scope, so f's `sym` is reachable only as `label.sym` (verified).
         // Both are followed when indexing, but a .binclude records the full scope
         // path its contents land in, so the file can be parsed with that as its base.
-        const includeMatch = line.match(/^\s*(?:([a-zA-Z_][a-zA-Z0-9_]*)\s*:?)?\s*\.(include|binclude)\s+["']([^"']+)["']/i);
+        // Matching quotes: `.include "f'` is `'"' expected` to the assembler
+        // (verified), and workspace.ts has always required the pair.
+        const includeMatch = line.match(/^\s*(?:([a-zA-Z_][a-zA-Z0-9_]*)\s*:?)?\s*\.(include|binclude)\s+(["'])([^"']+)\3/i);
         if (includeMatch) {
-            const [, includeLabel, directive, includePath] = includeMatch;
+            const [, includeLabel, directive, , includePath] = includeMatch;
             const isBinclude = directive.toLowerCase() === 'binclude';
             const enclosing = getCurrentScopePath();
 

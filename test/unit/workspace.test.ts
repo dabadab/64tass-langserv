@@ -168,3 +168,16 @@ describe('findFilePathAt', () => {
         expect(at(line, line.indexOf('data.bin'))!.resolved).toBe(path.join(dir, 'data.bin'));
     });
 });
+
+describe('findFilePathAt and the directive slot', () => {
+    // A path named in prose was becoming a document link and a definition target.
+    it('ignores a path mentioned in a comment', () => {
+        const line = '        nop ; see .include "b.asm" for the rest';
+        expect(findFilePathAt(line, line.indexOf('b.asm'), '/tmp/x.asm', [])).toBeNull();
+    });
+
+    it('still finds one in the directive slot, labelled or not', () => {
+        expect(findFilePathAt('        .include "b.asm"', 20, '/tmp/x.asm', [])?.text).toBe('b.asm');
+        expect(findFilePathAt('lbl     .binclude "b.asm"', 21, '/tmp/x.asm', [])?.text).toBe('b.asm');
+    });
+});

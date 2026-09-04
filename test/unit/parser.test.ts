@@ -1339,3 +1339,10 @@ describe('a comparison is not a definition', () => {
         expect(parse('_x = 1').labels.map(l => l.name)).toEqual(['_x']);
     });
 });
+
+describe('include paths need matching quotes', () => {
+    it('does not index one that opens and closes differently', () => {
+        // `.include "f'` is "'\"' expected" to the assembler (verified).
+        expect(parse(`        .include "b.asm'`).includes).toEqual([]);
+    });
+});

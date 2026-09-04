@@ -63,8 +63,14 @@ export function collectSourceFiles(root: string, options: CollectOptions = {}): 
     return found;
 }
 
-/** Directives whose argument is a quoted file path (same set completion offers). */
-const FILE_PATH_DIRECTIVE = /(?:^|\s)\.(include|binclude|binary)\s+(["'])([^"']*)\2/i;
+/**
+ * Directives whose argument is a quoted file path (same set completion offers).
+ *
+ * Anchored to the directive slot, the way the parser's own include pattern is: a
+ * path named in prose - `nop ; see .include "b.asm" for the rest` - was becoming
+ * a document link and a go-to-definition target.
+ */
+const FILE_PATH_DIRECTIVE = /^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s*:?\s*)?\.(include|binclude|binary)\s+(["'])([^"']*)\2/i;
 
 export interface FilePathReference {
     /** The path exactly as written in the source */
