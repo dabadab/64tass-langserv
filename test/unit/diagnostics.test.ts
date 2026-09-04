@@ -1387,3 +1387,34 @@ describe('symbols passed to a macro or function', () => {
         expect(getDiagnostics(source).filter(d => d.code === 'undefined-symbol')).toEqual([]);
     });
 });
+
+describe('conditionals written in comment-block prose', () => {
+    // A `.comment` block holds English, and English says things like "disabled
+    // with .if 0". Read as a conditional it opened a chain that never closed, so
+    // everything below was marked dead and every diagnostic suppressed - while
+    // 64tass reports both errors here (verified).
+    const SOURCE = [
+        '        .comment',
+        'disabled with .if 0',
+        '        .endc',
+        '*=$1000',
+        '        sta undefined_here',
+        'dup     = 1',
+        'dup     = 2',
+    ].join('\n');
+
+    it('still reports what the assembler reports', () => {
+        const found = getDiagnostics(SOURCE).map(d => d.message);
+        expect(found).toContain("Undefined symbol 'undefined_here'");
+        expect(found.some(m => m.startsWith("Duplicate label 'dup'"))).toBe(true);
+    });
+
+    it('greys nothing out', () => {
+        expect(getDiagnostics(SOURCE).filter(d => d.code === 'inactive-code')).toEqual([]);
+    });
+
+    it('still decides a real conditional', () => {
+        const real = '        .if 0\n        sta undefined_here\n        .endif';
+        expect(getDiagnostics(real).filter(d => d.code === 'inactive-code')).toHaveLength(1);
+    });
+});

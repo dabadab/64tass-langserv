@@ -196,3 +196,11 @@ describe('areMutuallyExclusive', () => {
         expect(areMutuallyExclusive(p.get(1), p.get(4))).toBe(false);
     });
 });
+
+describe('computeBranchPaths and comment blocks', () => {
+    it('does not open a chain for prose inside a .comment block', () => {
+        const lines = ['        .comment', 'text mentioning .if 1', '        .endc', 'after   = 1'];
+        // The last line is outside every chain; a prose `.if` used to nest it.
+        expect(computeBranchPaths(lines).get(3)).toEqual([]);
+    });
+});

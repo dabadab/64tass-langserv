@@ -1,6 +1,6 @@
 import { DocumentIndex } from './types';
 import { findSymbolInfo } from './symbols';
-import { parseNumericValue, parseLineStructure, stripStrings } from './utils';
+import { parseNumericValue, parseLineStructure, stripStrings, findCommentBlockLines } from './utils';
 
 /**
  * Result of evaluating a conditional expression.
@@ -228,11 +228,17 @@ export interface BranchStep {
  * statically. A line outside any conditional gets an empty path.
  */
 export function computeBranchPaths(lines: string[]): Map<number, BranchStep[]> {
+    // A `.comment` block holds prose, and prose says things like "disabled with
+    // .if 0". Reading that as a conditional opens a chain that never closes and
+    // marks the rest of the file dead (verified: 64tass reports the errors below
+    // it, and the extension used to suppress them).
+    const commentBlockLines = findCommentBlockLines(lines);
     const paths = new Map<number, BranchStep[]>();
     const stack: BranchStep[] = [];
     let nextChain = 0;
 
     for (let i = 0; i < lines.length; i++) {
+        if (commentBlockLines.has(i)) continue;
         const code = stripStrings(parseLineStructure(lines[i]).code);
 
         if (/(?:^|\s)\.(endif|fi)\b/i.test(code)) {

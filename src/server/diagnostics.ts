@@ -44,12 +44,19 @@ function findDeadLines(
     unit?: ReadonlySet<string>
 ): Set<number> {
     const dead = new Set<number>();
+    // Prose inside a `.comment` block is not code: "disabled with .if 0" written
+    // in one opened a chain that never closed, so the whole rest of the file was
+    // marked dead and every diagnostic after it suppressed. The conservatism that
+    // makes this scanner safe - it can suppress but never invent - only holds
+    // while the lines it reads are code.
+    const commentBlockLines = findCommentBlockLines(lines);
     // taken: has some branch of this chain already been taken?
     // live: is the branch we are currently in possibly executable?
     const stack: { live: boolean; taken: boolean | null }[] = [];
     const isDead = () => stack.some(s => s.live === false);
 
     for (let i = 0; i < lines.length; i++) {
+        if (commentBlockLines.has(i)) continue;
         const code = stripStrings(parseLineStructure(lines[i]).code);
         const open = code.match(/(?:^|\s)\.(if|ifeq|ifne|ifmi|ifpl)\b(.*)$/i);
         const elsif = code.match(/(?:^|\s)\.(elsif|elif)\b(.*)$/i);
