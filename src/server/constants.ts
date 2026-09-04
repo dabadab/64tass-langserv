@@ -580,16 +580,29 @@ export const BUILTINS = new Set([
     'sqrt', 'str', 'symbol', 'tan', 'tanh', 'trunc', 'tuple', 'type', 'word',
 ]);
 
-// Built-in directives regex pattern for validation
-export const BUILTIN_DIRECTIVES_PATTERN = /^\.(byte|word|long|dword|addr|rta|text|ptext|null|fill|align|binary|include|binclude|cpu|enc|cdef|edef|assert|error|warn|cerror|cwarn|var|here|as|option|eor|seed|else|elsif|elif|case|default|shift|shiftl|proff|pron|hidemac|showmac|continue|break|breakif|continueif|sfunction|lbl|goto|databank|dpage|autsiz|mansiz|char|dint|lint|sint|dsection|dstruct|dunion|offs|tdef|al|alignind|alignpageind|check|from|xl|xs|end)$/i;
+/**
+ * The built-in directives that are not scope openers or closers - the names, and
+ * the pattern BUILT FROM them.
+ *
+ * That way round on purpose: the list used to be scraped back out of the
+ * pattern's own source text, so any edit that added a group or an anchor would
+ * have yielded an empty list - and two parser branches gate on it, which would
+ * have quietly changed what every data label and macro-call label means, with no
+ * test failing anywhere near the cause.
+ */
+const BUILTIN_DIRECTIVE_NAMES: string[] = [
+    'byte', 'word', 'long', 'dword', 'addr', 'rta', 'text', 'ptext', 'null',
+    'fill', 'align', 'binary', 'include', 'binclude', 'cpu', 'enc', 'cdef', 'edef',
+    'assert', 'error', 'warn', 'cerror', 'cwarn', 'var', 'here', 'as', 'option',
+    'eor', 'seed', 'else', 'elsif', 'elif', 'case', 'default', 'shift', 'shiftl',
+    'proff', 'pron', 'hidemac', 'showmac', 'continue', 'break', 'breakif', 'continueif', 'sfunction',
+    'lbl', 'goto', 'databank', 'dpage', 'autsiz', 'mansiz', 'char', 'dint', 'lint',
+    'sint', 'dsection', 'dstruct', 'dunion', 'offs', 'tdef', 'al', 'alignind', 'alignpageind',
+    'check', 'from', 'xl', 'xs', 'end'
+];
 
-// Canonical list of all directive names (without the leading dot), for completion.
-// Derived from the other directive sources above so there's a single source of
-// truth instead of a separately hand-maintained list that could drift out of sync.
-const BUILTIN_DIRECTIVE_NAMES: string[] = (() => {
-    const match = BUILTIN_DIRECTIVES_PATTERN.source.match(/^\^\\\.\((.+)\)\$$/);
-    return match ? match[1].split('|') : [];
-})();
+export const BUILTIN_DIRECTIVES_PATTERN =
+    new RegExp(`^\\.(${BUILTIN_DIRECTIVE_NAMES.join('|')})$`, 'i');
 
 // Directives whose argument is a name from a fixed vocabulary (encoding name, CPU
 // name, compiler option), never a user-defined symbol - so symbol completion
@@ -602,3 +615,6 @@ export const ALL_DIRECTIVES: string[] = Array.from(new Set([
     ...Object.values(OPENER_TO_CLOSERS).flat().map(d => d.slice(1)),
     ...BUILTIN_DIRECTIVE_NAMES
 ])).sort();
+
+/** The same names, for the membership tests the parser runs twice per line. */
+export const ALL_DIRECTIVE_SET: ReadonlySet<string> = new Set(ALL_DIRECTIVES);

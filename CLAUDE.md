@@ -130,6 +130,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   every later label was filed under the wrong one, silently. A `:` counts as a
   boundary (`outer:.proc` is valid) but a letter does not, which is what keeps the
   dotted reference `outer.proc` from reading as an opener.
+- **Directive lists**: `BUILTIN_DIRECTIVE_NAMES` is the array, and
+  `BUILTIN_DIRECTIVES_PATTERN` is BUILT from it. It used to be the other way
+  round - the list scraped back out of the pattern's own `.source` - where any
+  edit adding a group or an anchor would have yielded an empty list, silently
+  changing what every data label and macro-call label means. `ALL_DIRECTIVE_SET`
+  is the same names as a Set, for the membership tests the parser runs twice per
+  line.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`.
   An UNNAMED one is still a scope - `.block` with no label hides its labels from
   the outside (verified) - so it gets a synthetic `block@<line>` name rather than
@@ -556,7 +563,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1658 tests); compiles first
+yarn test          # Run all tests (currently 1660 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

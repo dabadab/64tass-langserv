@@ -11,7 +11,7 @@
  */
 import { TextEdit, Range, Position } from 'vscode-languageserver/node';
 import { parseLineStructure, findCommentBlockLines } from './utils';
-import { OPCODES, ALL_DIRECTIVES } from './constants';
+import { OPCODES, ALL_DIRECTIVE_SET } from './constants';
 
 export interface FormatColumns {
     mnemonic: number;
@@ -62,7 +62,7 @@ function splitFields(body: string): Fields | null {
     // label the program no longer had.
     const isInstruction = !colon && (/^[.#*]/.test(word)
         || OPCODES.has(word.toLowerCase())
-        || ALL_DIRECTIVES.includes(word.toLowerCase()));
+        || ALL_DIRECTIVE_SET.has(word.toLowerCase()));
     const assigned = /^\s*:?=/.test(after);
 
     if (!isInstruction && (colon || assigned || !indented)) {

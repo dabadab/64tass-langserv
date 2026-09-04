@@ -8,6 +8,7 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN,
     ALL_DIRECTIVES,
+    ALL_DIRECTIVE_SET,
     opcodesForCpu,
     registerModesForCpu,
     CPU_NAMES,
@@ -337,5 +338,24 @@ describe('directives that do not exist', () => {
     it('keeps .var, which does exist', () => {
         expect(BUILTIN_DIRECTIVES_PATTERN.test('.var')).toBe(true);
         expect(ALL_DIRECTIVES).toContain('var');
+    });
+});
+
+describe('the directive list and its pattern', () => {
+    // The list used to be scraped back out of the pattern's own source text, so
+    // any edit adding a group or an anchor would have silently emptied it - and
+    // two parser branches gate on it.
+    it('agree with each other', () => {
+        for (const name of ALL_DIRECTIVES) {
+            const isOpenerOrCloser = SCOPE_OPENERS[`.${name}`] !== undefined
+                || CLOSING_DIRECTIVES[`.${name}`] !== undefined
+                || OPENER_TO_CLOSERS[`.${name}`] !== undefined;
+            if (!isOpenerOrCloser) expect(BUILTIN_DIRECTIVES_PATTERN.test(`.${name}`), name).toBe(true);
+        }
+    });
+
+    it('is not empty, whatever the pattern is edited to', () => {
+        expect(ALL_DIRECTIVES.length).toBeGreaterThan(100);
+        expect(ALL_DIRECTIVE_SET.size).toBe(ALL_DIRECTIVES.length);
     });
 });

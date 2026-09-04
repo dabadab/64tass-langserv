@@ -2,7 +2,7 @@ import { Range, Position } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
-import { SCOPE_OPENERS, CLOSING_DIRECTIVES, ALL_DIRECTIVES, opcodesForCpu, DEFAULT_CPU } from './constants';
+import { SCOPE_OPENERS, CLOSING_DIRECTIVES, ALL_DIRECTIVE_SET, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { blockDirectivesOn, BOUNDARY } from './blocks';
 import { resolveIncludePath } from './paths';
 import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys, parseLineStructure, stripStrings } from './utils';
@@ -736,7 +736,7 @@ export function parseDocument(
         // also recorded "tab1 was made by macro rta".
         const dataLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.([a-zA-Z]+)\b/i);
         if (dataLabelMatch
-            && ALL_DIRECTIVES.includes(dataLabelMatch[3].toLowerCase())
+            && ALL_DIRECTIVE_SET.has(dataLabelMatch[3].toLowerCase())
             && !HAS_OWN_BRANCH.has(dataLabelMatch[3].toLowerCase())) {
             const labelName = dataLabelMatch[2];
             const startChar = dataLabelMatch[1].length;
@@ -811,7 +811,7 @@ export function parseDocument(
             // Every known directive, not only the scope-creating ones: a data
             // directive reaching here would be recorded as the macro that made
             // the label.
-            if (!ALL_DIRECTIVES.includes(macroLabelMatch[5].toLowerCase())) {
+            if (!ALL_DIRECTIVE_SET.has(macroLabelMatch[5].toLowerCase())) {
                 labels.push({
                     name: normalizeName(labelName),
                     originalName: labelName,
