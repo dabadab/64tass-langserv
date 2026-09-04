@@ -125,7 +125,7 @@ export function indexDocument(
  * Left as a definition when nothing of the name is callable, so a plain
  * `loop`-style label keeps working.
  */
-function settleBareWords(uris: Set<string>, documentIndex: Map<string, DocumentIndex>): void {
+export function settleBareWords(uris: Set<string>, documentIndex: Map<string, DocumentIndex>): void {
     const callable = new Set<string>();
     for (const uri of uris) {
         for (const label of documentIndex.get(uri)?.labels ?? []) {

@@ -265,7 +265,15 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   deliberately excluded: they assemble but are addressing-size and bank
   overrides, not indices (`lda $10,b` disassembles as a plain absolute
   `lda $0010`).
-- **Index lifetime**: `scanWorkspace` runs once, at startup, so `onDidClose` must
+- **Index lifetime**: `scanWorkspace` goes through `indexDocument`, not
+  `parseDocument`: that is what records the include EDGES. Scanning past them left
+  `IncludeGraph` empty for every file nobody had opened, so an include on its own
+  was a compilation unit of one - its parent's symbols read as undefined, the
+  assembler ran on the include alone, and unused-symbol hints counted only that
+  file. One `indexedUris` set is shared across the scan so a file included by
+  several roots is parsed once (`addRef` runs before that set is consulted), and
+  `settleBareWords` runs once at the end, over everything the scan reached.
+  `scanWorkspace` runs once, at startup, so `onDidClose` must
   NOT simply drop a file - doing so shrank the index with every file opened and
   closed, quietly costing Ctrl+T and cross-file go-to-definition for the rest of
   the session. A closed file under a workspace root is re-indexed from disk
@@ -526,7 +534,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1623 tests); compiles first
+yarn test          # Run all tests (currently 1624 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

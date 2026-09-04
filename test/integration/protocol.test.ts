@@ -281,3 +281,28 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
         expect(help?.signatures?.[0]?.label).toContain('ptr');
     });
 });
+
+describe.skipIf(!SERVER_BUILT)('a file nobody has opened', () => {
+    let server: TestServer;
+
+    beforeAll(async () => {
+        // parent.asm defines a symbol and includes child.inc. Only the child is
+        // ever opened, so the include edge can come from nowhere but the scan.
+        server = await TestServer.start({
+            'parent.asm': 'FOO = 1\n        .include "child.inc"\n',
+            'child.inc': '*=$1000\n        lda #FOO\n',
+        });
+        await server.initialize();
+    }, 30000);
+
+    afterAll(async () => { await server?.stop(); });
+
+    it('still contributes its symbols to the include it never showed', async () => {
+        const uri = server.uriOf('child.inc');
+        const published = server.nextDiagnostics(uri);
+        await server.connection.sendNotification('textDocument/didOpen', {
+            textDocument: { uri, languageId: '64tass', version: 1, text: '*=$1000\n        lda #FOO\n' },
+        });
+        expect((await published).filter(d => d.code === 'undefined-symbol')).toEqual([]);
+    }, 30000);
+});

@@ -58,8 +58,6 @@ import { buildHover } from './hover';
 import { buildDocumentLinks } from './documentLinks';
 import { computeSelectionRanges } from './selectionRanges';
 import { buildCodeActions } from './codeActions';
-import { detectCaseSensitivityPragma, detectCpu } from './utils';
-import { parseDocument } from './parser';
 import {
     getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits,
     isRenameable, isValidSymbolName, findReferences, findDocumentHighlights
@@ -74,7 +72,7 @@ import { IncludeGraph } from './includes';
 import { collectSourceFiles, findFilePathAt } from './workspace';
 import { CPU_FLAG, DEFAULT_CPU, isCpuName } from './constants';
 import { computeFoldingRanges } from './folding';
-import { indexDocument as indexDocumentWith, clearIncludeRefs as clearIncludeRefsWith, IndexContext } from './indexing';
+import { indexDocument as indexDocumentWith, clearIncludeRefs as clearIncludeRefsWith, settleBareWords, IndexContext } from './indexing';
 
 import { buildDocumentSymbols } from './documentSymbols';
 import { findWorkspaceSymbols } from './workspaceSymbols';
@@ -437,29 +435,33 @@ async function scanWorkspace(): Promise<void> {
 
     const started = Date.now();
     let indexed = 0;
+    // Shared across the scan, so a file included by several roots is parsed once
+    // while every edge is still recorded - indexDocument calls addRef before it
+    // consults this set.
+    const scanned = new Set<string>();
 
     for (const file of files) {
         const uri = pathToFileURL(file).toString();
-        if (documentIndex.has(uri)) continue; // already indexed as open doc or include
+        if (scanned.has(uri) || documentIndex.has(uri)) continue; // open, or already reached as an include
 
         const content = getDocumentText(uri);
         if (content === null) continue;
 
-        const caseSensitive = detectCaseSensitivityPragma(content) ?? globalSettings.caseSensitive;
-        const cpu = detectCpu(content) ?? globalSettings.cpu;
-        documentIndex.set(
-            uri,
-            parseDocument(TextDocument.create(uri, '64tass', 1, content), {
-                caseSensitive, cpu,
-                log: msg => connection.console.warn(msg),
-                includePaths: searchPaths(),
-            })
-        );
+        // Through indexDocument, not parseDocument: it is what records the include
+        // edges. Scanning past them left IncludeGraph empty for every file nobody
+        // had opened, so an include on its own was a compilation unit of one and
+        // its parent's symbols read as undefined. Its own URI as the root, which
+        // it is - that also defers the bare-word pass to the end of the scan.
+        indexDocumentWith(TextDocument.create(uri, '64tass', 1, content), indexContext, scanned, uri);
         indexed++;
 
         // Hand the event loop back regularly so requests are not blocked
         if (indexed % 20 === 0) await new Promise(resolve => setImmediate(resolve));
     }
+
+    // Once, over everything the scan reached: a no-argument macro call is only
+    // knowable as a call after the file defining the macro has been read.
+    settleBareWords(scanned, documentIndex);
 
     if (indexed > 0) {
         connection.console.log(`Indexed ${indexed} workspace file(s) in ${Date.now() - started}ms`);
