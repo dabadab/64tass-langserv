@@ -173,7 +173,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   imported by an enclosing `.with`. `.with` scopes accumulate - `.with b` inside
   `.with a` searches `a.b` - and apply to qualified names too, so inside
   `.with MAPDATA` the reference `CHARS.DATA` means `MAPDATA.CHARS.DATA`. The
-  expansion is applied once (`applyWith`), or it would recurse forever. `.with X` makes X's members visible unqualified
+  expansion is applied once (`applyWith`), or it would recurse forever. The
+  parser matches `.with`/`.endwith` on the shared `BOUNDARY` from `blocks.ts`, so
+  `lbl:.with sc` opens the scope here as well as for the unclosed-block check -
+  the two used to disagree on that line - and the branch indexes the label the
+  line carries before it continues, which it silently dropped before. `.with X` makes X's members visible unqualified
   but does NOT change where definitions land - a label defined inside a `.with` block
   belongs to the enclosing scope (verified). So it is recorded per line as
   `scopeAtLine[n].withScopes` (raw names, resolved at query time since the target may
@@ -534,7 +538,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1630 tests); compiles first
+yarn test          # Run all tests (currently 1634 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

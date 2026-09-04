@@ -3,7 +3,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { SCOPE_OPENERS, CLOSING_DIRECTIVES, ALL_DIRECTIVES, opcodesForCpu, DEFAULT_CPU } from './constants';
-import { blockDirectivesOn } from './blocks';
+import { blockDirectivesOn, BOUNDARY } from './blocks';
 import { resolveIncludePath } from './paths';
 import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys, parseLineStructure, stripStrings } from './utils';
 
@@ -258,9 +258,37 @@ export function parseDocument(
         // are not anchored, so a comment saying "wrap this in .with MAP" imported
         // a scope that was never opened, and one mentioning `.endwith` closed one
         // that was. Same trap blockDirectivesOn exists to avoid for the closers.
+        //
+        // The boundary is the shared one: a colon is a boundary too, so `lbl:.with`
+        // opens a scope - blockDirectivesOn already counted that line for the
+        // unclosed-block check, and the two disagreeing left `.with` open here and
+        // closed there.
         const codeOnly = stripStrings(parseLineStructure(line).code);
-        const withMatch = codeOnly.match(/(?:^|\s)\.with\s+([a-zA-Z_][a-zA-Z0-9_.]*)/i);
+        const withMatch = codeOnly.match(new RegExp(`${BOUNDARY}\\.with\\s+([a-zA-Z_][a-zA-Z0-9_.]*)`, 'i'));
         if (withMatch) {
+            // A label on the line is a label like any other (verified: `.byte <lbl`
+            // resolves). The branch used to continue before any label branch ran,
+            // so every reference to it reported "Undefined symbol".
+            const withLabel = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)\.with\b/i);
+            if (withLabel) {
+                const labelName = withLabel[2];
+                const startChar = withLabel[1].length;
+                if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
+                labels.push({
+                    name: normalizeName(labelName),
+                    originalName: labelName,
+                    uri: document.uri,
+                    range: Range.create(
+                        Position.create(lineNum, startChar),
+                        Position.create(lineNum, startChar + labelName.length)
+                    ),
+                    scopePath: getCurrentScopePath(),
+                    localScope: isLocalName(labelName) ? currentLocalScope : null,
+                    isLocal: isLocalName(labelName),
+                    kind: 'code',
+                    comment: getBlockComment(lines, lineNum)
+                });
+            }
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),
                 localScope: currentLocalScope,
@@ -269,7 +297,7 @@ export function parseDocument(
             withScopes.push(normalizeName(withMatch[1]));
             continue;
         }
-        if (/(?:^|\s)\.endwith\b/i.test(codeOnly)) {
+        if (new RegExp(`${BOUNDARY}\\.endwith\\b`, 'i').test(codeOnly)) {
             withScopes.pop();
             scopeAtLine.set(lineNum, {
                 scopePath: getCurrentScopePath(),

@@ -1271,3 +1271,35 @@ describe('includes that do not resolve', () => {
         expect(parse('start   nop').unresolvedIncludes).toBe(false);
     });
 });
+
+describe('the .with line', () => {
+    // Both verified against the assembler: `lbl:.with sc` opens the scope, and the
+    // label it carries is an ordinary one (`.byte <lbl` resolves).
+    const SOURCE = [
+        'sc      .block',
+        'v       = 1',
+        '        .bend',
+        'lbl:.with sc',
+        '        lda #v',
+        '        .endwith',
+    ].join('\n');
+
+    it('opens the scope when a colon precedes the directive', () => {
+        expect(parse(SOURCE).scopeAtLine.get(4)?.withScopes).toEqual(['sc']);
+    });
+
+    it('indexes the label the line carries', () => {
+        const label = parse(SOURCE).labels.find(l => l.name === 'lbl');
+        expect(label?.kind).toBe('code');
+        expect(label?.range.start.character).toBe(0);
+    });
+
+    it('indexes a label written with a space too', () => {
+        expect(parse('lbl     .with sc\n        .endwith').labels.map(l => l.name)).toEqual(['lbl']);
+    });
+
+    it('still closes on a colon-prefixed .endwith', () => {
+        const index = parse('        .with sc\n        lda #1\ncl:.endwith\n        lda #2');
+        expect(index.scopeAtLine.get(3)?.withScopes).toEqual([]);
+    });
+});

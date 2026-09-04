@@ -26,7 +26,7 @@ export interface BlockDirectives {
 // (verified) - so ':' counts as a boundary too. A letter before the dot must not:
 // that is what keeps the dotted reference "outer.proc" from reading as an opener.
 // Safe: directive names come from the static tables in constants.ts.
-const BOUNDARY = '(?:^|[\\s:])';
+export const BOUNDARY = '(?:^|[\\s:])';
 const OPENER_PATTERNS: [string, RegExp][] = Object.keys(OPENER_TO_CLOSERS)
     .map(directive => [directive, new RegExp(`${BOUNDARY}\\${directive}\\b`, 'i')]);
 const CLOSER_PATTERNS: [string, RegExp][] = Object.keys(CLOSING_DIRECTIVES)
