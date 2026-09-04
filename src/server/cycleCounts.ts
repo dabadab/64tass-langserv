@@ -23,8 +23,13 @@ import { addressExpressionOf, bytesForValue, parseOperand } from './operands';
 import { parseLineStructure } from './utils';
 import { evaluateExpression } from './conditions';
 
-/** Leading label (if any), then the instruction slot, then the rest. */
-const LINE = /^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(:?)\s*(.*)$/;
+/**
+ * Leading label (if any), then the instruction slot, then the rest.
+ *
+ * The label may be anonymous: `-  inx` is the idiom a tight loop is built from,
+ * and requiring an identifier left the count blank on exactly those lines.
+ */
+const LINE = /^\s*([a-zA-Z_][a-zA-Z0-9_]*|[+-]+)\s*(:?)\s*(.*)$/;
 
 /**
  * Split a line into mnemonic and operand, by the assembler's first-token rule:

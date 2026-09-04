@@ -62,6 +62,16 @@ describe('cycle counts', () => {
         expect(countsFor('        *= $1000\n        lda $1234', '65816')).toEqual([]);
     });
 
+    it('counts a line that starts with an anonymous label', () => {
+        // `-  inx` is what a tight loop is made of, and the column was blank on
+        // exactly those lines.
+        expect(labelled('        *= $1000\n-       inx\n        bne -\n+       nop')).toEqual({
+            '-       inx': '2',
+            'bne -': '2**',
+            '+       nop': '2',
+        });
+    });
+
     it('reports the line each count belongs to', () => {
         expect(countsFor('        *= $1000\n\n        nop\n        rts'))
             .toEqual([{ line: 2, text: '2' }, { line: 3, text: '6' }]);
