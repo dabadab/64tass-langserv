@@ -400,6 +400,105 @@ function callArguments(
     return { text: kept.join(' '), start: call[1].length };
 }
 
+/**
+ * Names defined twice where both definitions can exist.
+ *
+ * Definitions in different branches of the same conditional chain are NOT
+ * duplicates: the assembler assembles at most one branch, so they can never both
+ * exist - which is why this uses BRANCH PATHS and not just `findDeadLines`, whose
+ * answer for an undecidable condition is "both live". A definition inside a
+ * branch that provably cannot be taken is not there at all, so it neither
+ * collides nor is collided with, and that is what `deadLines` is for.
+ */
+function findDuplicateLabels(
+    index: DocumentIndex,
+    lines: string[],
+    deadLines: ReadonlySet<number>,
+    uri: string,
+    documentIndex: Map<string, DocumentIndex>,
+    getText?: (uri: string) => string | null
+): Diagnostic[] {
+    const found: Diagnostic[] = [];
+    const report = (label: LabelDefinition, other: LabelDefinition) => found.push({
+        severity: DiagnosticSeverity.Error,
+        range: label.range,
+        message: `Duplicate label '${label.originalName}', ${describeLocation(other, uri)}`,
+        source: '64tass',
+        // Rendered by the client as a link to the other definition.
+        relatedInformation: [{
+            location: { uri: other.uri, range: other.range },
+            message: 'first defined here'
+        }]
+    });
+
+    const branchPaths = computeBranchPaths(lines);
+    const seen = new Map<string, LabelDefinition[]>();
+    for (const label of index.labels) {
+        // Anonymous labels can have several instances in one scope, and
+        // re-assignable variables (`.var` / `:=`) are meant to be redefined.
+        if (label.isAnonymous || label.kind === 'var') continue;
+        if (deadLines.has(label.range.start.line)) continue;
+
+        const key = `${label.scopePath ?? 'global'}:${label.localScope ?? 'none'}:${label.name}`;
+        const prior = seen.get(key);
+        if (!prior) {
+            seen.set(key, [label]);
+            continue;
+        }
+
+        const path = branchPaths.get(label.range.start.line);
+        const collided = prior.find(other =>
+            !areMutuallyExclusive(path, branchPaths.get(other.range.start.line)));
+        if (collided) report(label, collided);
+        prior.push(label);
+    }
+
+    // The same name defined here AND in a file this one includes: the assembler
+    // rejects that, and the loop above cannot see it.
+    for (const [label, other] of crossFileDuplicates(index, documentIndex, deadLines, getText)) {
+        report(label, other);
+    }
+    return found;
+}
+
+
+/**
+ * An anonymous reference (`+`, `--`, ...) the file has no label for.
+ *
+ * Anchored: such a reference IS the start of the operand. `#-1` and `table+1` are
+ * arithmetic, which a letter or digit straight after settles, and a mixed run
+ * (`+-`) is not a reference at all.
+ */
+function findAnonymousProblem(
+    operand: string,
+    operandStart: number,
+    uri: string,
+    lineNum: number,
+    documentIndex: Map<string, DocumentIndex>
+): Diagnostic[] {
+    const match = operand.match(/^(\s*)([+-]+)/);
+    if (!match) return [];
+
+    const ref = match[2];
+    const after = operand[match[0].length] ?? ' ';
+    if (!ref.split('').every(c => c === ref[0]) || /[a-zA-Z0-9_]/.test(after)) return [];
+
+    const direction = ref[0] as '+' | '-';
+    if (findAnonymousLabel(direction, ref.length, uri, lineNum, documentIndex)) return [];
+
+    const startCol = operandStart + match[1].length;
+    return [{
+        severity: DiagnosticSeverity.Warning,
+        range: Range.create(
+            Position.create(lineNum, startCol),
+            Position.create(lineNum, startCol + ref.length)
+        ),
+        message: `No ${direction === '+' ? 'forward' : 'backward'} anonymous label found`,
+        source: '64tass'
+    }];
+}
+
+
 export function validateDocument(
     document: TextDocument,
     documentIndex: Map<string, DocumentIndex>,
@@ -444,71 +543,7 @@ export function validateDocument(
         });
     }
 
-    // Check for duplicate labels (same name, same scopePath, same localScope)
-    // All names are stored lowercase, so simple comparison works
-    // Skip anonymous labels - they're allowed to have multiple instances
-    //
-    // Definitions in different branches of the same conditional chain are NOT
-    // duplicates: the assembler assembles at most one branch, so they can never
-    // both exist. That holds even when the condition cannot be decided statically,
-    // which is why this uses branch paths rather than findDeadLines.
-    const branchPaths = computeBranchPaths(lines);
-    const seenLabels = new Map<string, LabelDefinition[]>();
-    for (const label of index.labels) {
-        // Anonymous labels can have multiple instances in the same scope
-        if (label.isAnonymous) continue;
-        // Re-assignable variables (.var / :=) are meant to be redefined
-        if (label.kind === 'var') continue;
-
-        // A definition the assembler never reaches cannot collide with anything,
-        // nor be collided with - `.if 0` around one of two same-named labels is
-        // the common case, and it is not a duplicate.
-        if (deadLines.has(label.range.start.line)) continue;
-
-        const key = `${label.scopePath ?? 'global'}:${label.localScope ?? 'none'}:${label.name}`;
-        const priorDefinitions = seenLabels.get(key);
-
-        if (priorDefinitions) {
-            const path = branchPaths.get(label.range.start.line);
-            const collided = priorDefinitions.find(prior =>
-                !areMutuallyExclusive(path, branchPaths.get(prior.range.start.line)));
-
-            if (collided) {
-                diagnostics.push({
-                    severity: DiagnosticSeverity.Error,
-                    range: label.range,
-                    message: `Duplicate label '${label.originalName}', ${describeLocation(collided, document.uri)}`,
-                    source: '64tass',
-                    // Rendered by the client as a link to the other definition.
-                    relatedInformation: [{
-                        location: { uri: collided.uri, range: collided.range },
-                        message: 'first defined here'
-                    }]
-                });
-            }
-            priorDefinitions.push(label);
-        } else {
-            seenLabels.set(key, [label]);
-        }
-    }
-
-    // The same name defined here AND in a file this one includes: the assembler
-    // rejects that, and the same-file loop above cannot see it. Only the include
-    // TREE is compared, never the whole compilation unit - two independent
-    // programs that both include one header are in each other's unit but are
-    // never assembled together, so their labels do not collide.
-    for (const [label, other] of crossFileDuplicates(index, documentIndex, deadLines, getText)) {
-        diagnostics.push({
-            severity: DiagnosticSeverity.Error,
-            range: label.range,
-            message: `Duplicate label '${label.originalName}', ${describeLocation(other, document.uri)}`,
-            source: '64tass',
-            relatedInformation: [{
-                location: { uri: other.uri, range: other.range },
-                message: 'first defined here'
-            }]
-        });
-    }
+    diagnostics.push(...findDuplicateLabels(index, lines, deadLines, document.uri, documentIndex, getText));
 
     // Check for unclosed blocks and undefined symbols in a single pass
     const blockStack: { directive: string; line: number }[] = [];
@@ -810,39 +845,11 @@ export function validateDocument(
                 }
             }
 
-            // Check for anonymous label references (+ or -)
-            // ONLY in opcode context (branch/jump instructions), NOT in data directives
-            // Data directives use +/- for arithmetic/unary operators
+            // Anonymous label references (+ / -), in an opcode operand only:
+            // a data directive uses them as arithmetic.
             if (opcodeMatch) {
-                // Anchored: an anonymous reference is the start of the operand and
-                // nowhere else. Scanning it globally and then discarding every
-                // match that was not at the start said the same thing the long way.
-                const anonMatch = operand.match(/^(\s*)([+-]+)/);
-                const ref = anonMatch?.[2] ?? '';
-                // Mixed symbols (`+-`) are not a reference, and `#-1` or `table+1`
-                // is arithmetic - a letter or digit after it settles that.
-                const after = anonMatch ? operand[anonMatch[0].length] ?? ' ' : ' ';
-                const wellFormed = ref !== '' && ref.split('').every(c => c === ref[0])
-                    && !/[a-zA-Z0-9_]/.test(after);
-
-                if (anonMatch && wellFormed) {
-                    const direction = ref[0] as '+' | '-';
-                    const targetLabel = findAnonymousLabel(
-                        direction, ref.length, document.uri, lineNum, documentIndex);
-
-                    if (!targetLabel) {
-                        const startCol = operandStart + anonMatch[1].length;
-                        diagnostics.push({
-                            severity: DiagnosticSeverity.Warning,
-                            range: Range.create(
-                                Position.create(lineNum, startCol),
-                                Position.create(lineNum, startCol + ref.length)
-                            ),
-                            message: `No ${direction === '+' ? 'forward' : 'backward'} anonymous label found`,
-                            source: '64tass'
-                        });
-                    }
-                }
+                diagnostics.push(...findAnonymousProblem(
+                    operand, operandStart, document.uri, lineNum, documentIndex));
             }
 
             // Strip string literals to avoid matching symbols inside strings
