@@ -84,3 +84,38 @@ describe('mentions inside a .comment block', () => {
         expect(inOneFile(source).map(d => d.message)).toEqual(["Unused const 'shared'"]);
     });
 });
+
+describe('re-scanning the compilation unit', () => {
+    // Every debounced publish used to re-read and re-scan every file of the unit.
+    // The result is remembered per INDEX object, which a re-parse replaces.
+    it('reads each file once while nothing changes', () => {
+        const source = 'shared  = 1\n        lda #shared';
+        const doc = createDoc(source, 'file:///cached.asm');
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, parseDocument(doc)]]);
+
+        let reads = 0;
+        const getText = () => { reads++; return source; };
+        findUnusedSymbols(doc.uri, documentIndex, [doc.uri], getText);
+        findUnusedSymbols(doc.uri, documentIndex, [doc.uri], getText);
+        expect(reads).toBe(1);
+    });
+
+    it('reads again once the file has been re-indexed', () => {
+        const first = 'shared  = 1\n        lda #shared';
+        const doc = createDoc(first, 'file:///changed.asm');
+        const documentIndex = new Map<string, DocumentIndex>([[doc.uri, parseDocument(doc)]]);
+
+        let text = first;
+        let reads = 0;
+        const getText = () => { reads++; return text; };
+        expect(findUnusedSymbols(doc.uri, documentIndex, [doc.uri], getText)).toEqual([]);
+
+        // The edit removes the only use; re-indexing is what makes it visible.
+        text = 'shared  = 1\n        nop';
+        const edited = createDoc(text, doc.uri);
+        documentIndex.set(doc.uri, parseDocument(edited));
+        expect(findUnusedSymbols(doc.uri, documentIndex, [doc.uri], getText).map(d => d.message))
+            .toEqual(["Unused const 'shared'"]);
+        expect(reads).toBe(2);
+    });
+});

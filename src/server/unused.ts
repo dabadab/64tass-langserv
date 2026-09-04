@@ -28,6 +28,18 @@ function describeKind(label: LabelDefinition): string {
 const IDENTIFIER = /[a-zA-Z_][a-zA-Z0-9_]*/g;
 
 /**
+ * One file's used names, keyed by its INDEX object rather than its URI.
+ *
+ * `parseDocument` returns a fresh object every time a file is re-indexed, and a
+ * file cannot change without being re-indexed, so identity is exactly the right
+ * invalidation signal - and a WeakMap forgets an entry as soon as the index it
+ * belongs to is replaced. Without this, every debounced publish re-read and
+ * re-scanned every file of the compilation unit: fifty includes meant fifty
+ * synchronous reads and fifty full-text scans per pause in typing.
+ */
+const namesPerIndex = new WeakMap<DocumentIndex, Set<string>>();
+
+/**
  * Every identifier written in `uris`, minus the definitions themselves.
  *
  * Comments and string contents are stripped first: a name mentioned in a comment
@@ -41,6 +53,13 @@ function referencedNames(
 ): Set<string> {
     const used = new Set<string>();
     for (const uri of uris) {
+        const fileIndex = documentIndex.get(uri);
+        const remembered = fileIndex && namesPerIndex.get(fileIndex);
+        if (remembered) {
+            for (const name of remembered) used.add(name);
+            continue;
+        }
+
         const text = getText(uri);
         if (text === null) continue;
         // Where this file's definitions sit, so the defining occurrence of a name
@@ -49,6 +68,7 @@ function referencedNames(
         for (const label of documentIndex.get(uri)?.labels ?? []) {
             definitions.add(`${label.range.start.line}:${label.range.start.character}`);
         }
+        const names = new Set<string>();
         const lines = text.split('\n');
         // A name written inside a `.comment` block is no more a use than one in a
         // trailing comment: the assembler never reads either.
@@ -60,9 +80,11 @@ function referencedNames(
             let match;
             while ((match = IDENTIFIER.exec(code)) !== null) {
                 if (definitions.has(`${lineNum}:${match.index}`)) continue;
-                used.add(caseSensitive ? match[0] : match[0].toLowerCase());
+                names.add(caseSensitive ? match[0] : match[0].toLowerCase());
             }
         }
+        if (fileIndex) namesPerIndex.set(fileIndex, names);
+        for (const name of names) used.add(name);
     }
     return used;
 }

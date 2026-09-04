@@ -215,11 +215,11 @@ function substitutionsFor(
             const memberSource = index.labelDefinedByMacro.get(prefix);
             if (memberSource) {
                 // A function whose `.endf` hands back a scope of its own exposes
-                // that scope's members, not its top-level ones.
-                for (const [otherUri, other] of documentIndex) {
-                    if (unit && !unit.has(otherUri)) continue;
-                    const returned = other.functionReturnScope.get(memberSource);
-                    if (returned) found.push(returned + suffix);
+                // that scope's members, not its top-level ones. Which function
+                // returns what does not depend on the document being examined, so
+                // that lookup is hoisted out rather than nested in this loop.
+                for (const returned of returnedScopesFor(memberSource, documentIndex, unit)) {
+                    found.push(returned + suffix);
                 }
                 found.push(memberSource + suffix);
             }
@@ -227,6 +227,21 @@ function substitutionsFor(
         if (found.length > 0) return found;
     }
     return [];
+}
+
+/** The scopes a function of this name hands back, across the unit. */
+function returnedScopesFor(
+    functionPath: string,
+    documentIndex: Map<string, DocumentIndex>,
+    unit?: ReadonlySet<string>
+): string[] {
+    const found: string[] = [];
+    for (const [uri, index] of documentIndex) {
+        if (unit && !unit.has(uri)) continue;
+        const returned = index.functionReturnScope.get(functionPath);
+        if (returned) found.push(returned);
+    }
+    return found;
 }
 
 /** Does this label live in one of the scopes a reference may be naming? */
