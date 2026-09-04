@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateCondition, computeBranchPaths, areMutuallyExclusive } from '../../src/server/conditions';
+import { evaluateCondition, computeBranchPaths, areMutuallyExclusive, conditionalOn } from '../../src/server/conditions';
 import { buildIndex } from '../helpers/doc';
 
 /** Evaluate `cond` against a document containing `defs` above it. */
@@ -202,5 +202,30 @@ describe('computeBranchPaths and comment blocks', () => {
         const lines = ['        .comment', 'text mentioning .if 1', '        .endc', 'after   = 1'];
         // The last line is outside every chain; a prose `.if` used to nest it.
         expect(computeBranchPaths(lines).get(3)).toEqual([]);
+    });
+});
+
+describe('conditionalOn', () => {
+    // One classifier for both scanners. They carried a regex each, on a boundary
+    // that did not match blockDirectivesOn's, so `lbl:.if 1` opened a block for
+    // the unclosed-block check and no chain at all for these - while the
+    // assembler takes it (verified).
+    it('sees a conditional after a label colon', () => {
+        expect(conditionalOn('lbl:.if 1')).toEqual({ kind: 'open', directive: 'if', condition: ' 1' });
+        expect(conditionalOn('lbl2:.endif')?.kind).toBe('end');
+    });
+
+    it('keeps the directive apart, since .ifeq is not decided like .if', () => {
+        expect(conditionalOn('        .ifeq 1')?.directive).toBe('ifeq');
+        expect(conditionalOn('        .elif 1')?.kind).toBe('elsif');
+    });
+
+    it('is null for an ordinary line', () => {
+        expect(conditionalOn('        lda #1')).toBeNull();
+    });
+
+    it('numbers the branches of a labelled chain', () => {
+        expect([...computeBranchPaths('lbl:.if 0\n        nop\nlbl2:.endif'.split('\n'))]
+            .map(([line, path]) => [line, path.length])).toEqual([[0, 0], [1, 1], [2, 0]]);
     });
 });

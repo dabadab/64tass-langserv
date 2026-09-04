@@ -1,6 +1,7 @@
 import { DocumentIndex } from './types';
 import { findSymbolInfo } from './symbols';
 import { parseNumericValue, parseLineStructure, stripStrings, findCommentBlockLines } from './utils';
+import { BOUNDARY } from './blocks';
 
 /**
  * Result of evaluating a conditional expression.
@@ -211,6 +212,40 @@ class Parser {
     }
 }
 
+/**
+ * What a line does to a conditional chain, if anything.
+ *
+ * One classifier for both scanners - `findDeadLines` needs the condition text and
+ * `computeBranchPaths` only the shape, but which lines COUNT has to be one
+ * answer. They carried a regex each, on a boundary that did not match the one
+ * `blockDirectivesOn` uses, so `lbl:.if 1` opened a block for the unclosed-block
+ * check and no chain at all for these two (verified: the assembler takes it).
+ */
+export type ConditionalKind = 'open' | 'elsif' | 'else' | 'end';
+
+export interface ConditionalLine {
+    kind: ConditionalKind;
+    /** The directive itself, lowercased: `.ifeq` is not decided like `.if`. */
+    directive: string;
+    /** Everything after it, for the branches that carry a condition. */
+    condition: string;
+}
+
+const CONDITIONAL_PATTERNS: [ConditionalKind, RegExp][] = [
+    ['end', new RegExp(`${BOUNDARY}\\.(endif|fi)\\b(.*)$`, 'i')],
+    ['open', new RegExp(`${BOUNDARY}\\.(if|ifeq|ifne|ifmi|ifpl)\\b(.*)$`, 'i')],
+    ['elsif', new RegExp(`${BOUNDARY}\\.(elsif|elif)\\b(.*)$`, 'i')],
+    ['else', new RegExp(`${BOUNDARY}\\.(else)\\b(.*)$`, 'i')],
+];
+
+export function conditionalOn(code: string): ConditionalLine | null {
+    for (const [kind, pattern] of CONDITIONAL_PATTERNS) {
+        const match = code.match(pattern);
+        if (match) return { kind, directive: match[1].toLowerCase(), condition: match[2] ?? '' };
+    }
+    return null;
+}
+
 /** One step of a line's position through nested conditionals. */
 export interface BranchStep {
     /** Identifies the .if/.elsif/.else/.endif chain */
@@ -241,19 +276,21 @@ export function computeBranchPaths(lines: string[]): Map<number, BranchStep[]> {
         if (commentBlockLines.has(i)) continue;
         const code = stripStrings(parseLineStructure(lines[i]).code);
 
-        if (/(?:^|\s)\.(endif|fi)\b/i.test(code)) {
+        const conditional = conditionalOn(code);
+
+        if (conditional?.kind === 'end') {
             stack.pop();
             paths.set(i, [...stack]);
             continue;
         }
 
-        if (/(?:^|\s)\.(if|ifeq|ifne|ifmi|ifpl)\b/i.test(code)) {
+        if (conditional?.kind === 'open') {
             paths.set(i, [...stack]);
             stack.push({ chain: nextChain++, branch: 0 });
             continue;
         }
 
-        if (/(?:^|\s)\.(elsif|elif|else)\b/i.test(code) && stack.length > 0) {
+        if ((conditional?.kind === 'elsif' || conditional?.kind === 'else') && stack.length > 0) {
             // Replace the frame rather than mutating it: the stored paths share
             // these step objects, so mutating would retroactively rewrite the
             // branch recorded for every line already seen in this chain.

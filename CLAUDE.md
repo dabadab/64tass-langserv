@@ -210,6 +210,14 @@ a stale `out/server/server.js` would be worse than not testing it at all.
     `effectiveCaseSensitive` helper in `server.ts`) rather than assume a single global
     value - this is a comment as far as 64tass itself is concerned and has no effect
     on the real compiler.
+- **Conditional structure**: `conditionalOn` (`conditions.ts`) is the ONE
+  classifier of `.if`/`.elsif`/`.else`/`.endif` lines, consumed by both
+  `findDeadLines` and `computeBranchPaths`. They carried a regex each, on a
+  boundary that did not match the one `blockDirectivesOn` uses - so `lbl:.if 1`
+  opened a block for the unclosed-block check and no chain at all for these two,
+  though the assembler takes it (verified). It keeps the directive apart from the
+  condition, since `.ifeq` and friends are deliberately left undecided where `.if`
+  is evaluated.
 - **Conditional blocks**: `evaluateCondition` (`conditions.ts`) decides `.if`/`.elsif`
   conditions statically where possible; `findDeadLines` in `diagnostics.ts` uses it to
   skip undefined-symbol reporting inside branches that provably cannot be taken.
@@ -563,7 +571,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1672 tests); compiles first
+yarn test          # Run all tests (currently 1676 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

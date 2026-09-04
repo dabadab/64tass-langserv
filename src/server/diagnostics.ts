@@ -29,7 +29,7 @@ import { blockDirectivesOn } from './blocks';
 import { addressExpressionOf, findAddressingProblem, immediateBytesFor } from './operands';
 import { calleeScopePath } from './signatureHelp';
 import { LABEL_REQUIRED_OPENERS } from './constants';
-import { evaluateCondition, evaluateExpression, computeBranchPaths, areMutuallyExclusive } from './conditions';
+import { evaluateCondition, evaluateExpression, computeBranchPaths, areMutuallyExclusive, conditionalOn } from './conditions';
 
 /**
  * Lines that sit inside a conditional branch which provably cannot be taken.
@@ -61,10 +61,12 @@ function findDeadLines(
     for (let i = 0; i < lines.length; i++) {
         if (commentBlockLines.has(i)) continue;
         const code = stripStrings(parseLineStructure(lines[i]).code);
-        const open = code.match(/(?:^|\s)\.(if|ifeq|ifne|ifmi|ifpl)\b(.*)$/i);
-        const elsif = code.match(/(?:^|\s)\.(elsif|elif)\b(.*)$/i);
-        const isElse = /(?:^|\s)\.else\b/i.test(code);
-        const isEnd = /(?:^|\s)\.(endif|fi)\b/i.test(code);
+        // One classifier, shared with computeBranchPaths - see conditionalOn.
+        const conditional = conditionalOn(code);
+        const open = conditional?.kind === 'open' ? conditional : null;
+        const elsif = conditional?.kind === 'elsif' ? conditional : null;
+        const isElse = conditional?.kind === 'else';
+        const isEnd = conditional?.kind === 'end';
 
         if (isEnd) {
             stack.pop();
@@ -74,8 +76,8 @@ function findDeadLines(
         if (open) {
             // Only plain .if conditions are evaluated; .ifeq/.ifne/... compare against
             // the program counter era and are left undecided.
-            const cond = open[1].toLowerCase() === 'if'
-                ? evaluateCondition(open[2].trim(), uri, i, documentIndex, caseSensitive, unit)
+            const cond = open.directive === 'if'
+                ? evaluateCondition(open.condition.trim(), uri, i, documentIndex, caseSensitive, unit)
                 : null;
             stack.push({ live: cond === null ? true : cond, taken: cond });
             continue;
@@ -86,7 +88,7 @@ function findDeadLines(
             if (frame.taken === true) {
                 frame.live = false; // an earlier branch already ran
             } else if (frame.taken === false) {
-                const cond = evaluateCondition(elsif[2].trim(), uri, i, documentIndex, caseSensitive, unit);
+                const cond = evaluateCondition(elsif.condition.trim(), uri, i, documentIndex, caseSensitive, unit);
                 frame.live = cond === null ? true : cond;
                 if (cond === true) frame.taken = true;
                 else if (cond !== null) frame.taken = false;
