@@ -119,25 +119,59 @@ export function parseDocument(
         return parts.length > 0 ? parts.join('.') : null;
     }
 
+    /**
+     * A label in the shape almost every branch wants: its own name and column,
+     * the scope in force, local-ness decided by the leading underscore, and the
+     * documentation comment around it. Anything else a branch needs it to be goes
+     * in `extra` - which is also where the differences between branches now show,
+     * instead of being buried in fifteen copies of the same ten fields.
+     */
+    const addLabel = (
+        labelName: string,
+        kind: LabelKind,
+        line: number,
+        startChar: number,
+        extra: Partial<LabelDefinition> = {}
+    ) => {
+        labels.push({
+            name: normalizeName(labelName),
+            originalName: labelName,
+            uri: document.uri,
+            range: Range.create(
+                Position.create(line, startChar),
+                Position.create(line, startChar + labelName.length)
+            ),
+            scopePath: getCurrentScopePath(),
+            localScope: isLocalName(labelName) ? currentLocalScope : null,
+            isLocal: isLocalName(labelName),
+            kind,
+            comment: getBlockComment(lines, line),
+            ...extra,
+        });
+    };
+
+    /**
+     * What scope a line sits in. Read at CALL time, so it always reflects the
+     * stack as it is at that point of the sweep - which is why the branches that
+     * push or pop a scope call it before or after doing so, deliberately.
+     */
+    const recordScope = (line: number) => scopeAtLine.set(line, {
+        scopePath: getCurrentScopePath(),
+        localScope: currentLocalScope,
+        withScopes: [...withScopes]
+    });
+
     // No documentation comment on these three: a pragma's own line IS the comment,
     // so it would document itself with its own syntax.
     // Symbols supplied by "; 64tass-langserv: define NAME = VALUE" pragmas, which
     // stand in for the -D flags a real build passes on the command line. Indexed as
     // ordinary re-assignable variables so they resolve like any other symbol.
     for (const def of detectDefinePragmas(text)) {
-        labels.push({
-            name: normalizeName(def.name),
-            originalName: def.name,
-            uri: document.uri,
-            range: Range.create(
-                Position.create(def.line, def.nameStart),
-                Position.create(def.line, def.nameStart + def.name.length)
-            ),
-            scopePath: null,
-            localScope: null,
-            isLocal: false,
-            kind: 'var',
-            value: def.value
+        addLabel(def.name, 'var', def.line, def.nameStart, {
+            scopePath: null, localScope: null, isLocal: false,
+            value: def.value,
+            // The pragma line is the comment, so it does not also document itself.
+            comment: undefined,
         });
     }
 
@@ -177,11 +211,7 @@ export function parseDocument(
         const lineLower = line.toLowerCase();
 
         // Record scope info for this line
-        scopeAtLine.set(lineNum, {
-            scopePath: getCurrentScopePath(),
-            localScope: currentLocalScope,
-            withScopes: [...withScopes]
-        });
+        recordScope(lineNum);
 
         // Skip empty lines and comment-only lines
         if (/^\s*;/.test(line) || /^\s*$/.test(line)) {
@@ -233,19 +263,8 @@ export function parseDocument(
                 // when the path did not resolve, so it is still a known symbol.
                 if (includeLabel) {
                     const labelStart = line.indexOf(includeLabel);
-                    labels.push({
-                        name: normalizeName(includeLabel),
-                        originalName: includeLabel,
-                        uri: document.uri,
-                        range: Range.create(
-                            Position.create(lineNum, labelStart),
-                            Position.create(lineNum, labelStart + includeLabel.length)
-                        ),
-                        scopePath: enclosing,
-                        localScope: null,
-                        isLocal: false,
-                        kind: 'block',
-                        comment: getBlockComment(lines, lineNum)
+                    addLabel(includeLabel, 'block', lineNum, labelStart, {
+                        scopePath: enclosing, localScope: null, isLocal: false,
                     });
                 }
                 continue;
@@ -276,36 +295,15 @@ export function parseDocument(
                 const labelName = withLabel[2];
                 const startChar = withLabel[1].length;
                 if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
-                labels.push({
-                    name: normalizeName(labelName),
-                    originalName: labelName,
-                    uri: document.uri,
-                    range: Range.create(
-                        Position.create(lineNum, startChar),
-                        Position.create(lineNum, startChar + labelName.length)
-                    ),
-                    scopePath: getCurrentScopePath(),
-                    localScope: isLocalName(labelName) ? currentLocalScope : null,
-                    isLocal: isLocalName(labelName),
-                    kind: 'code',
-                    comment: getBlockComment(lines, lineNum)
-                });
+                addLabel(labelName, 'code', lineNum, startChar);
             }
-            scopeAtLine.set(lineNum, {
-                scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope,
-                withScopes: [...withScopes]
-            });
+            recordScope(lineNum);
             withScopes.push(normalizeName(withMatch[1]));
             continue;
         }
         if (new RegExp(`${BOUNDARY}\\.endwith\\b`, 'i').test(codeOnly)) {
             withScopes.pop();
-            scopeAtLine.set(lineNum, {
-                scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope,
-                withScopes: [...withScopes]
-            });
+            recordScope(lineNum);
             continue;
         }
 
@@ -369,11 +367,7 @@ export function parseDocument(
         }
         if (closedScope) {
             // Update scope after closing
-            scopeAtLine.set(lineNum, {
-                scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope,
-                withScopes: [...withScopes]
-            });
+            recordScope(lineNum);
             continue;
         }
 
@@ -398,19 +392,8 @@ export function parseDocument(
                 const paramsStr = match[3] ? stripComment(match[3]).trim() : '';
                 const comment = getBlockComment(lines, lineNum);
 
-                labels.push({
-                    name: normalizeName(labelName),
-                    originalName: labelName,
-                    uri: document.uri,
-                    range: Range.create(
-                        Position.create(lineNum, startChar),
-                        Position.create(lineNum, startChar + labelName.length)
-                    ),
-                    scopePath: currentPath,
-                    localScope: isLocalName(labelName) ? currentLocalScope : null,
-                    isLocal: isLocalName(labelName),
-                    kind: open.slice(1) as LabelKind,
-                    comment
+                addLabel(labelName, open.slice(1) as LabelKind, lineNum, startChar, {
+                    scopePath: currentPath, comment,
                 });
 
                 // Push named scope (normalized for matching)
@@ -445,11 +428,7 @@ export function parseDocument(
                 }
 
                 // Update scope for this line after opening
-                scopeAtLine.set(lineNum, {
-                    scopePath: getCurrentScopePath(),
-                    localScope: currentLocalScope,
-                    withScopes: [...withScopes]
-                });
+                recordScope(lineNum);
                 // The line is a scope opener and nothing else - skip the branches
                 // below, which would otherwise index it a second time as a data
                 // label or a macro call.
@@ -465,11 +444,7 @@ export function parseDocument(
                 // exactly as the unlabelled `.binclude` branch does. '@' cannot
                 // occur in a user symbol, so it can never collide with one.
                 scopeStack.push({ name: `${open.slice(1)}@${lineNum}`, directive: open });
-                scopeAtLine.set(lineNum, {
-                    scopePath: getCurrentScopePath(),
-                    localScope: currentLocalScope,
-                    withScopes: [...withScopes]
-                });
+                recordScope(lineNum);
             }
         }
 
@@ -486,28 +461,9 @@ export function parseDocument(
             const labelName = codeLabelMatch[2];
             const startChar = codeLabelMatch[1].length;
             if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
-            scopeAtLine.set(lineNum, {
-                scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope,
-                withScopes: [...withScopes]
-            });
+            recordScope(lineNum);
 
-            labels.push({
-                name: normalizeName(labelName),
-                originalName: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, startChar),
-                    Position.create(lineNum, startChar + labelName.length)
-                ),
-                scopePath: getCurrentScopePath(),
-                localScope: isLocalName(labelName) ? currentLocalScope : null,
-                isLocal: isLocalName(labelName),
-                kind: 'code',
-                // No colon means this may turn out to be a no-argument macro call.
-                fromBareWord: codeLabelMatch[3] !== ':',
-                comment: getBlockComment(lines, lineNum)
-            });
+            addLabel(labelName, 'code', lineNum, startChar, { fromBareWord: codeLabelMatch[3] !== ':' });
             continue;
         }
 
@@ -524,26 +480,9 @@ export function parseDocument(
             const labelName = codeLabelOpcodeMatch[2];
             const startChar = codeLabelOpcodeMatch[1].length;
             if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
-            scopeAtLine.set(lineNum, {
-                scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope,
-                withScopes: [...withScopes]
-            });
+            recordScope(lineNum);
 
-            labels.push({
-                name: normalizeName(labelName),
-                originalName: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, startChar),
-                    Position.create(lineNum, startChar + labelName.length)
-                ),
-                scopePath: getCurrentScopePath(),
-                localScope: isLocalName(labelName) ? currentLocalScope : null,
-                isLocal: isLocalName(labelName),
-                kind: 'code',
-                comment: getBlockComment(lines, lineNum)
-            });
+            addLabel(labelName, 'code', lineNum, startChar);
             continue;
         }
 
@@ -589,38 +528,16 @@ export function parseDocument(
                 // Optional named label in front of the loop, e.g. "squarelo .for ..."
                 if (loopLabel && !anonymousPrefix) {
                     const loopLabelName = loopLabel.replace(/[\s:]+$/, '');
-                    labels.push({
-                        name: normalizeName(loopLabelName),
-                        originalName: loopLabelName,
-                        uri: document.uri,
-                        range: Range.create(
-                            Position.create(lineNum, indent),
-                            Position.create(lineNum, indent + loopLabelName.length)
-                        ),
-                        scopePath: getCurrentScopePath(),
-                        localScope: null,
-                        isLocal: false,
-                        kind: 'data',
-                        comment: getBlockComment(lines, lineNum)
+                    addLabel(loopLabelName, 'data', lineNum, indent, {
+                        localScope: null, isLocal: false,
                     });
                 }
 
                 for (const { name, offset } of loopVars) {
                     const startChar = restStart + offset;
                     const isLocal = name.startsWith('_');
-                    labels.push({
-                        name: normalizeName(name),
-                        originalName: name,
-                        uri: document.uri,
-                        range: Range.create(
-                            Position.create(lineNum, startChar),
-                            Position.create(lineNum, startChar + name.length)
-                        ),
-                        scopePath: getCurrentScopePath(),
-                        localScope: isLocal ? currentLocalScope : null,
-                        isLocal,
-                        kind: 'var',
-                        comment: getBlockComment(lines, lineNum)
+                    addLabel(name, 'var', lineNum, startChar, {
+                        localScope: isLocal ? currentLocalScope : null, isLocal,
                     });
                 }
                 // An anonymous label on this line still has to be registered, so
@@ -641,20 +558,9 @@ export function parseDocument(
             const isLocal = labelName.startsWith('_');
             const value = varLabelMatch[3]?.trim();
 
-            labels.push({
-                name: normalizeName(labelName),
-                originalName: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, startChar),
-                    Position.create(lineNum, startChar + labelName.length)
-                ),
-                scopePath: getCurrentScopePath(),
-                localScope: isLocal ? currentLocalScope : null,
-                isLocal,
-                kind: 'var',
+            addLabel(labelName, 'var', lineNum, startChar, {
+                localScope: isLocal ? currentLocalScope : null, isLocal,
                 value: value || undefined,
-                comment: getBlockComment(lines, lineNum)
             });
             continue;
         }
@@ -679,19 +585,8 @@ export function parseDocument(
                 continue;   // modifies the variable defined elsewhere
             }
 
-            labels.push({
-                name: normalizeName(labelName),
-                originalName: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, startChar),
-                    Position.create(lineNum, startChar + labelName.length)
-                ),
-                scopePath: getCurrentScopePath(),
-                localScope: currentLocalScope,
-                isLocal: true,
-                kind: operator === ':=' ? 'var' : 'const',
-                comment: getBlockComment(lines, lineNum)
+            addLabel(labelName, operator === ':=' ? 'var' : 'const', lineNum, startChar, {
+                localScope: currentLocalScope, isLocal: true,
             });
             continue;
         }
@@ -746,20 +641,7 @@ export function parseDocument(
             && !HAS_OWN_BRANCH.has(dataLabelMatch[3].toLowerCase())) {
             const labelName = dataLabelMatch[2];
             const startChar = dataLabelMatch[1].length;
-            labels.push({
-                name: normalizeName(labelName),
-                originalName: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, startChar),
-                    Position.create(lineNum, startChar + labelName.length)
-                ),
-                scopePath: getCurrentScopePath(),
-                localScope: isLocalName(labelName) ? currentLocalScope : null,
-                isLocal: isLocalName(labelName),
-                kind: 'data',
-                comment: getBlockComment(lines, lineNum)
-            });
+            addLabel(labelName, 'data', lineNum, startChar);
             continue;
         }
 
@@ -774,20 +656,7 @@ export function parseDocument(
             const labelName = structInstanceMatch[2];
             const structName = normalizeName(structInstanceMatch[4]);
 
-            labels.push({
-                name: normalizeName(labelName),
-                originalName: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, startChar),
-                    Position.create(lineNum, startChar + labelName.length)
-                ),
-                scopePath: getCurrentScopePath(),
-                localScope: isLocalName(labelName) ? currentLocalScope : null,
-                isLocal: isLocalName(labelName),
-                kind: 'data',
-                comment: getBlockComment(lines, lineNum)
-            });
+            addLabel(labelName, 'data', lineNum, startChar);
             // Keyed by full path: two same-named instances in different scopes are
             // different instances, and a bare name would let the later one win.
             structInstances.set(scopedName(labelName), structName);
@@ -818,20 +687,7 @@ export function parseDocument(
             // directive reaching here would be recorded as the macro that made
             // the label.
             if (!ALL_DIRECTIVE_SET.has(macroLabelMatch[5].toLowerCase())) {
-                labels.push({
-                    name: normalizeName(labelName),
-                    originalName: labelName,
-                    uri: document.uri,
-                    range: Range.create(
-                        Position.create(lineNum, startChar),
-                        Position.create(lineNum, startChar + labelName.length)
-                    ),
-                    scopePath: getCurrentScopePath(),
-                    localScope: isLocalName(labelName) ? currentLocalScope : null,
-                    isLocal: isLocalName(labelName),
-                    kind: 'data',
-                    comment: getBlockComment(lines, lineNum)
-                });
+                addLabel(labelName, 'data', lineNum, startChar);
                 // Track the macro used to define this label (for sub-label validation)
                 labelDefinedByMacro.set(scopedName(labelName), macroCalled);
             }
@@ -865,20 +721,10 @@ export function parseDocument(
             const isReassignable = constMatch[3] === ':';
             const value = constMatch[4]?.trim();
 
-            labels.push({
-                name: normalizeName(labelName),
-                originalName: labelName,
-                uri: document.uri,
-                range: Range.create(
-                    Position.create(lineNum, startChar),
-                    Position.create(lineNum, startChar + labelName.length)
-                ),
+            addLabel(labelName, isReassignable ? 'var' : 'const', lineNum, startChar, {
                 scopePath: scopeWith(leadingScope),
-                localScope: isLocal ? currentLocalScope : null,
-                isLocal,
-                kind: isReassignable ? 'var' : 'const',
+                localScope: isLocal ? currentLocalScope : null, isLocal,
                 value: value || undefined,
-                comment: getBlockComment(lines, lineNum)
             });
 
             // "PIC = mk(5)" where mk is a .function returning namespace(*) makes
@@ -903,18 +749,10 @@ export function parseDocument(
             for (const key of findDictKeys(rawValue)) {
                 // +1 to point at the name rather than the leading dot
                 const keyStart = valueStart + key.start + 1;
-                labels.push({
-                    name: normalizeName(key.name),
-                    originalName: key.name,
-                    uri: document.uri,
-                    range: Range.create(
-                        Position.create(lineNum, keyStart),
-                        Position.create(lineNum, keyStart + key.name.length)
-                    ),
-                    scopePath: memberScope,
-                    localScope: null,
-                    isLocal: false,
-                    kind: 'const'
+                addLabel(key.name, 'const', lineNum, keyStart, {
+                    scopePath: memberScope, localScope: null, isLocal: false,
+                    // The line's comment describes the assignment, not each key.
+                    comment: undefined,
                 });
             }
             continue;
