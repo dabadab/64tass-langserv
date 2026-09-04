@@ -1323,3 +1323,19 @@ describe('a colon before a macro call', () => {
         expect(parse(`${DEFS}        lda #mac`).labels.map(l => l.name)).toEqual(['mac']);
     });
 });
+
+describe('a comparison is not a definition', () => {
+    // `foo == 1` is "an expression is expected" to the assembler (verified), and
+    // diagnostics says so - but the parser was filing it as a constant whose value
+    // is `= 1`, so the index carried a symbol for a line that cannot assemble.
+    it('indexes nothing for ==', () => {
+        expect(parse('foo == 1').labels).toEqual([]);
+        expect(parse('_x == 1').labels).toEqual([]);
+    });
+
+    it('still indexes the assignments that are real', () => {
+        expect(parse('foo = 1').labels.map(l => l.kind)).toEqual(['const']);
+        expect(parse('foo := 1').labels.map(l => l.kind)).toEqual(['var']);
+        expect(parse('_x = 1').labels.map(l => l.name)).toEqual(['_x']);
+    });
+});

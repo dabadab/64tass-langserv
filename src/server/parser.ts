@@ -663,7 +663,7 @@ export function parseDocument(
         //   _v ..= [1] a compound assignment - a modification of an existing
         //              variable, not a definition, so it is left as a reference
         // 64tass has ..= += -= *= /= &= |= ^= <<= >>= %= **= (all verified).
-        const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(\.\.=|\*\*=|<<=|>>=|[-+*/&|^%]=|:=|=|:|;|$)/);
+        const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(\.\.=|\*\*=|<<=|>>=|[-+*/&|^%]=|:=|=(?!=)|:|;|$)/);
         if (localMatch) {
             const labelName = localMatch[2];
             const startChar = localMatch[1].length;
@@ -841,7 +841,10 @@ export function parseDocument(
         // symbol lands in and only the last segment is its name. That is the same
         // shape findDictKeys produces for dict-literal keys. Without this the whole
         // line matched no branch at all and the definition simply vanished.
-        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(:?)=\s*([^;]+)/);
+        // `(?!=)`: `foo == 1` is "an expression is expected" to the assembler
+        // (verified), so the index must not carry a symbol for a line that cannot
+        // assemble - diagnostics already reports it.
+        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(:?)=(?!=)\s*([^;]+)/);
         if (constMatch) {
             const writtenPath = constMatch[2];
             const lastDot = writtenPath.lastIndexOf('.');
