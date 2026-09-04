@@ -795,20 +795,23 @@ export function parseDocument(
         // is why the macro used is recorded here and resolved at query time.
         // Separated by whitespace or a colon: "label: .macro_name args", even "label:.macro_name"
         // Allow leading indentation, since sub-labels are conventionally indented inside a .proc/.block
-        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*:\s*|\s+)([.#])([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
+        const macroLabelMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:\s*|\s+)([.#])([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
         // "lda #COLORS" is an opcode with an immediate operand, not a label calling
-        // a macro, so the '#' form has to rule the mnemonics out.
-        const isImmediateOperand = macroLabelMatch?.[3] === '#'
+        // a macro, so the '#' form has to rule the mnemonics out - unless a colon
+        // settles it, as it does everywhere else in this file: `nop: #mac` defines
+        // nop and expands mac (verified).
+        const isImmediateOperand = macroLabelMatch?.[4] === '#'
+            && !macroLabelMatch[3].includes(':')
             && opcodes.has(macroLabelMatch[2].toLowerCase());
         if (macroLabelMatch && !isImmediateOperand) {
             const labelName = macroLabelMatch[2];
             const startChar = macroLabelMatch[1].length;
-            const macroCalled = normalizeName(macroLabelMatch[4]);
+            const macroCalled = normalizeName(macroLabelMatch[5]);
             // Skip if this is a scope-creating directive (already handled above)
             // Every known directive, not only the scope-creating ones: a data
             // directive reaching here would be recorded as the macro that made
             // the label.
-            if (!ALL_DIRECTIVES.includes(macroLabelMatch[4].toLowerCase())) {
+            if (!ALL_DIRECTIVES.includes(macroLabelMatch[5].toLowerCase())) {
                 labels.push({
                     name: normalizeName(labelName),
                     originalName: labelName,

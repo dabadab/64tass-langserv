@@ -1303,3 +1303,23 @@ describe('the .with line', () => {
         expect(index.scopeAtLine.get(3)?.withScopes).toEqual([]);
     });
 });
+
+describe('a colon before a macro call', () => {
+    const DEFS = 'mac     .macro\n        .endm\n';
+
+    it('defines the label even when its name is a mnemonic', () => {
+        // `nop: #mac` defines nop and expands mac (verified). Without the colon
+        // the `#` form has to rule mnemonics out, or `lda #COLORS` reads as a call.
+        const index = parse(`${DEFS}nop:    #mac`);
+        expect(index.labels.map(l => l.name)).toEqual(['mac', 'nop']);
+        expect(index.labelDefinedByMacro.get('nop')).toBe('mac');
+    });
+
+    it('does the same for the dot form, as it always did', () => {
+        expect(parse(`${DEFS}nop:    .mac`).labels.map(l => l.name)).toEqual(['mac', 'nop']);
+    });
+
+    it('still reads an immediate operand as one', () => {
+        expect(parse(`${DEFS}        lda #mac`).labels.map(l => l.name)).toEqual(['mac']);
+    });
+});
