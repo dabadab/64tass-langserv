@@ -271,7 +271,12 @@ function publishFor(uri: string): void {
             { getText: getDocumentText, unit: unitFor(uri) })
         : [];
     const unused = doc && globalSettings.unusedSymbols
-        ? findUnusedSymbols(uri, documentIndex, includeGraph.compilationUnit(uri), getDocumentText)
+        // Through the guard, and falling back to the WHOLE index when it stands
+        // down: too small a unit greys out a symbol the parent uses, which is the
+        // expensive direction for this check. Completion and the spelling quick fix
+        // keep the unrestricted unit on purpose - there, a missing suggestion is
+        // all a wrong answer costs.
+        ? findUnusedSymbols(uri, documentIndex, unitFor(uri) ?? documentIndex.keys(), getDocumentText)
         : [];
     connection.sendDiagnostics({
         uri,
