@@ -730,3 +730,29 @@ describe('findDictKeys', () => {
         expect(findDictKeys('        .text "{.A: 1}"')).toEqual([]);
     });
 });
+
+describe('findCommentBlockLines - the directive slot', () => {
+    // All verified: 64tass reads `.comment`/`.endc` only as the first token or the
+    // second after a label. Prose is what a comment block is full of, so matching
+    // them anywhere swallowed the rest of the file, or ended the block early.
+    const lines = (source: string) => [...findCommentBlockLines(source.split('\n'))];
+
+    it('ignores a mention of .comment in the prose', () => {
+        expect(lines('        .comment\nthis mentions .comment in prose\nlbl = 1\n        .endc\nafter = 2'))
+            .toEqual([1, 2]);
+    });
+
+    it('ignores a mention of .endc in the prose', () => {
+        expect(lines('        .comment\nprose mentioning .endc here\nlbl = 1\n        .endc\nafter = 2'))
+            .toEqual([1, 2]);
+    });
+
+    it('honours a label before either directive', () => {
+        expect(lines('op      .comment\ninside = 1\ncl      .endc\nafter = 2')).toEqual([1]);
+    });
+
+    it('does not close on a directive used as a value', () => {
+        // `x = .endc` closes nothing (verified).
+        expect(lines('        .comment\n  x = .endc\n        .endc\nafter = 2')).toEqual([1]);
+    });
+});

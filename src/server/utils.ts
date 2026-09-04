@@ -445,8 +445,15 @@ export function parameterName(entry: string): string | null {
 
 // `.comment` opens a block the assembler ignores wholesale; `.endc` or
 // `.endcomment` closes it, and the blocks nest.
-const COMMENT_BLOCK_OPEN = /(?:^|\s)\.comment\b/i;
-const COMMENT_BLOCK_CLOSE = /(?:^|\s)\.end(?:c|comment)\b/i;
+//
+// Anchored to the DIRECTIVE SLOT - the first token, or the second after a label -
+// because that is all 64tass reads (verified: prose saying ".comment" nests
+// nothing, prose saying ".endc" closes nothing, and `x = .endc` closes nothing
+// either). Matching them anywhere on the line was wrong in both directions, and a
+// comment block is precisely where prose lives: a mention of `.comment` in it
+// swallowed the rest of the file, and one of `.endc` ended the block early.
+const COMMENT_BLOCK_OPEN = /^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*(?:\s*:\s*|\s+))?\.comment\b/i;
+const COMMENT_BLOCK_CLOSE = /^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*(?:\s*:\s*|\s+))?\.end(?:c|comment)\b/i;
 
 /**
  * Line numbers strictly inside a `.comment` block - not the `.comment` line, and
