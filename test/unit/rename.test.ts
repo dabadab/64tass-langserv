@@ -328,3 +328,15 @@ describe('computeRenameEdits - a same-named symbol behind a dot', () => {
         expect(edits.map(e => e.range.start.line)).toEqual([0]);
     });
 });
+
+describe('computeRenameEdits - a local name with a capital', () => {
+    it('rewrites the references as well as the definition', () => {
+        // The dangerous half: the definition was renamed and every use left
+        // pointing at a name that no longer existed, with no error anywhere.
+        const source = 'main\n_Loop   = 1\n        lda _LOOP\n        lda _Loop';
+        const { documentIndex, docs } = buildIndex({ source, uri: 'file:///caps.asm' });
+        const symbol = findSymbolInfo('_Loop', docs[0].uri, 1, documentIndex)!;
+        const edits = codeChanges(computeRenameEdits(symbol, '_iter', documentIndex, textLookup(docs), false), docs[0].uri);
+        expect(edits.map(e => e.range.start.line).sort()).toEqual([1, 2, 3]);
+    });
+});

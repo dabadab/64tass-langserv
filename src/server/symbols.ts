@@ -617,6 +617,12 @@ export function findSymbolOccurrences(
         if (docContent === null) continue;
 
         const lines = docContent.split('\n');
+        // `symbol.name` is lowercased when the document is case-insensitive, so a
+        // case-sensitive match against it finds `_Loop` and misses `_LOOP` - and
+        // rename then rewrote the definition and none of its uses. The dotted-chain
+        // path below normalises both sides instead, which is why this only ever
+        // showed on locals and in comments.
+        const nameFlags = index.caseSensitive ? 'g' : 'gi';
 
         for (let lineNum = 0; lineNum < lines.length; lineNum++) {
             const line = lines[lineNum];
@@ -625,7 +631,7 @@ export function findSymbolOccurrences(
             if (code.trim() !== '') {
                 if (symbol.isLocal) {
                     // Safe: symbol name from user file, sanitized via escapeRegex()
-                    const pattern = new RegExp(`\\b${escapedName}\\b`, 'g');
+                    const pattern = new RegExp(`\\b${escapedName}\\b`, nameFlags);
                     let match;
                     while ((match = pattern.exec(code)) !== null) {
                         const startCol = match.index;
@@ -701,7 +707,7 @@ export function findSymbolOccurrences(
             if (commentStart >= 0) {
                 const comment = line.substring(commentStart);
                 // Safe: symbol name from user file, sanitized via escapeRegex()
-                const commentPattern = new RegExp(`\\b${escapedName}\\b`, 'g');
+                const commentPattern = new RegExp(`\\b${escapedName}\\b`, nameFlags);
                 let match;
                 while ((match = commentPattern.exec(comment)) !== null) {
                     const startCol = commentStart + match.index;

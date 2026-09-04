@@ -144,3 +144,42 @@ describe('a dotted reference is not a macro call', () => {
         expect(refs.map(r => r.range.start.line)).toEqual([2]);
     });
 });
+
+describe('a name with a capital in it', () => {
+    // `symbol.name` is lowercased when the document is case-insensitive, which the
+    // default is. Matching case-sensitively against that found the definition and
+    // none of its uses - and rename rewrote exactly that much.
+    const SOURCE = [
+        'main',
+        '_Loop   = 1',
+        '        lda _LOOP',
+        '        lda _Loop',
+        'Counter = 1 ; the COUNTER',
+        '        lda COUNTER',
+    ].join('\n');
+    const FILES = [{ source: SOURCE, uri: 'file:///caps.asm' }];
+
+    function occurrencesOf(name: string, line: number) {
+        const { documentIndex, getText } = withText(FILES);
+        const symbol = findSymbolInfo(name, 'file:///caps.asm', line, documentIndex)!;
+        return findSymbolOccurrences(symbol, documentIndex, getText, false);
+    }
+
+    it('finds a local symbol\'s references whatever case they are written in', () => {
+        expect(occurrencesOf('_Loop', 1).map(o => `${o.range.start.line}:${o.range.start.character}`))
+            .toEqual(['1:0', '2:12', '3:12']);
+    });
+
+    it('finds it in a comment too', () => {
+        const inComment = occurrencesOf('Counter', 4).filter(o => o.inComment);
+        expect(inComment.map(o => o.range.start.character)).toEqual([18]);
+    });
+
+    it('still matches exactly when the document is case-sensitive', () => {
+        const { documentIndex, getText } = withText([{ source: SOURCE, uri: 'file:///cs.asm', caseSensitive: true }]);
+        const symbol = findSymbolInfo('_Loop', 'file:///cs.asm', 1, documentIndex, true)!;
+        const found = findSymbolOccurrences(symbol, documentIndex, getText, true);
+        // `_LOOP` is a different symbol under -C, and stays untouched.
+        expect(found.map(o => `${o.range.start.line}:${o.range.start.character}`)).toEqual(['1:0', '3:12']);
+    });
+});
