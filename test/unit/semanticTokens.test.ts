@@ -129,3 +129,13 @@ describe('semantic token legend', () => {
         }
     });
 });
+
+describe('hex literals', () => {
+    it('are not coloured as a symbol that happens to share their digits', () => {
+        // `lda #$FF` with a symbol called `ff` defined somewhere - the same guard
+        // the undefined-symbol scan has always carried.
+        const source = 'ff      = 1\n        *= $1000\n        lda #$FF';
+        // `ff` is defined, so a token here would be the hex digits coloured.
+        expect(tokens(source).map(t => t.text)).toEqual(['ff']);
+    });
+});

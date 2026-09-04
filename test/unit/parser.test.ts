@@ -1346,3 +1346,14 @@ describe('include paths need matching quotes', () => {
         expect(parse(`        .include "b.asm'`).includes).toEqual([]);
     });
 });
+
+describe('a value containing a semicolon', () => {
+    it('is not truncated at a semicolon inside a string', () => {
+        // `[^;]+` recorded `"a` - what hover showed, and what findDictKeys saw.
+        expect(parse('msg = "a;b"').labels[0].value).toBe('"a;b"');
+    });
+
+    it('still stops at a real comment', () => {
+        expect(parse('n = 5 ; five').labels[0].value).toBe('5');
+    });
+});

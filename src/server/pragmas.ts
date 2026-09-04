@@ -148,8 +148,11 @@ export function pragmaHover(line: string, lineNumber: number): Hover | null {
     if (!pragma) return null;
     return {
         contents: { kind: MarkupKind.Markdown, value: describe(pragma) },
+        // From the `;` to the end of the pragma name. The old arithmetic
+        // collapsed to `trimStart().length`, which is the INDENT - right only for
+        // an unindented pragma, and shifted left by the indent for any other.
         range: Range.create(
-            Position.create(lineNumber, match[1].length - (match[1].length - match[1].trimStart().length)),
+            Position.create(lineNumber, match[1].length - match[1].trimStart().length),
             Position.create(lineNumber, match[0].length)
         ),
     };

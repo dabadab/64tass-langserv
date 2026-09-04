@@ -812,39 +812,24 @@ export function validateDocument(
             // ONLY in opcode context (branch/jump instructions), NOT in data directives
             // Data directives use +/- for arithmetic/unary operators
             if (opcodeMatch) {
-                const anonRefPattern = /([+-]+)/g;
-                let anonMatch;
-                while ((anonMatch = anonRefPattern.exec(operand)) !== null) {
-                    const ref = anonMatch[1]; // '+', '--', '+++', etc.
-                    const matchIndex = anonMatch.index;
+                // Anchored: an anonymous reference is the start of the operand and
+                // nowhere else. Scanning it globally and then discarding every
+                // match that was not at the start said the same thing the long way.
+                const anonMatch = operand.match(/^(\s*)([+-]+)/);
+                const ref = anonMatch?.[2] ?? '';
+                // Mixed symbols (`+-`) are not a reference, and `#-1` or `table+1`
+                // is arithmetic - a letter or digit after it settles that.
+                const after = anonMatch ? operand[anonMatch[0].length] ?? ' ' : ' ';
+                const wellFormed = ref !== '' && ref.split('').every(c => c === ref[0])
+                    && !/[a-zA-Z0-9_]/.test(after);
 
-                    // Skip if not a valid anonymous reference (mixed symbols)
-                    if (!ref.split('').every(c => c === ref[0])) continue;
-
-                    // Skip if adjacent to alphanumeric or $ (like table+1, value-offset, $1000+5, #-1)
-                    const before = matchIndex > 0 ? operand[matchIndex - 1] : ' ';
-                    const after = matchIndex + ref.length < operand.length ? operand[matchIndex + ref.length] : ' ';
-                    if (/[a-zA-Z0-9_$#]/.test(before) || /[a-zA-Z0-9_]/.test(after)) continue;
-
-                    // Skip if there's any non-whitespace before the +/- (like "table + offset")
-                    // Anonymous labels must be at the start of the operand
-                    const beforeText = operand.substring(0, matchIndex).trim();
-                    if (beforeText.length > 0) continue;
-
+                if (anonMatch && wellFormed) {
                     const direction = ref[0] as '+' | '-';
-                    const distance = ref.length;
-
-                    // Validate that the reference can be resolved
                     const targetLabel = findAnonymousLabel(
-                        direction,
-                        distance,
-                        document.uri,
-                        lineNum,
-                        documentIndex
-                    );
+                        direction, ref.length, document.uri, lineNum, documentIndex);
 
                     if (!targetLabel) {
-                        const startCol = operandStart + matchIndex;
+                        const startCol = operandStart + anonMatch[1].length;
                         diagnostics.push({
                             severity: DiagnosticSeverity.Warning,
                             range: Range.create(

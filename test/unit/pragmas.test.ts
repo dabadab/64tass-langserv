@@ -87,3 +87,13 @@ describe('pragma hover', () => {
         }
     });
 });
+
+describe('pragma hover range', () => {
+    it('covers the pragma even when the line is indented', () => {
+        // The old arithmetic collapsed to the indent's own length, so an indented
+        // pragma highlighted a span shifted left by it.
+        const hover = pragmaHover('        ; 64tass-langserv: cpu 65816', 0);
+        expect(hover?.range?.start.character).toBe(8);
+        expect(hover?.range?.end.character).toBe('        ; 64tass-langserv: cpu'.length);
+    });
+});

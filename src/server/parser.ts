@@ -665,6 +665,10 @@ export function parseDocument(
         //   _v ..= [1] a compound assignment - a modification of an existing
         //              variable, not a definition, so it is left as a reference
         // 64tass has ..= += -= *= /= &= |= ^= <<= >>= %= **= (all verified).
+        // The `:` alternative is live - `_loc: = 1` reaches here - but `;` and
+        // end-of-line are not: the code-label branch above accepts a leading
+        // underscore and claims a bare `_name` or `_name ; comment` first. They
+        // stay for the shape of the alternation rather than for what they match.
         const localMatch = line.match(/^(\s*)(_[a-zA-Z0-9_]*)\s*(\.\.=|\*\*=|<<=|>>=|[-+*/&|^%]=|:=|=(?!=)|:|;|$)/);
         if (localMatch) {
             const labelName = localMatch[2];
@@ -846,7 +850,11 @@ export function parseDocument(
         // `(?!=)`: `foo == 1` is "an expression is expected" to the assembler
         // (verified), so the index must not carry a symbol for a line that cannot
         // assemble - diagnostics already reports it.
-        const constMatch = line.match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(:?)=(?!=)\s*([^;]+)/);
+        // The value runs to the REAL comment, which parseLineStructure knows:
+        // `[^;]+` stopped at a `;` inside a string, so `msg = "a;b"` recorded the
+        // value `"a` - visible in hover, and in what findDictKeys sees.
+        const constMatch = parseLineStructure(line).code
+            .match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(:?)=(?!=)\s*(\S.*)/);
         if (constMatch) {
             const writtenPath = constMatch[2];
             const lastDot = writtenPath.lastIndexOf('.');

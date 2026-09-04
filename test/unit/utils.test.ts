@@ -756,3 +756,17 @@ describe('findCommentBlockLines - the directive slot', () => {
         expect(lines('        .comment\n  x = .endc\n        .endc\nafter = 2')).toEqual([1]);
     });
 });
+
+describe('define pragma details', () => {
+    it('takes the whole expression as the value', () => {
+        // `(\S+)` made `define X = 1 + 2` no define at all.
+        expect(detectDefinePragmas('; 64tass-langserv: define X = 1 + 2')[0])
+            .toMatchObject({ name: 'X', value: '1 + 2' });
+    });
+
+    it('points at the symbol even when it is called define', () => {
+        const [found] = detectDefinePragmas('; 64tass-langserv: define define = 1');
+        expect(found.name).toBe('define');
+        expect(found.nameStart).toBe('; 64tass-langserv: define '.length);
+    });
+});

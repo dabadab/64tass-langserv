@@ -340,7 +340,9 @@ export function detectCaseSensitivityPragma(text: string): boolean | null {
 // It exists so build-time flags that a project passes with -D (and which therefore
 // appear nowhere in the source) can still be resolved - most usefully to decide
 // which .if branches are dead. Keep it in sync with the -D flags of your real build.
-const DEFINE_PRAGMA = /^\s*;\s*64tass-langserv\s*:\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(\S+)\s*$/i;
+// The value is the rest of the line, not one word: `define X = 1 + 2` is a
+// perfectly good define and `(\S+)` silently made it no define at all.
+const DEFINE_PRAGMA = /^\s*;\s*64tass-langserv\s*:\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(\S.*?)\s*$/i;
 
 export interface PragmaDefine {
     name: string;
@@ -365,7 +367,9 @@ export function detectDefinePragmas(text: string): PragmaDefine[] {
                 name: match[1],
                 value: match[2],
                 line: i,
-                nameStart: lines[i].indexOf(match[1], lines[i].toLowerCase().indexOf('define'))
+                // Searched from PAST the keyword, or a symbol called `define`
+                // would point at the keyword instead of at itself.
+                nameStart: lines[i].indexOf(match[1], lines[i].toLowerCase().indexOf('define') + 'define'.length)
             });
         }
     }

@@ -163,6 +163,10 @@ export function buildSemanticTokens(
                 continue;
             }
 
+            // `$FF` is a hex literal, not a symbol - the same guard the
+            // undefined-symbol scan carries, or the digits get coloured whenever a
+            // project happens to define a symbol of that name.
+            if (start > 0 && code[start - 1] === '$' && /^[0-9A-Fa-f]+$/.test(name)) continue;
             const symbol = findSymbolInfo(name, uri, lineNum, documentIndex, caseSensitive, true, unit);
             if (symbol) {
                 tokens.push({
