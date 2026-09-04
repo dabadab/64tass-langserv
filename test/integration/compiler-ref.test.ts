@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as path from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import * as fs from 'fs';
+import * as os from 'os';
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import { TASS_EXISTS, compile, parseErrors } from '../helpers/compiler';
 import { parseDocument } from '../../src/server/parser';
@@ -135,5 +136,21 @@ describe.skipIf(!TASS_EXISTS)('compiler reference: label agreement', () => {
         const { index } = fixtureDoc('macros.asm');
         expect(index.parametersAtScope.get('load')).toEqual(['value']);
         expect(index.parametersAtScope.get('add2')).toEqual(['a', 'b']);
+    });
+});
+
+describe.skipIf(!TASS_EXISTS)('one statement per line', () => {
+    // What lets blockDirectivesOn return unordered sets: no line can carry both an
+    // opener and its closer, so the order its consumers pick is unobservable.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tass-oneline-'));
+
+    it.each([
+        'y .block .bend',
+        'y .block : .bend',
+        'a: b: nop',
+    ])('64tass rejects %j', (line) => {
+        const file = path.join(dir, 'oneline.asm');
+        fs.writeFileSync(file, `        *= $1000\n${line}\n        rts\n`);
+        expect(compile(file).exitCode).not.toBe(0);
     });
 });

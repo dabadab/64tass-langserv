@@ -13,6 +13,13 @@ import { parseLineStructure, stripStrings } from './utils';
  *
  * Comments and string contents are removed first, so only real directives count.
  */
+/**
+ * Two sets rather than an ordered list with columns, which is enough because
+ * 64tass has NO statement separator: `y .block .bend`, `y .block : .bend` and
+ * `a: b: nop` are all "extra characters on line" or "general syntax" (verified).
+ * One line therefore carries at most one opener or closer of interest, and the
+ * order consumers resolve them in cannot be observed on source that assembles.
+ */
 export interface BlockDirectives {
     /** Opening directives on the line, e.g. `.proc`. */
     opened: string[];
