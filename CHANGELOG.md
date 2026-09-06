@@ -2,6 +2,53 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [0.12.0] - 2026-09-06
+
+### Added
+- **Parameters On Hover** - hovering a macro or function shows the parameters it declares,
+  as written: casing, `: type` and `= default` included
+- **Signature Help While Typing A Call** - the parameter you are on is shown in bold, from
+  the space after the name onwards, in all four call forms 64tass accepts (`#mac a, b`,
+  `.mac a, b`, a bare `mac a, b` and `fn(a, b)`). The popup follows the form you are
+  writing, so a `.function` invoked as a statement is shown as one
+
+### Improved
+- **More Symbols Checked** - the arguments of a macro or function call, and the operands of
+  `.if`, `.for`, `.rept`, `.align`, `.check`, `.logical`, `.cerror` and `*=`. Arguments the
+  callee never reads are left alone, as 64tass only works one out where the body asks for it
+- **Addressing Width** - `sty $c000,x` is reported: the shape is right and the width is
+  not, since sty has no absolute,x form
+- **CPU-Dependent Checks** - are judged against the target in force rather than only a
+  declared one. A file for a wider CPU should say so with `64tass.cpu`, a `.cpu` directive
+  or the pragma, or it is read as `6502i`
+- **Performance** - unused-symbol hints no longer re-read and re-scan every file of the
+  compilation unit on each pause in typing
+
+### Fixed
+- **Rename Corrupted Source** - three ways: `jsr scope.name` counted as a use of a
+  top-level `name` and was rewritten with it; a local whose name has a capital had its
+  definition renamed and none of its uses; and a name inside a string literal was edited
+  like code
+- **`.comment` Blocks Were Read As Code** - prose saying ".if 0" greyed out the rest of the
+  file and suppressed its errors, `.comment`/`.endc` were honoured mid-sentence, an opener
+  written in one was folded against a real closer, and a name mentioned in one counted as
+  a use
+- **Includes Nobody Opened** - the workspace scan recorded no include edges, so an include
+  opened on its own reported its parent's symbols as undefined
+- **No-Argument Macro Calls** - a bare `inc_d020` was indexed as a label, colliding with
+  the macro it calls; 44 false duplicate errors disappeared from one real project
+- **`sty ($100)/2,x`** - the address was read as `$100`, so a line the assembler takes was
+  reported as an error
+- **`.with`** - `lbl:.with sc` opened no scope, and a label on such a line was never indexed
+- **`nop: #mac`** - a colon settles label-vs-instruction, as it does everywhere else
+- **Cycle Counts** - a line starting with an anonymous label (`-  inx`) got none
+- **`foo == 1`** - was indexed as a constant, for a line the assembler rejects
+- **File Paths In Comments** - `nop ; see .include "b.asm"` became a document link and a
+  go-to-definition target
+- **Signature Help In A Scope** - a macro or function defined inside a `.proc` never got a
+  popup
+- **Unused Symbols** - a symbol used by the file's parent could be greyed out
+
 ## [0.11.0] - 2026-08-25
 
 ### Added
