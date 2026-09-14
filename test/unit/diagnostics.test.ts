@@ -1605,3 +1605,20 @@ describe('a #name macro call', () => {
         expect(macros('        *= $1000\nknown   = 1\n        lda #known')).toEqual([]);
     });
 });
+
+describe('a line with trailing whitespace', () => {
+    // The opcode pattern allows a label in front of the mnemonic, and on
+    // `jsr foo  ` that alternative matched - `foo` as the mnemonic, a space as
+    // its operand - so nothing on the line was checked at all. Only an operand
+    // of exactly three letters could do it, which is why it went unnoticed.
+    it('still has its symbols checked', () => {
+        expect(getDiagnostics('        *= $1000\n        jsr foo  ')
+            .filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
+    });
+
+    it('reports the symbol where it is written', () => {
+        const [found] = getDiagnostics('        *= $1000\n        jsr foo   ')
+            .filter(d => d.code === 'undefined-symbol');
+        expect([found.range.start.character, found.range.end.character]).toEqual([12, 15]);
+    });
+});

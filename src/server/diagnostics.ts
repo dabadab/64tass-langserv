@@ -696,9 +696,14 @@ export function validateDocument(
         const defPrefix = code.match(/^(\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*\s*(?::=|=|:))/);
         const assignmentRhs = defPrefix && /[:=]=?$/.test(defPrefix[1]) && defPrefix[1].trimEnd().endsWith('=');
         // Dict-literal keys are blanked too: "{.MAP: 1}" names a key, not a macro.
+        // Trailing whitespace is dropped (columns are counted from the left, so
+        // nothing moves): the opcode pattern below carries an optional label in
+        // front of the mnemonic, and on `jsr foo  ` that alternative matched -
+        // `foo` read as the mnemonic and a space as its operand - so the line's
+        // symbols, its immediate and its addressing mode all went unchecked.
         const codeForRefs = stripDictKeys(defPrefix
             ? ' '.repeat(defPrefix[1].length) + code.slice(defPrefix[1].length)
-            : code);
+            : code).trimEnd();
 
         // Nothing after the definition (e.g. a bare "loop:") - nothing to validate
         if (codeForRefs.trim() === '') continue;
