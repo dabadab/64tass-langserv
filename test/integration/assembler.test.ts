@@ -25,6 +25,21 @@ describe.skipIf(!TASS_EXISTS)('running the assembler', () => {
         expect(sub?.[0].message).toBe("no indirect x indexed addressing mode for opcode 'lda'");
     });
 
+    it('passes caseSensitive on as -C', async () => {
+        // The fixture assembles only with the flag: without it `Flag` and `flag`
+        // are one symbol and the second definition is a duplicate (verified).
+        const file = path.join(DIR, 'case-sensitive.asm');
+        const uri = pathToFileURL(file).toString();
+
+        const sensitive = await assemble({ assemblerPath: TASS_PATH, file, caseSensitive: true });
+        expect(sensitive.diagnostics.get(uri) ?? []).toEqual([]);
+
+        const insensitive = await assemble({ assemblerPath: TASS_PATH, file });
+        expect(insensitive.diagnostics.get(uri)?.map(d => d.message)).toEqual([
+            "duplicate definition 'flag' (original definition of 'flag' was here)",
+        ]);
+    });
+
     it('reports a run that could not happen at all', async () => {
         const result = await assemble({
             assemblerPath: path.join(DIR, 'no-such-assembler'),
