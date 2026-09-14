@@ -60,7 +60,7 @@ import { computeSelectionRanges } from './selectionRanges';
 import { buildCodeActions } from './codeActions';
 import {
     getWordAtPosition, findSymbolInfo, findDefinition, computeRenameEdits,
-    isRenameable, isValidSymbolName, findReferences, findDocumentHighlights
+    isRenameable, renameProblem, findReferences, findDocumentHighlights
 } from './symbols';
 import { validateDocument } from './diagnostics';
 import { assemble, chooseRoots, mergeDiagnostics } from './assembler';
@@ -743,13 +743,10 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
     const target = resolveRenameTarget(params.textDocument.uri, params.position);
     if (!target) return null;
 
-    if (!isValidSymbolName(params.newName)) {
-        throw new ResponseError(
-            ErrorCodes.InvalidRequest,
-            `'${params.newName}' is not a valid symbol name: use a letter or underscore ` +
-            `followed by letters, digits or underscores.`
-        );
-    }
+    const problem = renameProblem(
+        target.symbol, params.newName, documentIndex,
+        effectiveCaseSensitive(target.symbol.uri), unitFor(target.symbol.uri));
+    if (problem) throw new ResponseError(ErrorCodes.InvalidRequest, problem);
 
     return computeRenameEdits(
         target.symbol,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { WorkspaceEdit } from 'vscode-languageserver/node';
-import { computeRenameEdits, findSymbolInfo, isRenameable, isValidSymbolName } from '../../src/server/symbols';
+import { computeRenameEdits, findSymbolInfo, isRenameable, isValidSymbolName, renameProblem } from '../../src/server/symbols';
 import { buildIndex } from '../helpers/doc';
 
 // Helper: build a getDocumentText function backed by the (immutable) source docs.
@@ -338,5 +338,57 @@ describe('computeRenameEdits - a local name with a capital', () => {
         const symbol = findSymbolInfo('_Loop', docs[0].uri, 1, documentIndex)!;
         const edits = codeChanges(computeRenameEdits(symbol, '_iter', documentIndex, textLookup(docs), false), docs[0].uri);
         expect(edits.map(e => e.range.start.line).sort()).toEqual([1, 2, 3]);
+    });
+});
+
+describe('renameProblem', () => {
+    // Each refusal is something the assembler would actually reject or silently
+    // read differently - verified: `lda .byte 1` is "an operator is expected",
+    // a `_name` is local to the nearest code label, and two definitions of one
+    // name in a scope are a duplicate definition. Directive words are fine:
+    // `byte = 1` and `if .byte 1` both assemble.
+    const symbolIn = (source: string, name: string, line = 0) => {
+        const { documentIndex, docs } = buildIndex({ source, uri: `file:///${name}.asm` });
+        return { symbol: findSymbolInfo(name, docs[0].uri, line, documentIndex)!, documentIndex };
+    };
+
+    it('allows an ordinary new name', () => {
+        const { symbol, documentIndex } = symbolIn('start   nop', 'start');
+        expect(renameProblem(symbol, 'begin', documentIndex)).toBeNull();
+        expect(renameProblem(symbol, 'byte', documentIndex)).toBeNull();
+    });
+
+    it('refuses an instruction mnemonic', () => {
+        const { symbol, documentIndex } = symbolIn('start   nop', 'start');
+        expect(renameProblem(symbol, 'lda', documentIndex)).toMatch(/instruction mnemonic/);
+    });
+
+    it('refuses gaining or losing the leading underscore', () => {
+        const { symbol, documentIndex } = symbolIn('start   nop', 'start');
+        expect(renameProblem(symbol, '_start', documentIndex)).toMatch(/local to the nearest code label/);
+
+        const local = symbolIn('start   nop\n_helper nop', '_helper', 1);
+        expect(renameProblem(local.symbol, 'helper', local.documentIndex)).toMatch(/local to the nearest code label/);
+    });
+
+    it('refuses a name that already resolves there', () => {
+        const { symbol, documentIndex } = symbolIn('start   nop\ntaken   nop', 'start');
+        expect(renameProblem(symbol, 'taken', documentIndex)).toMatch(/already defined/);
+    });
+
+    it('allows a name defined in an unrelated scope', () => {
+        const { symbol, documentIndex } = symbolIn('start   nop\nouter   .block\ntaken   nop\n        .bend', 'start');
+        expect(renameProblem(symbol, 'taken', documentIndex)).toBeNull();
+    });
+
+    it('allows the name it already has, in any casing', () => {
+        const { symbol, documentIndex } = symbolIn('start   nop', 'start');
+        expect(renameProblem(symbol, 'start', documentIndex)).toBeNull();
+        expect(renameProblem(symbol, 'Start', documentIndex)).toBeNull();
+    });
+
+    it('still refuses a syntactically invalid name', () => {
+        const { symbol, documentIndex } = symbolIn('start   nop', 'start');
+        expect(renameProblem(symbol, '1abc', documentIndex)).toMatch(/not a valid symbol name/);
     });
 });

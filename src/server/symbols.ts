@@ -15,6 +15,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex } from './types';
 import { parseLineStructure, escapeRegex, stripStrings } from './utils';
+import { OPCODES } from './constants';
 
 /**
  * Normalize a name for matching based on case sensitivity
@@ -801,6 +802,51 @@ export function findDocumentHighlights(
             o.range,
             o.isDefinition ? DocumentHighlightKind.Write : DocumentHighlightKind.Read
         ));
+}
+
+/**
+ * Why a rename to `newName` must not go ahead, or null when it can.
+ *
+ * Beyond the name's syntax, three things break the source rather than merely
+ * look odd, all verified against the assembler:
+ *  - an instruction mnemonic: `lda .byte 1` is "an operator is expected" and
+ *    `lda nop` reads as an instruction, so the definition stops defining
+ *    anything (only a colon saves it, which is not what the rename writes);
+ *  - the leading underscore, gained or lost: `_name` is local to the nearest
+ *    code label, so it changes which references can see the symbol at all;
+ *  - a name that already resolves where the definition sits: the two become one
+ *    duplicate definition.
+ *
+ * Directive names are deliberately allowed - `byte = 1` and `if .byte 1` both
+ * assemble (verified), a directive being a directive only with its dot.
+ */
+export function renameProblem(
+    symbol: LabelDefinition,
+    newName: string,
+    documentIndex: Map<string, DocumentIndex>,
+    caseSensitive = false,
+    unit?: ReadonlySet<string>
+): string | null {
+    if (!isValidSymbolName(newName)) {
+        return `'${newName}' is not a valid symbol name: use a letter or underscore `
+            + 'followed by letters, digits or underscores.';
+    }
+    // Renaming to the same name, or to another casing of it where case does not
+    // matter, changes nothing that could collide.
+    if (normalizeName(newName, caseSensitive) === symbol.name) return null;
+
+    if (OPCODES.has(newName.toLowerCase())) {
+        return `'${newName}' is an instruction mnemonic: the definition would be read as the instruction.`;
+    }
+    if (newName.startsWith('_') !== symbol.isLocal) {
+        return newName.startsWith('_')
+            ? `'${newName}' would be local to the nearest code label, unlike '${symbol.originalName}'.`
+            : `'${symbol.originalName}' is local to the nearest code label; '${newName}' would not be.`;
+    }
+    const existing = findSymbolInfo(
+        newName, symbol.uri, symbol.range.start.line, documentIndex, caseSensitive, true, unit);
+    if (existing) return `'${newName}' is already defined here.`;
+    return null;
 }
 
 /**

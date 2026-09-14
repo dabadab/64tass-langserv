@@ -431,6 +431,12 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   line, and `#name` in the STATEMENT slot only, since a `#` after a mnemonic
   marks an immediate operand (a leading word that is an opcode disqualifies the
   line, the parser's first-token rule again). Both report `undefined-macro`.
+- **Rename guards**: `renameProblem` in `symbols.ts` refuses, with a reason, the
+  three new names that break source rather than merely look odd (all verified):
+  an instruction mnemonic (`lda .byte 1` does not define `lda`), a leading
+  underscore gained or lost (`_name` is local to the nearest code label), and a
+  name that already resolves where the definition sits. Directive words are
+  allowed - `byte = 1` assembles, a directive being one only with its dot.
 - **Diagnostic codes**: diagnostics that a quick fix can act on carry a `code`
   (`undefined-symbol`, `undefined-macro`, `unclosed-block`, plus
   `invalid-symbol-character`, `expression-expected` and `label-required`); `codeActions.ts`
@@ -601,7 +607,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1727 tests); compiles first
+yarn test          # Run all tests (currently 1735 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

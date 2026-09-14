@@ -147,6 +147,14 @@ describe.skipIf(!SERVER_BUILT)('language server protocol', () => {
         expect(edits.length).toBeGreaterThan(0);
     });
 
+    it('refuses a rename that would not assemble', async () => {
+        // The guard lives in symbols.ts; this is the wiring - the handler has to
+        // answer with an error rather than an edit that breaks the source.
+        await expect(server.request<unknown>(
+            'textDocument/rename', { ...server.at('main.asm', 0, 2), newName: 'lda' }))
+            .rejects.toThrow(/instruction mnemonic/);
+    });
+
     it('answers document highlights', async () => {
         const highlights = await server.request<{ range: { start: { line: number } } }[]>(
             'textDocument/documentHighlight', server.at('main.asm', 0, 2));
