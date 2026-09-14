@@ -246,3 +246,12 @@ describe('a symbol assigned more than once', () => {
         expect(evalWith('c == 1', 'c\t= 1')).toBe(true);
     });
 });
+
+describe('integer division', () => {
+    // 64tass floors rather than truncates: `-7 / 2` is -4 (verified).
+    it('rounds towards minus infinity', () => {
+        expect(evalWith('(-7 / 2) == -4')).toBe(true);
+        expect(evalWith('(7 / -2) == -4')).toBe(true);
+        expect(evalWith('(7 / 2) == 3')).toBe(true);
+    });
+});

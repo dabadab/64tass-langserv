@@ -156,7 +156,9 @@ class Parser {
             const right = this.parseUnary();
             if (right === null) return null;
             if (op === '/' && right === 0) return null; // don't decide on a division by zero
-            left = op === '*' ? left * right : Math.trunc(left / right);
+            // 64tass FLOORS: `-7 / 2` is -4, not the -3 truncation gives
+            // (verified - the assembler names the value in its own error).
+            left = op === '*' ? left * right : Math.floor(left / right);
         }
         return left;
     }
