@@ -1581,3 +1581,27 @@ describe('machine-code checks inside a dead branch', () => {
             .filter(d => d.code === 'no-addressing-mode')).toHaveLength(1);
     });
 });
+
+describe('a #name macro call', () => {
+    // `#nosuch 1, 2` is "not defined symbol 'nosuch'" to the assembler, at the
+    // name rather than the `#` (verified); `.nosuch` was reported already.
+    const macros = (source: string) => getDiagnostics(source).filter(d => d.code === 'undefined-macro');
+
+    it('is reported when nothing defines it', () => {
+        const found = macros('        *= $1000\n        #nosuch 1, 2');
+        expect(found).toHaveLength(1);
+        expect(found[0].range.start.character).toBe(9);
+    });
+
+    it('is reported behind a label too', () => {
+        expect(macros('        *= $1000\nlbl     #nosuch 1')).toHaveLength(1);
+    });
+
+    it('is silent when the macro exists', () => {
+        expect(macros('mac     .macro\n        .byte 1\n        .endm\n        *= $1000\n        #mac')).toEqual([]);
+    });
+
+    it('does not read an immediate operand as one', () => {
+        expect(macros('        *= $1000\nknown   = 1\n        lda #known')).toEqual([]);
+    });
+});

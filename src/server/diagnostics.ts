@@ -747,6 +747,29 @@ export function validateDocument(
             }
         }
 
+        // `#name` in the statement slot is a macro call as much as `.name` is, and
+        // an undefined one is "not defined symbol 'name'" to the assembler
+        // (verified). Only there: a `#` after a mnemonic marks an immediate
+        // operand, whose symbols the reference scan below already checks - which
+        // is why a leading word that is an opcode disqualifies the line, by the
+        // same first-token rule the parser goes by.
+        const hashCall = codeNoStrings.match(/^(\s*(?:([a-zA-Z_][a-zA-Z0-9_]*)\s*:?\s+)?)#([a-zA-Z_][a-zA-Z0-9_]*)/);
+        if (hashCall && !deadLines.has(lineNum) && !OPCODES.has((hashCall[2] ?? '').toLowerCase())) {
+            const nameCol = hashCall[1].length + 1;
+            if (!findSymbolInfo(hashCall[3], document.uri, lineNum, documentIndex, caseSensitive, true, unit)) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Warning,
+                    range: Range.create(
+                        Position.create(lineNum, nameCol),
+                        Position.create(lineNum, nameCol + hashCall[3].length)
+                    ),
+                    message: `Undefined macro '${hashCall[3]}'`,
+                    source: '64tass',
+                    code: 'undefined-macro'
+                });
+            }
+        }
+
         // Check regular symbol references (after opcodes or data directives).
         // Uses codeForRefs so a "label:" prefix no longer hides the rest of the line.
         // Look for symbols after opcodes

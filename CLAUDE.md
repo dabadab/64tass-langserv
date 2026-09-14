@@ -427,6 +427,10 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   macro's. The scan skips `in` (an operator, `1 in [1,2]`, and every `.for x in
   list`) and anything after a `\` (a macro argument substituted as text) - both
   found by real sources the moment the lists grew.
+- **Undefined macro calls**: both spellings are checked - `.name` anywhere on the
+  line, and `#name` in the STATEMENT slot only, since a `#` after a mnemonic
+  marks an immediate operand (a leading word that is an opcode disqualifies the
+  line, the parser's first-token rule again). Both report `undefined-macro`.
 - **Diagnostic codes**: diagnostics that a quick fix can act on carry a `code`
   (`undefined-symbol`, `undefined-macro`, `unclosed-block`, plus
   `invalid-symbol-character`, `expression-expected` and `label-required`); `codeActions.ts`
@@ -597,7 +601,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1721 tests); compiles first
+yarn test          # Run all tests (currently 1725 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
