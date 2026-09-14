@@ -508,7 +508,11 @@ export function parseDocument(
             // Variable names, with their offsets within `rest` so each gets its own
             // range. The `in` list must stop at ` in `, not run past it.
             const loopVars: { name: string; offset: number }[] = [];
-            const assignForm = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
+            // `:=` as well as `=`: the manual's current spelling for a loop
+            // variable is `.for i := 0, ...` (verified to assemble), and matching
+            // only `=` left every use of `i` reading as undefined - the three in
+            // the header included.
+            const assignForm = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:?=/);
             const inForm = rest.match(/^([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)\s+in\s/i);
             if (assignForm) {
                 loopVars.push({ name: assignForm[1], offset: 0 });

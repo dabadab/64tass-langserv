@@ -1466,3 +1466,12 @@ describe('symbols in a directive operand', () => {
             .toEqual(["Undefined symbol 'undefined_sym'"]);
     });
 });
+
+describe('a .for loop variable written with :=', () => {
+    it('is not reported undefined', () => {
+        // The manual's current spelling; it assembles, and every use of `i` used
+        // to be a warning, the three in the header included.
+        expect(getDiagnostics('        *= $1000\n        .for i := 0, i < 3, i += 1\n        .byte i\n        .next'))
+            .toEqual([]);
+    });
+});

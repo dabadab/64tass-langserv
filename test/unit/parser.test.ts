@@ -1357,3 +1357,14 @@ describe('a value containing a semicolon', () => {
         expect(parse('n = 5 ; five').labels[0].value).toBe('5');
     });
 });
+
+describe('the := spelling of a .for loop variable', () => {
+    // `.for i := 0, i < 3, i += 1` assembles (verified). Matching only `=` left
+    // every use of `i` undefined, the three in the header included.
+    it('records the variable', () => {
+        const label = parse('        .for i := 0, i < 3, i += 1\n        .byte i\n        .next')
+            .labels.find(l => l.name === 'i');
+        expect(label?.kind).toBe('var');
+        expect(label?.range.start.character).toBe(13);
+    });
+});
