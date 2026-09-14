@@ -415,6 +415,30 @@ export function findSymbolInfo(
 }
 
 /**
+ * How many definitions of a symbol the same lookup would find.
+ *
+ * Only interesting for `.var`s, which are re-assignable: more than one
+ * definition means the value in force at a given line depends on what the
+ * assembler executed to reach it, which the index does not model.
+ */
+export function countDefinitions(
+    symbol: LabelDefinition,
+    fromUri: string,
+    documentIndex: Map<string, DocumentIndex>,
+    unit?: ReadonlySet<string>
+): number {
+    let count = 0;
+    for (const index of documentsToSearch(documentIndex, fromUri, unit)) {
+        for (const label of index.labelsByName.get(symbol.name) ?? []) {
+            if (label.scopePath === symbol.scopePath
+                && label.isLocal === symbol.isLocal
+                && label.localScope === symbol.localScope) count++;
+        }
+    }
+    return count;
+}
+
+/**
  * Collect every non-local label visible from a given point in a document, plus
  * every local (`_name`) symbol valid in its current localScope - i.e. everything
  * findSymbolInfo could resolve a bare (non-dotted) reference to from this point,

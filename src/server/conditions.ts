@@ -1,5 +1,5 @@
 import { DocumentIndex } from './types';
-import { findSymbolInfo } from './symbols';
+import { countDefinitions, findSymbolInfo } from './symbols';
 import { parseNumericValue, parseLineStructure, stripStrings, findCommentBlockLines } from './utils';
 import { BOUNDARY } from './blocks';
 
@@ -203,6 +203,12 @@ class Parser {
         if (seen.has(name)) return null; // self-referential definition
         const symbol = findSymbolInfo(name, uri, line, documentIndex, caseSensitive, true, unit);
         if (!symbol || symbol.value === undefined) return null;
+        // A `.var` assigned more than once has no single value here: which
+        // assignment is in force depends on what the assembler executed to reach
+        // this line (verified: after `v .var 1` / `v .var 2`, `.if v == 1` takes
+        // the else branch, and deciding it from the first definition marked the
+        // live branch dead and reported a symbol in the dead one).
+        if (symbol.kind === 'var' && countDefinitions(symbol, uri, documentIndex, unit) > 1) return null;
 
         const direct = parseNumericValue(symbol.value);
         if (direct !== null) return direct;

@@ -229,3 +229,20 @@ describe('conditionalOn', () => {
             .map(([line, path]) => [line, path.length])).toEqual([[0, 0], [1, 1], [2, 0]]);
     });
 });
+
+describe('a symbol assigned more than once', () => {
+    // Verified: with `v .var 1` then `v .var 2`, the assembler takes the else of
+    // `.if v == 1`. Deciding it from the first definition marked the live branch
+    // dead - exactly the mistake the evaluator exists to avoid.
+    it('is undecidable', () => {
+        expect(evalWith('v == 1', 'v\t.var 1\nv\t.var 2')).toBeNull();
+    });
+
+    it('still decides one assigned once', () => {
+        expect(evalWith('v == 1', 'v\t.var 1')).toBe(true);
+    });
+
+    it('still decides a constant', () => {
+        expect(evalWith('c == 1', 'c\t= 1')).toBe(true);
+    });
+});

@@ -1545,3 +1545,13 @@ describe('labels inside a .bfor body', () => {
         expect(getDiagnostics(source).filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
     });
 });
+
+describe('a branch on a reassigned .var', () => {
+    it('is not greyed out', () => {
+        // The assembler assembles the .else here (v is 2 by then); marking it
+        // dead from the first definition hid the branch that is actually built.
+        const source = ['        *= $1000', 'v       .var 1', 'v       .var 2',
+            '        .if v == 1', '        lda #1', '        .else', '        lda #2', '        .endif'].join('\n');
+        expect(getDiagnostics(source).filter(d => d.message.includes('never taken'))).toEqual([]);
+    });
+});
