@@ -1503,3 +1503,24 @@ describe('references to a label on a bare call line', () => {
         expect(getDiagnostics(source).filter(d => d.code === 'undefined-symbol')).toEqual([]);
     });
 });
+
+describe('labels across .switch branches', () => {
+    // A .switch assembles at most one .case, so same-named labels in two of them
+    // never coexist - all three verified against the assembler.
+    const SWITCH = (body: string) => `        *= $1000\n        .switch 1\n${body}\n        .endswitch`;
+    const duplicates = (source: string) =>
+        getDiagnostics(source).filter(d => d.message.startsWith('Duplicate')).map(d => d.message);
+
+    it('are not duplicates in different cases', () => {
+        expect(duplicates(SWITCH('        .case 1\nlbl     .byte 1\n        .default\nlbl     .byte 2')))
+            .toEqual([]);
+    });
+
+    it('are duplicates twice in one case', () => {
+        expect(duplicates(SWITCH('        .case 1\nlbl     .byte 1\nlbl     .byte 3'))).toHaveLength(1);
+    });
+
+    it('are duplicates across the end of the switch', () => {
+        expect(duplicates(`${SWITCH('        .case 1\nlbl     .byte 1')}\nlbl     .byte 2`)).toHaveLength(1);
+    });
+});

@@ -242,6 +242,8 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   Always on: the conservatism is what makes that safe. Supports literals,
   index-resolved symbols, `!` `&&` `||`, `= == != < > <= >=`, arithmetic and parens;
   the program counter `*` and strings are undecidable.
+  `.case`/`.default` count as branches of their `.switch` just as `.elsif` does,
+  since the assembler assembles at most one of them.
   `computeBranchPaths`/`areMutuallyExclusive` (same module) record which branch of
   which chain each line sits in. The duplicate-label check needs BOTH: branch paths,
   because two definitions in different branches of one chain never collide even when
@@ -581,7 +583,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1675 tests); compiles first
+yarn test          # Run all tests (currently 1704 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

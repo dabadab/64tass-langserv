@@ -232,9 +232,13 @@ export interface ConditionalLine {
 }
 
 const CONDITIONAL_PATTERNS: [ConditionalKind, RegExp][] = [
-    ['end', new RegExp(`${BOUNDARY}\\.(endif|fi)\\b(.*)$`, 'i')],
-    ['open', new RegExp(`${BOUNDARY}\\.(if|ifeq|ifne|ifmi|ifpl)\\b(.*)$`, 'i')],
-    ['elsif', new RegExp(`${BOUNDARY}\\.(elsif|elif)\\b(.*)$`, 'i')],
+    ['end', new RegExp(`${BOUNDARY}\\.(endif|fi|endswitch)\\b(.*)$`, 'i')],
+    ['open', new RegExp(`${BOUNDARY}\\.(if|ifeq|ifne|ifmi|ifpl|switch)\\b(.*)$`, 'i')],
+    // `.case` and `.default` advance a branch exactly as `.elsif` does: a
+    // `.switch` assembles at most one of them, so same-named labels in two cases
+    // never coexist (verified - and twice in ONE case is a real duplicate, which
+    // the branch numbering still catches).
+    ['elsif', new RegExp(`${BOUNDARY}\\.(elsif|elif|case|default)\\b(.*)$`, 'i')],
     ['else', new RegExp(`${BOUNDARY}\\.(else)\\b(.*)$`, 'i')],
 ];
 

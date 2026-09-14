@@ -30,3 +30,11 @@ target  .byte 0
 
         jsr outer.inner
         lda outer.target
+
+        .switch mode
+        .case 1
+value   .byte 1
+        .default
+value   .byte 0
+        .endswitch
+        lda value
