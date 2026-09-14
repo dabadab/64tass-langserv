@@ -1475,3 +1475,23 @@ describe('a .for loop variable written with :=', () => {
             .toEqual([]);
     });
 });
+
+describe('assignments written without spaces', () => {
+    // All six assemble (verified). The name was captured as "everything before
+    // the `=`", so the operator was swallowed and reported as an illegal
+    // character in the symbol name - and every test for that check spaced its
+    // operators, so none of these was ever seen.
+    it.each(['v := 1', 'v+=1', 'v-=1', 'v*=2', 'v<<=1', 'v:=5', 'v..=[1]'])('accepts %j', (line) => {
+        expect(getDiagnostics(line)).toEqual([]);
+    });
+
+    it('still catches a character that cannot be in a name', () => {
+        expect(getDiagnostics('CODE_£ = $30').map(d => d.message))
+            .toEqual(["'£' is not allowed in a symbol name"]);
+    });
+
+    it('still catches an assignment with no expression', () => {
+        expect(getDiagnostics('CODE_= = $35').map(d => d.message)).toEqual(['An expression is expected']);
+        expect(getDiagnostics('a == 1').map(d => d.message)).toEqual(['An expression is expected']);
+    });
+});

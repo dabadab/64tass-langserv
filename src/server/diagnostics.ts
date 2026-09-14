@@ -111,6 +111,24 @@ function findDeadLines(
 }
 
 /**
+ * An assignment line split into its parts.
+ *
+ * The name is matched as symbol characters, and any junk between it and the
+ * operator separately - `CODE_£ = $30` is name `CODE_` plus `£`. Taking the name
+ * as "everything before the `=`" swallowed the operator whenever nothing
+ * separated the two, so `v+=1`, `v*=2` and `v:=5` were all reported as symbol
+ * names containing an illegal character, while the assembler takes every one of
+ * them (verified).
+ */
+function splitAssignment(code: string): { indent: string; name: string; valueStart: number } | null {
+    // No `(?!=)` here: `a == 1` has to reach findMissingValue, which reports it
+    // the way the assembler does ("an expression is expected").
+    const match = code.match(/^(\s*)([\p{L}0-9_.]*)([^\s;=]*?)\s*((?:\.\.|\*\*|<<|>>|[-+*/&|^%])?:?=)/u);
+    if (!match) return null;
+    return { indent: match[1], name: match[2] + match[3], valueStart: match[0].length };
+}
+
+/**
  * Where an assignment's value should be, when there is none the assembler can
  * use - it is missing entirely, or another `=` follows.
  *
@@ -122,10 +140,10 @@ function findDeadLines(
  * @returns the column the value should start at, or null if the line is fine
  */
 function findMissingValue(code: string): number | null {
-    const assignment = code.match(/^(\s*)([^\s;=]+)\s*:?=/);
+    const assignment = splitAssignment(code);
     if (!assignment) return null;
 
-    const valueStart = assignment[0].length;
+    const valueStart = assignment.valueStart;
     const value = code.slice(valueStart).trim();
     if (value !== '' && !value.startsWith('=')) return null;
     return valueStart + (code.slice(valueStart).length - code.slice(valueStart).trimStart().length);
@@ -148,12 +166,11 @@ function findMissingValue(code: string): number | null {
  * @returns the offending character and its column, or null if the line is fine
  */
 function findInvalidSymbolChar(code: string): { character: string; column: number } | null {
-    // Only assignment lines: "name = value" / "name := value". The name is
-    // everything before the '=', which is where an illegal character shows up.
-    const definition = code.match(/^(\s*)([^\s;=]+)\s*:?=(?!=)/);
+    // Only assignment lines: "name = value" / "name := value".
+    const definition = splitAssignment(code);
     if (!definition) return null;
 
-    const [, indent, name] = definition;
+    const { indent, name } = definition;
     // A line that does not begin like a symbol is not a definition at all - `*`
     // is the program counter, and an operator here means an expression.
     if (!/^[\p{L}_]/u.test(name)) return null;
