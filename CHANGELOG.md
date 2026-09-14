@@ -2,6 +2,21 @@
 
 All notable changes to the 64tass Language Support extension will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Benchmark Harness** - `yarn bench` measures the built server over LSP, the way the
+  editor uses it: startup, workspace scan, open and edit to diagnostics, every request
+  kind, and memory. `yarn bench:history` measures past releases in git worktrees so a
+  series can be reproduced on new hardware, `yarn bench:report` tabulates them and
+  `yarn bench:compare --baseline vX.Y.Z` fails on a regression before a tag. Records
+  live in `bench/results.jsonl`, per machine and workload, written only on `--save`
+
+### Removed
+- **Per-Test-Run Timing Log** - `test/performance-results.jsonl` was appended to on every
+  `yarn test`, mostly from dirty trees, and `src/server/performance.ts` was used by
+  nothing else. The scaling property test moved to `symbols.test.ts`
+
 ## [0.12.0] - 2026-09-06
 
 ### Added

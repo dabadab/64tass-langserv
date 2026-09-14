@@ -212,6 +212,14 @@ and use *Install from VSIX…* in the Extensions view.
 
 To run from source: `yarn install`, then F5 to launch the Extension Development Host.
 
+## Development
+
+`yarn test` runs the unit suite and the compiler reference tests (the latter need a real
+64tass, `TASS_PATH`). `yarn bench` measures the built server over LSP - startup, workspace
+scan, diagnostics after an edit, every request kind - and `yarn bench:history` does the
+same for past releases, so a regression can be traced to a version. Numbers are only
+comparable on one machine; see `bench/README.md`.
+
 ## License
 
 MIT
