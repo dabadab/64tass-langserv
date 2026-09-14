@@ -768,9 +768,12 @@ describe('parseDocument - non-6502 CPU targets', () => {
 
     // The point of CPU modes: a mnemonic the target does not have is not an opcode
     it('does not treat another CPU\'s mnemonic as an opcode by default', () => {
-        // No .cpu directive, so the 6502 default applies and "xba" is just a symbol
+        // No .cpu directive, so the 6502 default applies and "xba" is just a word.
+        // The LABEL is still defined - verified: 64tass rejects the rest of the
+        // line with "general syntax" and `jmp outer` on the next line resolves -
+        // and `unsupported-mnemonic` is what reports the mnemonic itself.
         const index = parse('outer   xba');
-        expect(index.labels.find(l => l.name === 'outer' && l.kind === 'code')).toBeUndefined();
+        expect(index.labels.map(l => `${l.name}:${l.kind}`)).toEqual(['outer:code']);
     });
 });
 
@@ -1366,5 +1369,36 @@ describe('the := spelling of a .for loop variable', () => {
             .labels.find(l => l.name === 'i');
         expect(label?.kind).toBe('var');
         expect(label?.range.start.character).toBe(13);
+    });
+});
+
+describe('a label in front of a bare call', () => {
+    // `lbl mac 5` assembles - whole projects call macros and functions without
+    // the prefix. The code-label branches want an opcode in the second slot and
+    // the macro-call branch wants the prefix, so this matched nothing and every
+    // reference to the label read as undefined.
+    const DEFS = 'mac     .macro\n        .byte 1\n        .endm\n';
+
+    it.each(['lbl     mac 5', 'lbl:    mac 5', 'lbl     mac'])('indexes the label in %j', (call) => {
+        const label = parse(DEFS + call).labels.find(l => l.name === 'lbl');
+        expect(label?.kind).toBe('code');
+        expect(label?.range.start.character).toBe(0);
+    });
+
+    it('marks it for settling, since the first word may itself be the macro', () => {
+        // Indented, no label: `mac other` is a call, and only the include tree
+        // knows that - settleBareWords drops the phantom label afterwards.
+        const index = parse(DEFS + '        mac other');
+        expect(index.labels.filter(l => l.kind === 'code').every(l => l.fromBareWord)).toBe(true);
+    });
+
+    it('leaves a colon-settled label alone', () => {
+        expect(parse(DEFS + 'lbl:    mac 5').labels.find(l => l.name === 'lbl')?.fromBareWord).toBe(false);
+    });
+
+    it('does not claim a line another branch owns', () => {
+        expect(parse(DEFS + 'lbl     lda #1').labels.find(l => l.name === 'lbl')?.kind).toBe('code');
+        expect(parse(DEFS + 'lbl     = 5').labels.find(l => l.name === 'lbl')?.kind).toBe('const');
+        expect(parse(DEFS + 'tab     .byte 1').labels.find(l => l.name === 'tab')?.kind).toBe('data');
     });
 });

@@ -698,6 +698,31 @@ export function parseDocument(
             continue;
         }
 
+        // A label in front of a BARE call: `lbl mac 5`, which assembles - whole
+        // projects call macros and functions without the `#` or `.`. The
+        // code-label branches above want an opcode in the second slot and the
+        // macro-call branch wants the prefix, so this shape matched nothing at all
+        // and every reference to the label read as undefined.
+        //
+        // Marked `fromBareWord` unless a colon settles it: if the FIRST word turns
+        // out to name a macro, the line is a call and this is no label - which
+        // only the include tree can decide, so settleBareWords does it later.
+        const bareCallMatch = parseLineStructure(line).code
+            .match(/^(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:\s*|\s+)([a-zA-Z_][a-zA-Z0-9_]*)\s*(\S[\s\S]*)?$/);
+        if (bareCallMatch
+            && !opcodes.has(bareCallMatch[2].toLowerCase())
+            && !opcodes.has(bareCallMatch[4].toLowerCase())
+            && !ALL_DIRECTIVE_SET.has(bareCallMatch[4].toLowerCase())) {
+            const labelName = bareCallMatch[2];
+            const startChar = bareCallMatch[1].length;
+            if (!isLocalName(labelName)) currentLocalScope = normalizeName(labelName);
+            recordScope(lineNum);
+            addLabel(labelName, 'code', lineNum, startChar, {
+                fromBareWord: !bareCallMatch[3].includes(':'),
+            });
+            continue;
+        }
+
         // Constant assignment ("v = 1") or re-assignable variable ("v := 1").
         // The assembler rejects redefining "=" but allows redefining ":=", so the
         // two are tagged differently for the duplicate check.

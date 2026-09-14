@@ -1495,3 +1495,11 @@ describe('assignments written without spaces', () => {
         expect(getDiagnostics('a == 1').map(d => d.message)).toEqual(['An expression is expected']);
     });
 });
+
+describe('references to a label on a bare call line', () => {
+    it('resolve', () => {
+        const source = 'mac     .macro\n        .byte 1\n        .endm\n'
+            + '        *= $1000\nlbl     mac 5\n        jmp lbl';
+        expect(getDiagnostics(source).filter(d => d.code === 'undefined-symbol')).toEqual([]);
+    });
+});

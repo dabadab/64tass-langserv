@@ -157,6 +157,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   with itself, and collided with the real macro - 44 false "Duplicate label"
   errors in one real project, all of them calls. A colon (`name:`) still defines,
   whatever exists.
+- **Bare calls with a label**: `lbl mac 5` assembles - whole projects call macros
+  and functions without the `#` or `.` - and matched no branch at all, so the
+  label was lost and every reference to it read as undefined. The branch that
+  records it sits after the macro-call one and marks the label `fromBareWord`
+  unless a colon settles it: if the FIRST word turns out to name a macro the line
+  is a call and there is no label, which only the include tree can decide.
+  `test/fixtures/corpus/bare-calls.asm` pins the shapes.
 - **Label vs instruction**: decided by the FIRST TOKEN, never by the column
   (verified): an indented `inner lda #1` defines `inner`, while `jsr rts` defines
   nothing at either column - `jsr` is the instruction and `rts` its operand - and a
@@ -613,7 +620,7 @@ building one literally.
   as a *label* means a mnemonic went unrecognised - which is what
   `all-opcodes.test.ts` asserts. `test/fixtures/64tass-examples/` holds real
   sources from the 64tass distribution.
-  `test/fixtures/corpus/` holds 21 files that BOTH assemble cleanly under real
+  `test/fixtures/corpus/` holds 22 files that BOTH assemble cleanly under real
   64tass and must produce zero error diagnostics here, so a false positive fails
   the build. Add one whenever a new construct is supported; verify it assembles
   before committing (a construct that does not assemble proves nothing), and add
