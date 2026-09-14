@@ -119,3 +119,20 @@ describe('re-scanning the compilation unit', () => {
         expect(reads).toBe(2);
     });
 });
+
+describe('the kind each message names', () => {
+    // Checked one by one against `64tass -Wunused`, whose wording this mirrors:
+    // a .proc, a .block and a bare label are all "label", a .function is a
+    // "macro", and .var and = have words of their own.
+    it.each([
+        ['vv      .var 7', "Unused variable 'vv'"],
+        ['cc      = 5', "Unused const 'cc'"],
+        ['lbl     nop', "Unused label 'lbl'"],
+        ['mm      .macro\n        .endm', "Unused macro 'mm'"],
+        ['ff      .function\n        .endf', "Unused macro 'ff'"],
+        ['pp      .proc\n        rts\n        .pend', "Unused label 'pp'"],
+        ['bb      .block\n        .bend', "Unused label 'bb'"],
+    ])('describes %s', (definition, message) => {
+        expect(inOneFile(`        *= $1000\n${definition}`).map(d => d.message)).toEqual([message]);
+    });
+});

@@ -19,7 +19,9 @@ import { parseLineStructure, stripStrings, findCommentBlockLines } from './utils
 function describeKind(label: LabelDefinition): string {
     switch (label.kind) {
         case 'var': return 'variable';
-        case 'macro': return 'macro';
+        // A `.function` is a macro to -Wunused as much as a `.macro` is
+        // (verified: both are "unused macro", under -Wunused-macro).
+        case 'macro': case 'function': return 'macro';
         case 'const': return 'const';
         default: return 'label';
     }
