@@ -137,6 +137,10 @@
     "compile:prod": "node esbuild.js --production",
     "watch": "node esbuild.js --watch",
     "typecheck": "tsc -b --noEmit && tsc -p tsconfig.test.json",
+    "bench": "yarn compile:prod && node bench/bench.mjs run",
+    "bench:history": "node bench/bench.mjs history",
+    "bench:report": "node bench/bench.mjs report",
+    "bench:compare": "yarn compile:prod && node bench/bench.mjs compare",
     "lint": "eslint .",
     "version-from-tag": "node -e \"const v = require('child_process').execSync('git describe --tags --abbrev=0').toString().trim().replace(/^v/, ''); const pkg = require('./package.json'); pkg.version = v; require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');\"",
     "vscode:prepublish": "yarn version-from-tag && yarn compile:prod",
@@ -157,6 +161,7 @@
     "eslint": "^9",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.67.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "vscode-jsonrpc": "^8.2.0"
   }
 }

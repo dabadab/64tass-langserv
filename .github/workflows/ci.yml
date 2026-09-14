@@ -61,3 +61,9 @@ jobs:
 
       - name: Build
         run: yarn compile
+
+      # The benchmark harness drives the built server over LSP. CI hardware is
+      # not comparable to anything, so no numbers are kept: this only proves the
+      # harness still runs, so it cannot quietly rot before the next release.
+      - name: Benchmark harness smoke
+        run: node bench/bench.mjs run --smoke

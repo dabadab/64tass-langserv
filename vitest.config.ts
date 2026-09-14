@@ -12,8 +12,6 @@ export default defineConfig({
                 'test/**',
                 // Client entry point: pure VS Code wiring, nothing to unit test
                 'src/extension.ts',
-                // Benchmark instrumentation, not product behaviour
-                'src/server/performance.ts',
             ],
             reporter: ['text-summary', 'html', 'lcov'],
             reportsDirectory: 'coverage',

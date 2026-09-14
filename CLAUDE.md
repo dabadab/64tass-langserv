@@ -39,10 +39,13 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │       ├── signatureHelp.ts      # getSignatureHelp — macro/function call hints
 │       ├── semanticTokens.ts     # buildSemanticTokens — semantic highlighting
 │       ├── folding.ts            # computeFoldingRanges — foldable block regions
-│       ├── debounce.ts           # Debouncer — collapses rapid diagnostic runs
-│       └── performance.ts        # Benchmark instrumentation (not product behaviour)
+│       └── debounce.ts           # Debouncer — collapses rapid diagnostic runs
 ├── tools/
 │   └── generate-directive-docs.mjs   # Rebuilds directiveDocs.ts from the manual
+├── bench/
+│   ├── bench.mjs                 # Run-time benchmark over LSP (run/history/report/compare)
+│   ├── lib/                      # Workload generator, LSP client, measurement, reporting
+│   └── results.jsonl             # Saved records, one per line, per machine id
 ├── syntaxes/
 │   └── 64tass.tmLanguage.json    # TextMate grammar for syntax highlighting
 ├── language-configuration.json   # Bracket matching, comments, etc.
@@ -410,8 +413,8 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   `DocumentIndex.labelsByName`, then by scope. It used to scan every label of
   every document per call, so cost grew with the whole workspace (~0.1 ms per
   lookup at 20k labels, and diagnostics calls it once per symbol occurrence).
-  `performance.test.ts` guards the scaling property rather than a wall-clock
-  ceiling, which would be flaky on CI.
+  `symbols.test.ts` guards the scaling property rather than a wall-clock
+  ceiling, which would be flaky on CI; absolute timings are `bench/`'s business.
 - **Cycle counts**: `cycles.ts`, keyed by opcode byte, for the NMOS family only
   (`6502`/`6502i`/`default`). The ONE table here that cannot be probed - 64tass
   is an assembler and has no timing information at all (no listing column, no
@@ -571,7 +574,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1676 tests); compiles first
+yarn test          # Run all tests (currently 1675 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
@@ -617,6 +620,34 @@ building one literally.
   any flags it needs to `COMPILE_FLAGS` in `corpus.test.ts`.
 - **Helpers:** `test/helpers/` — `createDoc`, `buildIndex`, `compile`
   - `buildIndex()` accepts `caseSensitive` per source object (falling back to the first entry), so a single index can mix case-sensitive and case-insensitive documents
+
+### Benchmarks
+
+Run-time performance is measured by `bench/`, NOT by the unit suite: no test
+asserts a wall-clock number, because a CI runner and a laptop differ several
+times over and any ceiling is either flaky or meaningless. The harness starts
+the BUILT bundle (`out/server/server.js`) as a child process and drives it over
+LSP on stdio, the way the editor does - nothing is imported from `src/`, which
+is what lets one harness measure any past release unchanged.
+
+```bash
+yarn bench                                # measure HEAD, print a table
+yarn bench --save                      # append to bench/results.jsonl (clean tree only)
+yarn bench:history                        # every v* tag, each built in its own git worktree
+yarn bench:report                         # versions x metrics for this machine
+yarn bench:compare --baseline v0.12.0  # before tagging: exit 1 on a >20% regression
+node bench/bench.mjs workload --verify    # the synthetic workload assembles under 64tass
+```
+
+Numbers are comparable only on ONE machine and ONE workload: every record
+carries a machine id (hash of CPU, cores, memory, platform) and the workload's
+content hash, and the report never puts different ones side by side. When the
+hardware changes, `bench:history --save` reproduces the series. Only `--save`
+writes `results.jsonl`; `yarn test` never does (its predecessor appended a
+line on every test run, which is how it came to hold four hundred
+unattributable measurements). CI runs `bench run --smoke` so the harness
+cannot rot, and keeps no numbers. See `bench/README.md` for the metrics, the
+debounce and scan footnotes, and the capability-by-version table.
 
 ## Release Process
 

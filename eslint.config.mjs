@@ -9,10 +9,14 @@ export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
-        // The generators under tools/ are Node scripts, not part of the bundle.
-        files: ['tools/**/*.mjs'],
+        // The generators under tools/ and the benchmark harness under bench/ are
+        // Node scripts, not part of the bundle.
+        files: ['tools/**/*.mjs', 'bench/**/*.mjs'],
         languageOptions: {
-            globals: { process: 'readonly', console: 'readonly', URL: 'readonly', fetch: 'readonly' },
+            globals: {
+                process: 'readonly', console: 'readonly', URL: 'readonly', fetch: 'readonly',
+                performance: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', setImmediate: 'readonly',
+            },
         },
     },
     {
