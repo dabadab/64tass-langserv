@@ -1555,3 +1555,29 @@ describe('a branch on a reassigned .var', () => {
         expect(getDiagnostics(source).filter(d => d.message.includes('never taken'))).toEqual([]);
     });
 });
+
+describe('machine-code checks inside a dead branch', () => {
+    // Nothing in a branch that cannot be taken is assembled, and the assembler
+    // reports none of these there (verified with all three inside one `.if 0`).
+    const inDeadBranch = (line: string) =>
+        getDiagnostics(`        *= $1000\n        .if 0\n${line}\n        .endif`)
+            .filter(d => d.severity === DiagnosticSeverity.Error);
+
+    it('says nothing about another CPU\'s mnemonic', () => {
+        expect(inDeadBranch('        bra $1000')).toEqual([]);
+        expect(getDiagnostics('        *= $1000\n        bra $1000')
+            .filter(d => d.code === 'unsupported-mnemonic')).toHaveLength(1);
+    });
+
+    it('says nothing about an oversized immediate', () => {
+        expect(inDeadBranch('        lda #$1234')).toEqual([]);
+        expect(getDiagnostics('        *= $1000\n        lda #$1234')
+            .filter(d => d.code === 'immediate-too-large')).toHaveLength(1);
+    });
+
+    it('says nothing about a shape with no addressing mode', () => {
+        expect(inDeadBranch('        ldx $10,x')).toEqual([]);
+        expect(getDiagnostics('        *= $1000\n        ldx $10,x')
+            .filter(d => d.code === 'no-addressing-mode')).toHaveLength(1);
+    });
+});

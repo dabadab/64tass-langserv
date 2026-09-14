@@ -631,7 +631,12 @@ export function validateDocument(
         // declared, or the default when nothing said. A 65c02 project that never
         // declares itself is reported against the 6502i default and should say so
         // with a `.cpu` directive, a pragma or the setting.
-        {
+        //
+        // Nothing in a branch that cannot be taken is assembled, so the assembler
+        // says nothing about it (verified: another CPU's mnemonic, an oversized
+        // immediate and a shape with no addressing mode are all silent inside
+        // `.if 0`) - and neither do the three checks that judge the machine code.
+        if (!deadLines.has(lineNum)) {
             const unsupported = findUnsupportedMnemonic(code, opcodes);
             // A macro of that name makes the line a macro call, and legal (verified).
             if (unsupported && !findSymbolInfo(unsupported.name, document.uri, lineNum, documentIndex, caseSensitive, true, unit)) {
@@ -769,7 +774,7 @@ export function validateDocument(
             operandStart = opcodeMatch[0].length - operand.length;
 
             // Does the immediate value fit the byte it is assembled into?
-            const tooLarge = findOversizedImmediate(
+            const tooLarge = deadLines.has(lineNum) ? null : findOversizedImmediate(
                 index.cpu, opcodeMatch[1], operand, document.uri, lineNum, documentIndex, caseSensitive, unit);
             if (tooLarge) {
                 diagnostics.push({
@@ -792,7 +797,9 @@ export function validateDocument(
             const addressValue = address === null
                 ? null
                 : evaluateExpression(address, document.uri, lineNum, documentIndex, caseSensitive, unit);
-            const problem = findAddressingProblem(index.cpu, opcodeMatch[1], operand, addressValue);
+            const problem = deadLines.has(lineNum)
+                ? null
+                : findAddressingProblem(index.cpu, opcodeMatch[1], operand, addressValue);
             // Judged against the target in force, declared or defaulted: a file
             // that never says which CPU it is for is taken at its default, since
             // staying silent there means saying nothing about most real sources.

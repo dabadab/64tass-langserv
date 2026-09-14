@@ -245,7 +245,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   executed to reach it, and taking the first one marked the LIVE branch dead. Both scanners
   skip `.comment` blocks: that conservatism only holds while the lines they read
   are CODE, and prose saying "disabled with .if 0" opened a chain that never
-  closed, marking the rest of the file dead and suppressing every diagnostic in it. The same set is
+  closed, marking the rest of the file dead and suppressing every diagnostic in it.
+  Dead lines also silence the three checks that judge machine code -
+  `unsupported-mnemonic`, `immediate-too-large`, `no-addressing-mode` - since an
+  unassembled branch draws none of them from the assembler either (verified).
+  The same set is
   what `validateDocument` greys out: one `Hint` + `DiagnosticTag.Unnecessary` per
   CONTIGUOUS run of dead lines (a fifty-line branch is one diagnostic, not fifty),
   covering only the branch body - the `.if`/`.else`/`.endif` lines are assembled.
@@ -593,7 +597,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1718 tests); compiles first
+yarn test          # Run all tests (currently 1721 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
