@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { indexDocument, clearIncludeRefs, IndexContext } from '../../src/server/indexing';
+import { indexDocument, clearIncludeRefs, settleBareWords, IndexContext } from '../../src/server/indexing';
 import { IncludeGraph } from '../../src/server/includes';
 import { DocumentIndex } from '../../src/server/types';
 import { DEFAULT_CPU } from '../../src/server/constants';
@@ -443,6 +443,73 @@ describe('a bare word that names a macro', () => {
             const kinds = w.context.documentIndex.get(w.uriOf('main.asm'))!
                 .labels.filter(l => l.name === 'inc_d020').map(l => l.kind);
             expect(kinds).toEqual(['macro', 'code']);
+        } finally { w.cleanup(); }
+    });
+});
+
+describe('what the workspace scan records', () => {
+    // The scan shares one indexedUris set across every file, which no other test
+    // does - and that is the only way scanWorkspace ever runs indexDocument.
+    function scan(w: ReturnType<typeof makeContext>, order: string[]) {
+        const scanned = new Set<string>();
+        for (const name of order) {
+            const uri = w.uriOf(name);
+            if (scanned.has(uri) || w.context.documentIndex.has(uri)) continue;
+            indexDocument(w.docFor(name), w.context, scanned, uri);
+        }
+        return scanned;
+    }
+
+    const TREE = {
+        'main.asm': '        .include "lib.inc"\nmain_sym rts\n        jsr deep',
+        'main2.asm': '        .include "lib.inc"\nmain_sym2 rts\n        jsr deep',
+        'lib.inc': '        .include "sub.inc"\nlib     nop',
+        'sub.inc': 'deep    jsr main_sym',
+    };
+
+    it.each([
+        ['includes first', ['lib.inc', 'sub.inc', 'main.asm', 'main2.asm']],
+        ['roots first', ['main.asm', 'main2.asm', 'lib.inc', 'sub.inc']],
+    ])('attributes a two-level tree to every root, scanning %s', (_name, order) => {
+        // The deep include was attributed to whichever file the directory listing
+        // reached first, so its compilation unit depended on disk order.
+        const w = makeContext(TREE);
+        try {
+            scan(w, order);
+            const unit = w.context.includeGraph.compilationUnit(w.uriOf('sub.inc'));
+            expect([...unit].sort()).toEqual([
+                w.uriOf('lib.inc'), w.uriOf('main.asm'), w.uriOf('main2.asm'), w.uriOf('sub.inc'),
+            ].sort());
+            expect(w.context.includeGraph.rootsFor(w.uriOf('sub.inc'))).toContain(w.uriOf('main2.asm'));
+        } finally { w.cleanup(); }
+    });
+
+    it('settles bare words per program, not across the workspace', () => {
+        // A macro called `wait` in one program used to delete the code label
+        // `wait` in another that never includes it - and re-opening the file
+        // brought it back, so the behaviour flipped per session.
+        const w = makeContext({
+            'a.asm': 'wait    .macro\n        nop\n        .endm',
+            'b.asm': 'wait\n        dex\n        jsr wait',
+        });
+        try {
+            const scanned = scan(w, ['a.asm', 'b.asm']);
+            settleBareWords(scanned, w.context.documentIndex,
+                uri => w.context.includeGraph.compilationUnit(uri));
+            expect(w.context.documentIndex.get(w.uriOf('b.asm'))!.labels.map(l => l.name)).toEqual(['wait']);
+        } finally { w.cleanup(); }
+    });
+
+    it('still drops one the same program defines', () => {
+        const w = makeContext({
+            'main.asm': '        .include "m.inc"\nwait\n        dex',
+            'm.inc': 'wait    .macro\n        nop\n        .endm',
+        });
+        try {
+            const scanned = scan(w, ['main.asm', 'm.inc']);
+            settleBareWords(scanned, w.context.documentIndex,
+                uri => w.context.includeGraph.compilationUnit(uri));
+            expect(w.context.documentIndex.get(w.uriOf('main.asm'))!.labels.map(l => l.name)).toEqual([]);
         } finally { w.cleanup(); }
     });
 });

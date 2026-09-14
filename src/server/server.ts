@@ -466,7 +466,7 @@ async function scanWorkspace(): Promise<void> {
 
     // Once, over everything the scan reached: a no-argument macro call is only
     // knowable as a call after the file defining the macro has been read.
-    settleBareWords(scanned, documentIndex);
+    settleBareWords(scanned, documentIndex, uri => includeGraph.compilationUnit(uri));
 
     if (indexed > 0) {
         connection.console.log(`Indexed ${indexed} workspace file(s) in ${Date.now() - started}ms`);

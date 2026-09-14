@@ -93,7 +93,15 @@ export function indexDocument(
         // Track that this root document references this included file
         context.includeGraph.addRef(includeUri, effectiveRootUri);
 
-        if (indexedUris.has(includeUri)) continue;
+        if (indexedUris.has(includeUri)) {
+            // Parsed already, under some other root. The PARSE is what this skips;
+            // the edges below it are this root's too, and stopping here left them
+            // attributed to whichever file the directory listing happened to reach
+            // first - so a deep include's compilation unit came out different on a
+            // differently-ordered disk.
+            attributeTree(includeUri, effectiveRootUri, context, new Set([document.uri]));
+            continue;
+        }
 
         // getDocumentText returns the open buffer when there is one, so an include
         // being edited is indexed from its unsaved contents rather than from disk.
@@ -125,18 +133,29 @@ export function indexDocument(
  * Left as a definition when nothing of the name is callable, so a plain
  * `loop`-style label keeps working.
  */
-export function settleBareWords(uris: Set<string>, documentIndex: Map<string, DocumentIndex>): void {
-    const callable = new Set<string>();
-    for (const uri of uris) {
-        for (const label of documentIndex.get(uri)?.labels ?? []) {
-            if (label.kind === 'macro' || label.kind === 'function') callable.add(label.name);
-        }
-    }
-    if (callable.size === 0) return;
-
+export function settleBareWords(
+    uris: Set<string>,
+    documentIndex: Map<string, DocumentIndex>,
+    // Which files count as "the same program" for a given file. The default is
+    // the set being settled, which is right for one include tree - the shape
+    // indexDocument passes. The workspace scan settles many programs at once and
+    // must pass the compilation unit instead, or a macro called `wait` in one
+    // program deletes the code label `wait` in another that never includes it.
+    unitOf: (uri: string) => Iterable<string> = () => uris
+): void {
     for (const uri of uris) {
         const index = documentIndex.get(uri);
         if (!index) continue;
+        if (!index.labels.some(label => label.fromBareWord)) continue;
+
+        const callable = new Set<string>();
+        for (const member of unitOf(uri)) {
+            for (const label of documentIndex.get(member)?.labels ?? []) {
+                if (label.kind === 'macro' || label.kind === 'function') callable.add(label.name);
+            }
+        }
+        if (callable.size === 0) continue;
+
         const kept = index.labels.filter(label => !(label.fromBareWord && callable.has(label.name)));
         if (kept.length === index.labels.length) continue;
 
@@ -147,6 +166,21 @@ export function settleBareWords(uris: Set<string>, documentIndex: Map<string, Do
             else byName.set(label.name, [label]);
         }
         documentIndex.set(uri, { ...index, labels: kept, labelsByName: byName });
+    }
+}
+
+/**
+ * Record `root` as reaching everything below `uri`, without re-parsing any of it.
+ *
+ * `seen` stops a cycle: `.include` loops are legal to write, and the parser
+ * indexes them once.
+ */
+function attributeTree(uri: string, root: string, context: IndexContext, seen: Set<string>): void {
+    if (seen.has(uri)) return;
+    seen.add(uri);
+    for (const childUri of context.documentIndex.get(uri)?.includes ?? []) {
+        context.includeGraph.addRef(childUri, root);
+        attributeTree(childUri, root, context, seen);
     }
 }
 
