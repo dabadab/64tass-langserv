@@ -13,7 +13,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DocumentIndex, LabelKind } from './types';
 import { OPCODES, ALL_DIRECTIVES, NON_SYMBOL_ARG_DIRECTIVES, DEFAULT_CPU, opcodesForCpu } from './constants';
 import { collectVisibleLabels, collectVisibleParameters, collectScopeMembers } from './symbols';
-import { parseLineStructure } from './utils';
+import { parseLineStructure, stripStrings } from './utils';
 import { CommaContext, indexRegistersFor } from './operands';
 import { pragmaCompletions } from './pragmas';
 
@@ -331,7 +331,11 @@ export function getCompletions(
     // textual change, so Enter still opens the next line instead of being eaten by
     // the popup. Without that default this branch actively costs a keypress on
     // every indexed line.
-    if (afterOpcode && /,\s*$/.test(before)) {
+    // The comma has to be a real one: inside a string literal it is text, and
+    // `lda #"a,` was offering x and y in the middle of one. stripStrings blanks
+    // an unterminated string to the end of the line, which is exactly the case
+    // being typed.
+    if (afterOpcode && /,\s*$/.test(stripStrings(before))) {
         const mnemonic = OPCODES.has(firstToken) ? firstToken : tokens[1]?.toLowerCase();
         const registers = mnemonic ? indexRegistersFor(cpu, mnemonic, commaContextAt(before)) : [];
         if (registers.length > 0) {

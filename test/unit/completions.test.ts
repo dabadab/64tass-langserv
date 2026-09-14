@@ -472,3 +472,18 @@ describe('getCompletions - semicolons inside strings', () => {
         expect(items).toHaveLength(0);
     });
 });
+
+describe('a comma inside a string literal', () => {
+    // `lda #","` assembles (verified): the comma is text, so nothing follows it
+    // that an index register could be. Offering x and y there was nonsense.
+    it('does not offer index registers', () => {
+        const line = '        lda #"a,';
+        expect(getCompletions(createDoc(line), Position.create(0, line.length), new Map())).toEqual([]);
+    });
+
+    it('still offers them after a real one', () => {
+        const line = '        lda $10,';
+        expect(getCompletions(createDoc(line), Position.create(0, line.length), new Map()).map(i => i.label))
+            .toEqual(['x', 'y']);
+    });
+});

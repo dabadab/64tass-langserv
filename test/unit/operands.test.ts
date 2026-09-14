@@ -185,3 +185,20 @@ describe('findAddressingProblem - operand width', () => {
         expect(findAddressingProblem('65ce02', 'sty', '$c000,x', 0xc000)).toBeNull();
     });
 });
+
+describe('a quoted string in the operand', () => {
+    // A comma or a bracket inside a string is text: `lda #","`, `lda "a"` and
+    // `lda ("a"),y` all assemble (verified).
+    it('is not read as operand structure', () => {
+        expect(parseOperand('#","')).toEqual({ kind: 'immediate' });
+        expect(parseOperand('"a"')).toEqual({ kind: 'address', shape: { bracket: '', inside: null, outside: null } });
+        expect(parseOperand('"(",x')).toEqual({ kind: 'address', shape: { bracket: '', inside: null, outside: 'x' } });
+        expect(parseOperand('("a"),y')).toEqual({ kind: 'address', shape: { bracket: '(', inside: null, outside: 'y' } });
+    });
+
+    it('leaves those lines unreported', () => {
+        expect(findAddressingProblem('6502i', 'lda', '#","')).toBeNull();
+        expect(findAddressingProblem('6502i', 'lda', '"a"')).toBeNull();
+        expect(findAddressingProblem('6502i', 'lda', '("a"),y')).toBeNull();
+    });
+});
