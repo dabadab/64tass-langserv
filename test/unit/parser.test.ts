@@ -1402,3 +1402,48 @@ describe('a label in front of a bare call', () => {
         expect(parse(DEFS + 'tab     .byte 1').labels.find(l => l.name === 'tab')?.kind).toBe('data');
     });
 });
+
+describe('the body scope of .bfor / .brept / .bwhile', () => {
+    // All verified against the assembler: a label inside one of these is not
+    // defined after the loop and does not collide with one outside, while the
+    // same code with the plain .for / .rept / .while is a duplicate definition.
+    const scopeOf = (source: string, name: string) =>
+        parse(source).labels.find(l => l.name === name)?.scopePath;
+
+    it('holds the labels of a .bfor', () => {
+        expect(scopeOf('        .bfor i in 0, 1\ninner   .byte i\n        .next', 'inner')).toBe('bfor@0');
+    });
+
+    it('holds the labels of a .brept and a .bwhile', () => {
+        expect(scopeOf('        .brept 2\ninner   .byte 1\n        .next', 'inner')).toBe('brept@0');
+        expect(scopeOf('        .bwhile * < 4\ninner   .byte 1\n        .next', 'inner')).toBe('bwhile@0');
+    });
+
+    it('leaves the plain .for alone', () => {
+        expect(scopeOf('        .for i = 0, i < 2, i = i + 1\ninner   .byte i\n        .next', 'inner')).toBeNull();
+    });
+
+    it('excludes the loop label and the loop variable', () => {
+        const source = 'tbl     .bfor i in 0, 1\ninner   .byte i\n        .next';
+        expect(scopeOf(source, 'tbl')).toBeNull();
+        expect(scopeOf(source, 'i')).toBeNull();
+    });
+
+    it('ends at the loop, not at a plain loop nested in it', () => {
+        const source = [
+            '        .bfor i in 0, 1',
+            '        .for j = 0, j < 2, j = j + 1',
+            '        .next',
+            'inner   .byte 1',
+            '        .next',
+            'after   .byte 1',
+        ].join('\n');
+        expect(scopeOf(source, 'inner')).toBe('bfor@0');
+        expect(scopeOf(source, 'after')).toBeNull();
+    });
+
+    it('nests', () => {
+        const source = '        .bfor i in 0, 1\n        .bfor j in 0, 1\ninner   .byte 1\n        .next\n        .next';
+        expect(scopeOf(source, 'inner')).toBe('bfor@0.bfor@1');
+    });
+});

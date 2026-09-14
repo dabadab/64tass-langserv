@@ -1524,3 +1524,24 @@ describe('labels across .switch branches', () => {
         expect(duplicates(`${SWITCH('        .case 1\nlbl     .byte 1')}\nlbl     .byte 2`)).toHaveLength(1);
     });
 });
+
+describe('labels inside a .bfor body', () => {
+    // The body is a scope of its own, verified both ways: the same name outside
+    // is not a duplicate, and a reference to the inner one from outside is
+    // "not defined symbol" to the assembler.
+    const LOOP = 'inner   .byte 0\n        .bfor i in 0, 1\ninner   .byte i\n        .next';
+
+    it('are not duplicates of one outside it', () => {
+        expect(getDiagnostics(`        *= $1000\n${LOOP}`).filter(d => d.message.startsWith('Duplicate'))).toEqual([]);
+    });
+
+    it('are still duplicates within the body', () => {
+        const source = '        *= $1000\n        .bfor i in 0, 1\ninner   .byte i\ninner   .byte i\n        .next';
+        expect(getDiagnostics(source).filter(d => d.message.startsWith('Duplicate'))).toHaveLength(1);
+    });
+
+    it('do not resolve from outside the loop', () => {
+        const source = `        *= $1000\n        .bfor i in 0, 1\nhidden  .byte i\n        .next\n        lda hidden`;
+        expect(getDiagnostics(source).filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
+    });
+});

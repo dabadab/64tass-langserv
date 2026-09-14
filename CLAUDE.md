@@ -141,6 +141,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   is the same names as a Set, for the membership tests the parser runs twice per
   line.
 - **Directive scopes**: `.proc`, `.block`, `.macro`, `.function`, `.struct`, `.union`, `.namespace`.
+  `.bfor`/`.brept`/`.bwhile` scope their BODY as well (verified: a label inside
+  is undefined after the loop and does not collide with one outside, unlike the
+  plain `.for`/`.rept`/`.while`), so the parser pushes a synthetic `bfor@<line>`
+  from the line AFTER the directive - a label in front of the loop names the
+  bytes it emits and the loop variable outlives the loop, so neither is inside.
+  Both kinds close with `.next`, hence `loopStack`: a plain loop nested in a
+  `.bfor` must not let its own `.next` close the scope.
   An UNNAMED one is still a scope - `.block` with no label hides its labels from
   the outside (verified) - so it gets a synthetic `block@<line>` name rather than
   null, the same trick the unlabelled `.binclude` uses. `@` cannot occur in a user
@@ -583,7 +590,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1704 tests); compiles first
+yarn test          # Run all tests (currently 1713 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

@@ -491,6 +491,18 @@ export const SCOPE_OPENERS: Record<string, string> = {
 
 // All valid closers for each opener
 // Loops can be closed by .next OR their specific .end* directive
+/**
+ * The loop directives, and which of them give their BODY a scope of its own.
+ *
+ * `.bfor`/`.brept`/`.bwhile` do (verified: a label inside is not defined after
+ * the loop and does not collide with one outside), the plain `.for`/`.rept`/
+ * `.while` do not - and both kinds close with `.next`, so the parser has to know
+ * which loops are open to tell which `.next` ends a scope.
+ */
+export const LOOP_OPENERS: ReadonlySet<string> = new Set(['.for', '.bfor', '.rept', '.brept', '.while', '.bwhile']);
+export const LOOP_BODY_SCOPES: ReadonlySet<string> = new Set(['.bfor', '.brept', '.bwhile']);
+export const LOOP_CLOSERS: ReadonlySet<string> = new Set(['.next', '.endfor', '.endrept', '.endwhile']);
+
 export const OPENER_TO_CLOSERS: Record<string, string[]> = {
     '.proc': ['.pend', '.endproc'],
     '.block': ['.bend', '.endblock'],

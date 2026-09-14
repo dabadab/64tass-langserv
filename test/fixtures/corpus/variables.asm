@@ -18,5 +18,14 @@ squarelo .for i = 0, i < 8, i = i + 1
         .byte j
         .next
 
+; A .bfor scopes its body, so the `entry` inside it is not the one above the
+; loop (verified: without the .b that is a duplicate definition).
+entry   .byte 0
+
+table   .bfor k in 1, 2
+entry   .byte k
+        .next
+
         lda squarelo
+        lda table
         rts

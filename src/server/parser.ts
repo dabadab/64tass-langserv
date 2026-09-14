@@ -2,7 +2,7 @@ import { Range, Position } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex, LabelKind } from './types';
-import { SCOPE_OPENERS, CLOSING_DIRECTIVES, ALL_DIRECTIVE_SET, opcodesForCpu, DEFAULT_CPU } from './constants';
+import { SCOPE_OPENERS, CLOSING_DIRECTIVES, ALL_DIRECTIVE_SET, LOOP_OPENERS, LOOP_BODY_SCOPES, LOOP_CLOSERS, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { blockDirectivesOn, BOUNDARY } from './blocks';
 import { resolveIncludePath } from './paths';
 import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys, parseLineStructure, stripStrings } from './utils';
@@ -87,6 +87,12 @@ export function parseDocument(
 
     // Stack for directive-based scopes: { name, directive }
     const scopeStack: { name: string | null; directive: string }[] = [];
+    // Which loops are currently open, and whether each scopes its body. Kept
+    // beside scopeStack rather than in it, because a plain `.for` is not a scope
+    // but its `.next` must not close the `.bfor` around it.
+    const loopStack: boolean[] = [];
+    // A scoped loop's frame opens on the line AFTER its directive - see below.
+    let pendingScope: { name: string; directive: string } | null = null;
     // Current code label for local symbol scoping
     let currentLocalScope: string | null = null;
     // Scopes imported by enclosing `.with` directives, innermost last. Recorded as
@@ -209,6 +215,11 @@ export function parseDocument(
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
         const lineLower = line.toLowerCase();
+
+        if (pendingScope) {
+            scopeStack.push(pendingScope);
+            pendingScope = null;
+        }
 
         // Record scope info for this line
         recordScope(lineNum);
@@ -369,6 +380,25 @@ export function parseDocument(
             // Update scope after closing
             recordScope(lineNum);
             continue;
+        }
+
+        // `.bfor`/`.brept`/`.bwhile` scope their body; `.for`/`.rept`/`.while` do
+        // not, and both close with `.next` - hence loopStack.
+        for (const closer of closersOnLine) {
+            if (!LOOP_CLOSERS.has(closer)) continue;
+            if (loopStack.pop()) {
+                scopeStack.pop();
+                recordScope(lineNum);
+            }
+        }
+        for (const opener of openersOnLine) {
+            if (!LOOP_OPENERS.has(opener)) continue;
+            const scoped = LOOP_BODY_SCOPES.has(opener);
+            loopStack.push(scoped);
+            // Opened on the NEXT line: a label in front of the loop names the bytes
+            // it emits and the loop variable outlives the loop, so neither of them
+            // belongs inside the body scope (both verified).
+            if (scoped) pendingScope = { name: `${opener.slice(1)}@${lineNum}`, directive: opener };
         }
 
         // Check for scope-opening directives with labels: "name .proc", "name .block", etc.
