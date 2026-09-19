@@ -5,7 +5,7 @@ import { LabelDefinition, DocumentIndex, LabelKind } from './types';
 import { SCOPE_OPENERS, CLOSING_DIRECTIVES, ALL_DIRECTIVE_SET, LOOP_OPENERS, LOOP_BODY_SCOPES, LOOP_CLOSERS, opcodesForCpu, DEFAULT_CPU } from './constants';
 import { blockDirectivesOn, BOUNDARY } from './blocks';
 import { resolveIncludePath } from './paths';
-import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys, parseLineStructure, stripStrings } from './utils';
+import { stripComment, getBlockComment, detectDefinePragmas, detectCpu, splitTopLevel, parameterName, findCommentBlockLines, findDictKeys, parseLineStructure, stripStrings, splitLines } from './utils';
 
 export type LogFunction = (message: string) => void;
 
@@ -82,7 +82,7 @@ export function parseDocument(
     const includes: string[] = [];
     let unresolvedIncludes = false;
     const includeScopes: Map<string, string> = new Map();
-    const lines = text.split('\n');
+    const lines = splitLines(text);
     const commentBlockLines = findCommentBlockLines(lines);
 
     // Stack for directive-based scopes: { name, directive }

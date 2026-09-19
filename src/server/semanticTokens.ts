@@ -1,6 +1,6 @@
 import { DocumentIndex, LabelKind } from './types';
 import { OPCODES, BUILTINS, ALL_DIRECTIVES } from './constants';
-import { parseLineStructure, stripStrings, findCommentBlockLines } from './utils';
+import { parseLineStructure, stripStrings, findCommentBlockLines, splitLines } from './utils';
 import { findSymbolInfo, isParameter } from './symbols';
 
 /**
@@ -82,7 +82,7 @@ export function buildSemanticTokens(
     const index = documentIndex.get(uri);
     if (!index) return tokens;
 
-    const lines = text.split('\n');
+    const lines = splitLines(text);
     const normalize = (name: string) => caseSensitive ? name : name.toLowerCase();
 
     // Definitions by position, so a label's own declaration is marked as such

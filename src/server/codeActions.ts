@@ -2,6 +2,7 @@ import { CodeAction, CodeActionKind, Diagnostic, Position, TextEdit } from 'vsco
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DocumentIndex } from './types';
 import { collectVisibleLabels } from './symbols';
+import { splitLines } from './utils';
 
 /** Longest suggestion distance still worth offering, as a share of the word's length. */
 const MAX_DISTANCE_RATIO = 0.4;
@@ -25,7 +26,7 @@ export function buildCodeActions(
     visibleUris?: ReadonlySet<string>
 ): CodeAction[] {
     const actions: CodeAction[] = [];
-    const lines = document.getText().split('\n');
+    const lines = splitLines(document.getText());
 
     for (const diagnostic of diagnostics) {
         if (diagnostic.code === 'undefined-symbol' || diagnostic.code === 'undefined-macro') {

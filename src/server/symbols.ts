@@ -14,7 +14,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import { LabelDefinition, DocumentIndex } from './types';
-import { parseLineStructure, escapeRegex, stripStrings } from './utils';
+import { parseLineStructure, escapeRegex, stripStrings, splitLines } from './utils';
 import { OPCODES } from './constants';
 
 /**
@@ -39,7 +39,7 @@ function getScopeChain(scopePath: string | null): (string | null)[] {
 
 export function getWordAtPosition(document: TextDocument, position: Position): string | null {
     const text = document.getText();
-    const lines = text.split('\n');
+    const lines = splitLines(text);
     const line = lines[position.line];
 
     if (!line) return null;
@@ -656,7 +656,7 @@ export function findSymbolOccurrences(
         const docContent = getDocumentText(uri);
         if (docContent === null) continue;
 
-        const lines = docContent.split('\n');
+        const lines = splitLines(docContent);
         // `symbol.name` is lowercased when the document is case-insensitive, so a
         // case-sensitive match against it finds `_Loop` and misses `_LOOP` - and
         // rename then rewrote the definition and none of its uses. The dotted-chain

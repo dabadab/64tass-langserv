@@ -20,7 +20,7 @@ import { opcodesForCpu } from './constants';
 import { addressingModesFor } from './addressing';
 import { cyclesFor, hasCycleData, formatCycles } from './cycles';
 import { addressExpressionOf, bytesForValue, parseOperand } from './operands';
-import { parseLineStructure } from './utils';
+import { parseLineStructure, splitLines } from './utils';
 import { evaluateExpression } from './conditions';
 
 /**
@@ -132,7 +132,7 @@ export function computeCycleCounts(
     if (!index || !hasCycleData(index.cpu)) return [];
 
     const counts: CycleCount[] = [];
-    const lines = document.getText().split('\n');
+    const lines = splitLines(document.getText());
     for (let line = 0; line < lines.length; line++) {
         const { code } = parseLineStructure(lines[line]);
         const text = cycleTextFor(code, document.uri, line, documentIndex, index);

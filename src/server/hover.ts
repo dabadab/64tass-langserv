@@ -6,7 +6,7 @@ import { opcodesForCpu, DEFAULT_CPU, CLOSING_DIRECTIVES } from './constants';
 import { addressingModesFor } from './addressing';
 import { opcodeDoc } from './opcodeDocs';
 import { cyclesFor, hasCycleData, formatCycles, CycleVariance } from './cycles';
-import { parseNumericValue, formatNumericValue, stripStrings, parseLineStructure } from './utils';
+import { parseNumericValue, formatNumericValue, stripStrings, parseLineStructure, splitLines } from './utils';
 import { computeFoldingRanges } from './folding';
 import { callSignature, calleeScopePath } from './signatureHelp';
 import { pragmaHover } from './pragmas';
@@ -87,7 +87,7 @@ export function closerHover(
     const region = computeFoldingRanges(text).find(range => range.endLine === line);
     if (!region) return null;   // unmatched; diagnostics reports that separately
 
-    const lines = text.split('\n');
+    const lines = splitLines(text);
     const openerText = lines[region.startLine] ?? '';
     const openerCode = stripStrings(parseLineStructure(openerText).code).toLowerCase();
     // Safe: directive names come from the static CLOSING_DIRECTIVES table.
@@ -201,7 +201,7 @@ export function buildHover(
     // The pragma comes first: its line is a comment, so nothing else would answer
     // for it, and a word inside one ("cpu", "root") could otherwise be looked up
     // as a symbol.
-    return pragmaHover(document.getText().split('\n')[line] ?? '', line)
+    return pragmaHover(splitLines(document.getText())[line] ?? '', line)
         ?? closerHover(word, document.getText(), line, document.uri, documentIndex)
         ?? directiveHover(word)
         ?? symbolHover(word, document.uri, line, documentIndex, caseSensitive, unit)

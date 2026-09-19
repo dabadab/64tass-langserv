@@ -1,7 +1,7 @@
 import { FoldingRange, FoldingRangeKind } from 'vscode-languageserver/node';
 import { CLOSING_DIRECTIVES } from './constants';
 import { blockDirectivesOn } from './blocks';
-import { findCommentBlockLines } from './utils';
+import { findCommentBlockLines, splitLines } from './utils';
 
 /**
  * Foldable regions of a document: each block-opening directive paired with the
@@ -11,7 +11,7 @@ import { findCommentBlockLines } from './utils';
  */
 export function computeFoldingRanges(text: string): FoldingRange[] {
     const ranges: FoldingRange[] = [];
-    const lines = text.split('\n');
+    const lines = splitLines(text);
 
     const stack: { directive: string; line: number }[] = [];
     // The assembler ignores a `.comment` block wholesale, so an opener written in

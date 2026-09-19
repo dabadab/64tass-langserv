@@ -23,7 +23,7 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN
 } from './constants';
-import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys, splitTopLevel } from './utils';
+import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys, splitTopLevel, splitLines } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { blockDirectivesOn } from './blocks';
 import { addressExpressionOf, findAddressingProblem, immediateBytesFor } from './operands';
@@ -309,7 +309,7 @@ function crossFileDuplicates(
             const text = getText?.(uri) ?? null;
             lines = text === null
                 ? new Set<number>()
-                : findDeadLines(text.split('\n'), uri, documentIndex, other.caseSensitive);
+                : findDeadLines(splitLines(text), uri, documentIndex, other.caseSensitive);
             deadElsewhere.set(uri, lines);
         }
         return lines;
@@ -525,7 +525,7 @@ export function validateDocument(
     const { getText, unit } = options;
     const diagnostics: Diagnostic[] = [];
     const text = document.getText();
-    const lines = text.split('\n');
+    const lines = splitLines(text);
     // The assembler ignores everything inside a `.comment` block, so nothing in
     // there is checked. The delimiting lines still are, so an unclosed one reports.
     const commentBlockLines = findCommentBlockLines(lines);

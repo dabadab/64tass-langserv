@@ -13,7 +13,7 @@
  */
 import { Diagnostic, DiagnosticSeverity, DiagnosticTag } from 'vscode-languageserver/node';
 import { DocumentIndex, LabelDefinition } from './types';
-import { parseLineStructure, stripStrings, findCommentBlockLines } from './utils';
+import { parseLineStructure, stripStrings, findCommentBlockLines, splitLines } from './utils';
 
 /** What 64tass calls each kind in its warning text. */
 function describeKind(label: LabelDefinition): string {
@@ -71,7 +71,7 @@ function referencedNames(
             definitions.add(`${label.range.start.line}:${label.range.start.character}`);
         }
         const names = new Set<string>();
-        const lines = text.split('\n');
+        const lines = splitLines(text);
         // A name written inside a `.comment` block is no more a use than one in a
         // trailing comment: the assembler never reads either.
         const commentBlockLines = findCommentBlockLines(lines);

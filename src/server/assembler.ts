@@ -15,6 +15,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { Diagnostic, DiagnosticSeverity, Range, Position } from 'vscode-languageserver/node';
+import { splitLines } from './utils';
 
 /** One line of 64tass's `file:line:col: severity: message` output. */
 export interface AssemblerMessage {
@@ -196,7 +197,7 @@ const ROOT_PRAGMA = /^\s*;\s*64tass-langserv\s*:\s*root\s+(\S.*?)\s*$/i;
 
 /** The `; 64tass-langserv: root <file>` pragma's argument, or null. */
 export function detectRootPragma(text: string): string | null {
-    for (const line of text.split('\n')) {
+    for (const line of splitLines(text)) {
         const match = line.match(ROOT_PRAGMA);
         if (match) return match[1];
     }

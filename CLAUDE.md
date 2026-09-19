@@ -119,6 +119,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   addressing-size and bank suffixes. These are not symbol references, so the
   undefined-symbol check skips them. Kept per-opcode rather than as a blanket list
   of short names, so `lda i` is still reported.
+- **Line splitting**: `splitLines` (`utils.ts`) is the one place document text
+  becomes lines, and it ends a line at `\r\n`, `\r` or `\n` as LSP does. Splitting
+  on `\n` alone left a `\r` on every line of a CRLF file, which any pattern
+  anchored with `$` then failed to match: `conditionalOn` classified `.fi\r` as an
+  ordinary line, so chains never closed and one real project reported 28
+  diagnostics it should not have - duplicate labels across `.if`/`.else`, and dead
+  branches checked as live code.
 - **`.comment` blocks**: `findCommentBlockLines` (`utils.ts`) is consulted by
   everything that reads lines as code - the parser, both conditional scanners,
   diagnostics, the formatter, folding, semantic tokens and the unused-symbol scan.
@@ -610,7 +617,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1749 tests); compiles first
+yarn test          # Run all tests (currently 1755 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

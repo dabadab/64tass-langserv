@@ -17,7 +17,8 @@ import {
     detectCaseSensitivityPragma,
     detectDefinePragmas,
     detectCpu,
-    tokenizeExpression
+    tokenizeExpression,
+    splitLines
 } from '../../src/server/utils';
 
 describe('parseLineStructure', () => {
@@ -768,5 +769,22 @@ describe('define pragma details', () => {
         const [found] = detectDefinePragmas('; 64tass-langserv: define define = 1');
         expect(found.name).toBe('define');
         expect(found.nameStart).toBe('; 64tass-langserv: define '.length);
+    });
+});
+
+describe('splitLines', () => {
+    // LSP counts a line as ending at \r\n, \r or \n. Splitting on \n alone left the
+    // \r on every line of a CRLF file, and a pattern anchored with `$` then matched
+    // nothing: a whole real project's `.if` chains classified as ordinary lines.
+    it('ends a line at any of the three', () => {
+        expect(splitLines('a\nb\r\nc\rd')).toEqual(['a', 'b', 'c', 'd']);
+    });
+
+    it('leaves no carriage return behind', () => {
+        expect(splitLines('        .fi\r\n        nop\r\n')).toEqual(['        .fi', '        nop', '']);
+    });
+
+    it('keeps the line count of a file that ends with a break', () => {
+        expect(splitLines('a\r\n')).toHaveLength(2);
     });
 });

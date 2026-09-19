@@ -1622,3 +1622,29 @@ describe('a line with trailing whitespace', () => {
         expect([found.range.start.character, found.range.end.character]).toEqual([12, 15]);
     });
 });
+
+describe('a document with CRLF line endings', () => {
+    // Every line of such a file ended in `\r`, which is not the end of a line to a
+    // pattern anchored with `$` - so `.fi\r` was no conditional at all, the chain
+    // never closed, and one real project reported 28 diagnostics it should not
+    // have: labels in the two halves of a chain as duplicates, and dead branches
+    // checked as live code.
+    const CHAIN = ['        *= $1000', '        .if 1', 'foo     nop', '        .else',
+        'foo     lda #1', '        jmp nowhere', '        .fi'];
+
+    it('does not read the two halves of a chain as duplicates', () => {
+        expect(getDiagnostics(CHAIN.join('\r\n')).filter(d => d.message.startsWith('Duplicate'))).toEqual([]);
+    });
+
+    it('still skips the branch that cannot be taken', () => {
+        const codes = getDiagnostics(CHAIN.join('\r\n')).map(d => d.code);
+        expect(codes).not.toContain('undefined-symbol');
+        expect(codes).toContain('inactive-code');
+    });
+
+    it('reports what it does find at the right line', () => {
+        const [found] = getDiagnostics('        *= $1000\r\n        jmp nowhere\r\n')
+            .filter(d => d.code === 'undefined-symbol');
+        expect([found.range.start.line, found.range.start.character]).toEqual([1, 12]);
+    });
+});

@@ -10,7 +10,7 @@
  * most: mnemonic at 8, operand at 12, trailing comment at 40.
  */
 import { TextEdit, Range, Position } from 'vscode-languageserver/node';
-import { parseLineStructure, findCommentBlockLines } from './utils';
+import { parseLineStructure, findCommentBlockLines, splitLines } from './utils';
 import { OPCODES, ALL_DIRECTIVE_SET } from './constants';
 
 export interface FormatColumns {
@@ -123,7 +123,7 @@ export function formatLine(line: string, columns: FormatColumns): string | null 
 
 /** Edits that align `text`, restricted to `range` when one is given. */
 export function formatDocument(text: string, columns: FormatColumns, range?: Range): TextEdit[] {
-    const lines = text.split('\n');
+    const lines = splitLines(text);
     // The assembler ignores these entirely, and so does this.
     const commentBlockLines = findCommentBlockLines(lines);
 

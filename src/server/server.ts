@@ -79,6 +79,7 @@ import { findWorkspaceSymbols } from './workspaceSymbols';
 import { getSignatureHelp } from './signatureHelp';
 import { buildSemanticTokens, encodeModifiers, TOKEN_TYPES, TOKEN_MODIFIERS } from './semanticTokens';
 import { Debouncer } from './debounce';
+import { splitLines } from './utils';
 
 // Get the current text of a document by URI: prefer the open in-memory buffer,
 // fall back to reading the file from disk (for indexed-but-unopened .include files).
@@ -543,7 +544,7 @@ connection.onDefinition((params: DefinitionParams): Location | null => {
     if (!document) return null;
 
     // Cursor on a quoted file path (.include / .binclude / .binary) opens that file
-    const line = document.getText().split('\n')[params.position.line];
+    const line = splitLines(document.getText())[params.position.line];
     if (line) {
         try {
             const reference = findFilePathAt(line, params.position.character, fileURLToPath(document.uri), searchPaths());
@@ -733,7 +734,7 @@ connection.onPrepareRename((params: PrepareRenameParams): Range | ResponseError<
 
     // Range of the identifier under the cursor, so the editor pre-fills it
     const line = params.position.line;
-    const text = target.document.getText().split('\n')[line] ?? '';
+    const text = splitLines(target.document.getText())[line] ?? '';
     const start = text.indexOf(target.word, Math.max(0, params.position.character - target.word.length));
     const from = start >= 0 ? start : params.position.character;
     return Range.create(Position.create(line, from), Position.create(line, from + target.word.length));

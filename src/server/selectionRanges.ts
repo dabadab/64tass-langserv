@@ -1,6 +1,6 @@
 import { SelectionRange, Range, Position } from 'vscode-languageserver/node';
 import { computeFoldingRanges } from './folding';
-import { parseLineStructure } from './utils';
+import { parseLineStructure, splitLines } from './utils';
 
 /**
  * Expand-selection steps for a position: word, then operand, then the code part
@@ -11,7 +11,7 @@ import { parseLineStructure } from './utils';
  * `.proc`/`.block`/`.if` nesting the editor already folds on.
  */
 export function computeSelectionRanges(text: string, positions: Position[]): SelectionRange[] {
-    const lines = text.split('\n');
+    const lines = splitLines(text);
     // Innermost first, so the walk outwards is just an ordered list.
     const blocks = computeFoldingRanges(text)
         .filter(f => f.endLine > f.startLine)

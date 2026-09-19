@@ -324,7 +324,7 @@ const CASE_SENSITIVITY_PRAGMA = /^\s*;\s*64tass-langserv\s*:\s*(case-sensitive|c
  * match found (top to bottom), or null if the pragma isn't present.
  */
 export function detectCaseSensitivityPragma(text: string): boolean | null {
-    for (const line of text.split('\n')) {
+    for (const line of splitLines(text)) {
         const match = line.match(CASE_SENSITIVITY_PRAGMA);
         if (match) {
             return match[1].toLowerCase() === 'case-sensitive';
@@ -359,7 +359,7 @@ export interface PragmaDefine {
  */
 export function detectDefinePragmas(text: string): PragmaDefine[] {
     const defines: PragmaDefine[] = [];
-    const lines = text.split('\n');
+    const lines = splitLines(text);
     for (let i = 0; i < lines.length; i++) {
         const match = lines[i].match(DEFINE_PRAGMA);
         if (match) {
@@ -395,7 +395,7 @@ const CPU_DIRECTIVE = /^\s*\.cpu\s+(["'])([^"']+)\1/i;
  * the index stores one target per document, so a later switch is not modelled.
  */
 export function detectCpu(text: string): string | null {
-    for (const line of text.split('\n')) {
+    for (const line of splitLines(text)) {
         const pragma = line.match(CPU_PRAGMA);
         if (pragma) return pragma[1].toLowerCase();
         const directive = line.match(CPU_DIRECTIVE);
@@ -545,4 +545,19 @@ export function stripDictKeys(code: string): string {
     }
     return result;
 }
+
+/**
+ * Split document text into lines the way LSP counts them: `\r\n`, `\r` and `\n`
+ * each end one.
+ *
+ * Splitting on `\n` alone left a `\r` at the end of every line of a CRLF file,
+ * which any pattern anchored with `$` then failed to match - `.fi\r` classified as
+ * no conditional at all, so the two halves of an `.if`/`.else` chain reported each
+ * other as duplicate labels and dead branches were checked as live code (28 such
+ * reports in one real project).
+ */
+export function splitLines(text: string): string[] {
+    return text.split(/\r\n|\r|\n/);
+}
+
 

@@ -2,6 +2,7 @@ import { DocumentLink, Range, Position } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { pathToFileURL, fileURLToPath } from 'url';
 import { findFilePathAt } from './workspace';
+import { splitLines } from './utils';
 
 /**
  * Clickable links for the quoted file paths in a document - `.include`,
@@ -23,7 +24,7 @@ export function buildDocumentLinks(
     }
 
     const links: DocumentLink[] = [];
-    const lines = document.getText().split('\n');
+    const lines = splitLines(document.getText());
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
         if (!line.includes('"') && !line.includes("'")) continue;
