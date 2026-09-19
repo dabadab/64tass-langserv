@@ -1447,3 +1447,37 @@ describe('the body scope of .bfor / .brept / .bwhile', () => {
         expect(scopeOf(source, 'inner')).toBe('bfor@0.bfor@1');
     });
 });
+
+describe('an unnamed .struct or .union', () => {
+    // Verified: its members land in the ENCLOSING scope - `lda field` after one
+    // assembles, where the same line after an unnamed .block or .namespace is
+    // "not defined symbol". The shape comes from a zeropage layout written as a
+    // .union of two .structs, whose every field read as undefined.
+    const scopeOf = (source: string, name: string) =>
+        parse(source).labels.find(l => l.name === name)?.scopePath;
+
+    it('puts its members in the scope around it', () => {
+        expect(scopeOf('        .struct\nfield   .byte ?\n        .ends', 'field')).toBeNull();
+        expect(scopeOf('        .union\nfield   .word ?\n        .endu', 'field')).toBeNull();
+    });
+
+    it('does so through a .union of unnamed .structs', () => {
+        const source = ['        .union', '        .struct', 'aa      .byte ?', '        .ends',
+            '        .struct', 'bb      .word ?', '        .ends', '        .endu'].join('\n');
+        expect([scopeOf(source, 'aa'), scopeOf(source, 'bb')]).toEqual([null, null]);
+    });
+
+    it('still scopes a NAMED one under its name', () => {
+        expect(scopeOf('point   .struct\nposx    .byte ?\n        .ends', 'posx')).toBe('point');
+    });
+
+    it('leaves the other unnamed scopes hiding their labels', () => {
+        expect(scopeOf('        .block\nhid     .byte 0\n        .bend', 'hid')).toBe('block@0');
+        expect(scopeOf('        .namespace\nhid     .byte 0\n        .endn', 'hid')).toBe('namespace@0');
+    });
+
+    it('closes on its own closer, leaving what follows outside', () => {
+        const source = '        .struct\nfield   .byte ?\n        .ends\nafter   .byte 0';
+        expect(scopeOf(source, 'after')).toBeNull();
+    });
+});

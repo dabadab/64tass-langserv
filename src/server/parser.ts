@@ -470,10 +470,22 @@ export function parseDocument(
             if (anonPattern.test(lineLower)) {
                 // An unnamed scope still IS a scope: `.block` with no label hides
                 // its labels from the outside (verified - `lda hidden` after one
-                // fails). A synthetic name keeps them indexed but unreachable,
-                // exactly as the unlabelled `.binclude` branch does. '@' cannot
-                // occur in a user symbol, so it can never collide with one.
-                scopeStack.push({ name: `${open.slice(1)}@${lineNum}`, directive: open });
+                // fails), and so does an unnamed `.namespace`. A synthetic name
+                // keeps them indexed but unreachable, exactly as the unlabelled
+                // `.binclude` branch does. '@' cannot occur in a user symbol, so it
+                // can never collide with one.
+                //
+                // An unnamed `.struct` or `.union` is the exception: its members
+                // land in the ENCLOSING scope (verified - the zeropage layout of a
+                // real project is a `.union` of two unnamed `.struct`s, and every
+                // field of both is reached unqualified). A null name keeps the
+                // frame, so the matching `.ends`/`.endu` still closes it, while
+                // contributing no segment to the scope path.
+                const transparent = open === '.struct' || open === '.union';
+                scopeStack.push({
+                    name: transparent ? null : `${open.slice(1)}@${lineNum}`,
+                    directive: open,
+                });
                 recordScope(lineNum);
             }
         }
