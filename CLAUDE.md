@@ -453,6 +453,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   underscore gained or lost (`_name` is local to the nearest code label), and a
   name that already resolves where the definition sits. Directive words are
   allowed - `byte = 1` assembles, a directive being one only with its dot.
+- **No line continuation**: nothing joins two lines in this language, a trailing
+  backslash included - a tuple, list or dict split across lines is "an expression
+  is expected" and then "general syntax" (verified). `findUnclosedBracket` in
+  `diagnostics.ts` reports the outermost bracket still open where a line ends,
+  as `unclosed-bracket`. Strings are blanked first and dead branches skipped -
+  the assembler does not parse those at all. One report per line: the opener is
+  where the line went wrong, and the lines after it are consequences.
 - **Capitals under `-C`**: with case sensitivity on the assembler matches
   instruction and directive names EXACTLY, and it has no capitalised names:
   `LDA #1` is "wrong type", `start RTS` and `JMP lbl` are "general syntax",
@@ -634,7 +641,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1768 tests); compiles first
+yarn test          # Run all tests (currently 1772 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

@@ -1695,3 +1695,33 @@ describe('a built-in written with capitals while case sensitivity is on', () => 
             .filter(d => d.severity === DiagnosticSeverity.Error)).toEqual([]);
     });
 });
+
+describe('a bracket left open at the end of a line', () => {
+    // 64tass continues a line in no way at all, a trailing backslash included: a
+    // tuple split over two lines is "an expression is expected" and then "general
+    // syntax", and `lda (1` is "')' expected" (all verified). The shape is a real
+    // project's 36-entry tuple written across seven lines.
+    const unclosed = (source: string) => getDiagnostics(source).filter(d => d.code === 'unclosed-bracket');
+
+    it('is reported where it opened', () => {
+        const [found] = unclosed('        *= $1000\nvals    = (aa,bb,\n        cc) - 1');
+        expect(found.severity).toBe(DiagnosticSeverity.Error);
+        expect(found.range.start).toEqual({ line: 1, character: 10 });
+    });
+
+    it('is reported in an operand too', () => {
+        expect(unclosed('        *= $1000\n        lda (1')).toHaveLength(1);
+        expect(unclosed('        *= $1000\nlist    = [1,')).toHaveLength(1);
+        expect(unclosed('        *= $1000\nd       = {.k: 1,')).toHaveLength(1);
+    });
+
+    it('says nothing about a line whose brackets close', () => {
+        expect(unclosed('        *= $1000\n        lda ($10),y\n        .byte <(start+1)\nstart   nop')).toEqual([]);
+        expect(unclosed("        *= $1000\nd       = {.k: 1}\n        .text \"((\"\n        nop ; (")).toEqual([]);
+    });
+
+    it('says nothing inside a branch that is not assembled', () => {
+        // Verified: the assembler does not parse such a branch at all.
+        expect(unclosed('        *= $1000\n        .if 0\n        lda (1\n        .endif')).toEqual([]);
+    });
+});

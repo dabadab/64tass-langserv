@@ -232,6 +232,27 @@ function findUnsupportedMnemonic(
 }
 
 /**
+ * A bracket opened on a line and still open at the end of it.
+ *
+ * 64tass has no line continuation of any kind, not even a trailing backslash: a
+ * tuple, list or dict written across two lines is "an expression is expected"
+ * followed by "general syntax", and `lda (1` is "')' expected" (all verified).
+ * So an opener still standing where the line ends cannot be anything else.
+ *
+ * The OUTERMOST unclosed one is reported - that is where the line went wrong,
+ * and one report per line is enough to say so.
+ */
+function findUnclosedBracket(code: string): { bracket: string; column: number } | null {
+    const open: { bracket: string; column: number }[] = [];
+    for (let i = 0; i < code.length; i++) {
+        const char = code[i];
+        if (char === '(' || char === '[' || char === '{') open.push({ bracket: char, column: i });
+        else if (char === ')' || char === ']' || char === '}') open.pop();
+    }
+    return open[0] ?? null;
+}
+
+/**
  * A built-in name in the statement slot written in anything but lowercase, while
  * case sensitivity is on.
  *
@@ -668,6 +689,25 @@ export function validateDocument(
                     message: `'${directive}' requires a label`,
                     source: '64tass',
                     code: 'label-required'
+                });
+            }
+        }
+
+        // A bracket left open at the end of the line. Nothing continues a line in
+        // this language, so the expression cannot be finished on the next one.
+        // Dead branches are not parsed at all (verified), hence the guard.
+        if (!deadLines.has(lineNum)) {
+            const unclosed = findUnclosedBracket(stripStrings(code));
+            if (unclosed) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Error,
+                    range: Range.create(
+                        Position.create(lineNum, unclosed.column),
+                        Position.create(lineNum, unclosed.column + 1)
+                    ),
+                    message: `'${unclosed.bracket}' is never closed - 64tass has no line continuation`,
+                    source: '64tass',
+                    code: 'unclosed-bracket'
                 });
             }
         }
