@@ -156,8 +156,33 @@ export function settleBareWords(
         }
         if (callable.size === 0) continue;
 
-        const kept = index.labels.filter(label => !(label.fromBareWord && callable.has(label.name)));
-        if (kept.length === index.labels.length) continue;
+        const dropped = new Set(index.labels
+            .filter(label => label.fromBareWord && callable.has(label.name))
+            .map(label => label.name));
+        if (dropped.size === 0) continue;
+
+        // The parser took each of these words for a code label, and so for the
+        // anchor of the `_local` symbols after it. A call anchors nothing (verified:
+        // a `_x` defined after `mac` or `fn 1` is still reached from above the
+        // call), so the local scope in force before the call carries on.
+        const scopeAtLine = new Map(index.scopeAtLine);
+        let carried: string | null = null;
+        for (const line of [...scopeAtLine.keys()].sort((a, b) => a - b)) {
+            const scope = scopeAtLine.get(line)!;
+            if (scope.localScope !== null && dropped.has(scope.localScope)) {
+                scopeAtLine.set(line, { ...scope, localScope: carried });
+            } else {
+                carried = scope.localScope;
+            }
+        }
+
+        const kept: LabelDefinition[] = [];
+        for (const label of index.labels) {
+            if (label.fromBareWord && dropped.has(label.name)) continue;
+            kept.push(label.localScope !== null && dropped.has(label.localScope)
+                ? { ...label, localScope: scopeAtLine.get(label.range.start.line)?.localScope ?? null }
+                : label);
+        }
 
         const byName = new Map<string, LabelDefinition[]>();
         for (const label of kept) {
@@ -165,7 +190,7 @@ export function settleBareWords(
             if (list) list.push(label);
             else byName.set(label.name, [label]);
         }
-        documentIndex.set(uri, { ...index, labels: kept, labelsByName: byName });
+        documentIndex.set(uri, { ...index, labels: kept, labelsByName: byName, scopeAtLine });
     }
 }
 

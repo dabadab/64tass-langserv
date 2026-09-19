@@ -5,6 +5,7 @@ import { pathToFileURL } from 'url';
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseDocument } from '../../src/server/parser';
+import { settleBareWords } from '../../src/server/indexing';
 import { validateDocument } from '../../src/server/diagnostics';
 import { detectCaseSensitivityPragma } from '../../src/server/utils';
 import { DocumentIndex } from '../../src/server/types';
@@ -43,6 +44,9 @@ function diagnose(file: string) {
     const doc = TextDocument.create(uri, '64tass', 1, fs.readFileSync(full, 'utf-8'));
     const index = new Map<string, DocumentIndex>();
     indexTree(doc, index, new Set(), true);
+    // As indexDocument does once the tree is read: a bare word naming a macro is
+    // a call, not a label, and anchors no `_local`s.
+    settleBareWords(new Set(index.keys()), index);
     return validateDocument(doc, index, index.get(uri)!.caseSensitive);
 }
 

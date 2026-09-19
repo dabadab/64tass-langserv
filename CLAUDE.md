@@ -163,7 +163,10 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   a phantom label: it polluted the outline and Ctrl+T, answered go-to-definition
   with itself, and collided with the real macro - 44 false "Duplicate label"
   errors in one real project, all of them calls. A colon (`name:`) still defines,
-  whatever exists.
+  whatever exists. Dropping one also undoes its effect on
+  the `_local` anchor: the parser moved `currentLocalScope` to the word, and a
+  call anchors nothing (verified), so `settleBareWords` carries the previous
+  local scope over the lines and locals that inherited the call's name.
 - **Bare calls with a label**: `lbl mac 5` assembles - whole projects call macros
   and functions without the `#` or `.` - and matched no branch at all, so the
   label was lost and every reference to it read as undefined. The branch that
@@ -607,7 +610,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1747 tests); compiles first
+yarn test          # Run all tests (currently 1749 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

@@ -5,6 +5,7 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { indexDocument, clearIncludeRefs, settleBareWords, IndexContext } from '../../src/server/indexing';
+import { findSymbolInfo } from '../../src/server/symbols';
 import { IncludeGraph } from '../../src/server/includes';
 import { DocumentIndex } from '../../src/server/types';
 import { DEFAULT_CPU } from '../../src/server/constants';
@@ -443,6 +444,46 @@ describe('a bare word that names a macro', () => {
             const kinds = w.context.documentIndex.get(w.uriOf('main.asm'))!
                 .labels.filter(l => l.name === 'inc_d020').map(l => l.kind);
             expect(kinds).toEqual(['macro', 'code']);
+        } finally { w.cleanup(); }
+    });
+});
+
+describe('local symbols after a bare call', () => {
+    // Verified: `_after_call` and `_after_tick` below are both reached from above
+    // the calls. The argument is a NAME on purpose: `bump $d020` never read as a
+    // label, `bump border` did. A call is not a label, so it does not anchor the `_local`s after
+    // it - but the parser took each call for one until the macro turned up.
+    const SOURCE = [
+        'bump    .function addr', '        inc addr', '        .endf',
+        'tick    .macro', '        nop', '        .endm',
+        'owner',
+        '        beq _after_call',
+        '        bump border',
+        '_after_call',
+        '        tick',
+        '_after_tick',
+        '        rts',
+    ].join('\n');
+
+    it('stay under the label before the call', () => {
+        const w = makeContext({ 'main.asm': SOURCE });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            const index = w.context.documentIndex.get(w.uriOf('main.asm'))!;
+            expect(index.labels.filter(l => l.isLocal).map(l => `${l.name}:${l.localScope}`))
+                .toEqual(['_after_call:owner', '_after_tick:owner']);
+        } finally { w.cleanup(); }
+    });
+
+    it('resolve from above the call', () => {
+        const w = makeContext({ 'main.asm': SOURCE });
+        try {
+            indexDocument(w.docFor('main.asm'), w.context);
+            for (const name of ['_after_call', '_after_tick']) {
+                expect(findSymbolInfo(name, w.uriOf('main.asm'), 7, w.context.documentIndex)?.name).toBe(name);
+            }
+            // ...and from below it, where the lines' own scope was just as wrong.
+            expect(findSymbolInfo('_after_call', w.uriOf('main.asm'), 12, w.context.documentIndex)).not.toBeNull();
         } finally { w.cleanup(); }
     });
 });
