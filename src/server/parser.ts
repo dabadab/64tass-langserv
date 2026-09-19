@@ -584,6 +584,7 @@ export function parseDocument(
                     const isLocal = name.startsWith('_');
                     addLabel(name, 'var', lineNum, startChar, {
                         localScope: isLocal ? currentLocalScope : null, isLocal,
+                        loopVariable: true,
                     });
                 }
                 // An anonymous label on this line still has to be registered, so

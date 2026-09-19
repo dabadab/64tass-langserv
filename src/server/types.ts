@@ -33,6 +33,11 @@ export interface LabelDefinition {
     // expands it (verified: the bytes are the macro's). Which macros exist is not
     // known until the include tree is read, so indexing.ts settles it afterwards.
     fromBareWord?: boolean;
+    // Set for the variable of a `.for`/`.bfor`. It holds a different value on
+    // every iteration, so nothing may be decided from whatever value it carries -
+    // both branches of an `.if` on it are assembled when the loop runs more than
+    // once (verified: the bytes of both appear in the output).
+    loopVariable?: boolean;
     // For anonymous labels: count of symbols in definition (+++  = 3)
     anonymousCount?: number;
     value?: string;

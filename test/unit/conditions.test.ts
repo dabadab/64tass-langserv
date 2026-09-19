@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { evaluateCondition, computeBranchPaths, areMutuallyExclusive, conditionalOn } from '../../src/server/conditions';
-import { buildIndex } from '../helpers/doc';
+import { buildIndex, emptyIndex } from '../helpers/doc';
+import { LabelDefinition } from '../../src/server/types';
 
 /** Evaluate `cond` against a document containing `defs` above it. */
 function evalWith(cond: string, defs = '') {
@@ -253,5 +254,40 @@ describe('integer division', () => {
         expect(evalWith('(-7 / 2) == -4')).toBe(true);
         expect(evalWith('(7 / -2) == -4')).toBe(true);
         expect(evalWith('(7 / 2) == 3')).toBe(true);
+    });
+});
+
+describe('a .for loop variable', () => {
+    // Verified: with `.for i = 0, i < 3, i = i + 1`, an `.if i == 0` inside the
+    // loop assembles its own branch once and its `.else` twice - the bytes of
+    // both are in the output, so neither may be marked dead.
+    it('decides nothing, even carrying a value', () => {
+        // The index records no value for a loop variable today, so the value is
+        // put there by hand: the rule has to hold the day one does - hover
+        // showing an initialiser, say.
+        const loopVar: LabelDefinition = {
+            name: 'i', originalName: 'i', uri: 'file:///loop.asm',
+            range: { start: { line: 0, character: 13 }, end: { line: 0, character: 14 } },
+            scopePath: null, localScope: null, isLocal: false, kind: 'var',
+            value: '0', loopVariable: true,
+        };
+        const index = emptyIndex({
+            labels: [loopVar],
+            labelsByName: new Map([['i', [loopVar]]]),
+            scopeAtLine: new Map([[2, { scopePath: null, localScope: null, withScopes: [] }]]),
+        });
+        const documentIndex = new Map([['file:///loop.asm', index]]);
+        expect(evaluateCondition('i == 0', 'file:///loop.asm', 2, documentIndex)).toBeNull();
+    });
+
+    it('is marked as one by the parser', () => {
+        const { documentIndex, docs } = buildIndex({
+            source: '        .for i = 0, i < 3, i = i + 1\n        .next', uri: 'file:///f.asm' });
+        expect(documentIndex.get(docs[0].uri)!.labels.map(l => `${l.name}:${l.loopVariable === true}`))
+            .toEqual(['i:true']);
+    });
+
+    it('leaves an ordinary constant decidable', () => {
+        expect(evalWith('c == 1', 'c\t= 1')).toBe(true);
     });
 });

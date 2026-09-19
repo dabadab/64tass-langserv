@@ -211,6 +211,13 @@ class Parser {
         // the else branch, and deciding it from the first definition marked the
         // live branch dead and reported a symbol in the dead one).
         if (symbol.kind === 'var' && countDefinitions(symbol, uri, documentIndex, unit) > 1) return null;
+        // A loop variable holds a different value on every pass, so an `.if` on it
+        // decides nothing: with `.for i = 0, i < 3, ...`, `.if i == 0` assembles
+        // its own branch once and the `.else` twice - the bytes of both are in the
+        // output (verified). The index records no value for one today, which makes
+        // this a guard rather than a repair: the day a loop variable carries its
+        // initialiser - for hover, say - the branches must stay undecided.
+        if (symbol.loopVariable) return null;
 
         const direct = parseNumericValue(symbol.value);
         if (direct !== null) return direct;

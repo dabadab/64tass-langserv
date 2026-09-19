@@ -255,7 +255,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   conditions statically where possible; `findDeadLines` in `diagnostics.ts` uses it to
   skip undefined-symbol reporting inside branches that provably cannot be taken.
   Deliberately conservative - anything undecidable returns `null` and leaves every
-  branch reported, so the evaluator can suppress but never invent. A symbol
+  branch reported, so the evaluator can suppress but never invent. A `.for`/`.bfor`
+  loop variable (`LabelDefinition.loopVariable`) is undecidable by rule - it holds
+  a different value each pass, and an `.if` on it has both branches assembled
+  (verified from the bytes). No value is recorded for one today, so that check
+  guards a future one rather than repairing anything. A symbol
   assigned more than once (`countDefinitions` in `symbols.ts`) is undecidable too:
   which `.var` assignment is in force at a line depends on what the assembler
   executed to reach it, and taking the first one marked the LIVE branch dead. Both scanners
@@ -641,7 +645,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1772 tests); compiles first
+yarn test          # Run all tests (currently 1777 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

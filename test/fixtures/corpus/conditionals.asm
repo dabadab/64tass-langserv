@@ -19,4 +19,14 @@ debug = 0
         jsr link_load_next_raw
         .endif
 
+; A loop variable decides nothing: both branches below are assembled, the first
+; on the first pass and the second on the other two.
+        .for i = 0, i < 3, i = i + 1
+        .if i == 0
+        .byte $01
+        .else
+        .byte $02
+        .endif
+        .next
+
         rts

@@ -1725,3 +1725,20 @@ describe('a bracket left open at the end of a line', () => {
         expect(unclosed('        *= $1000\n        .if 0\n        lda (1\n        .endif')).toEqual([]);
     });
 });
+
+describe('an .if on a .for loop variable', () => {
+    // Verified from the bytes: `.for i = 0, i < 3, ...` around `.if i == 0` puts
+    // $01 once and $02 twice in the output, so both branches are assembled and
+    // neither may be greyed out or skipped.
+    const LOOP = ['        *= $1000', '        .for i = 0, i < 3, i = i + 1', '        .if i == 0',
+        '        .byte undefined_one', '        .else', '        .byte undefined_two',
+        '        .endif', '        .next'].join('\n');
+
+    it('greys out neither branch', () => {
+        expect(getDiagnostics(LOOP).filter(d => d.code === 'inactive-code')).toEqual([]);
+    });
+
+    it('checks the symbols of both', () => {
+        expect(getDiagnostics(LOOP).filter(d => d.code === 'undefined-symbol')).toHaveLength(2);
+    });
+});
