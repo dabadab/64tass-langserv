@@ -4,6 +4,8 @@ All notable changes to the 64tass Language Support extension will be documented 
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-19
+
 ### Added
 - **Benchmark Harness** - `yarn bench` measures the built server over LSP, the way the
   editor uses it: startup, workspace scan, open and edit to diagnostics, every request
@@ -11,6 +13,39 @@ All notable changes to the 64tass Language Support extension will be documented 
   series can be reproduced on new hardware, `yarn bench:report` tabulates them and
   `yarn bench:compare --baseline vX.Y.Z` fails on a regression before a tag. Records
   live in `bench/results.jsonl`, per machine and workload, written only on `--save`
+
+### Improved
+- **Undefined `#mac` Calls** - are reported too; only the `.mac` spelling was checked
+- **Renames That Break The Source Are Refused** - with a reason rather than applied: an
+  instruction mnemonic (a label called `lda` is read as the instruction), a leading
+  underscore gained or lost (`_name` is local to the nearest code label), and a name that
+  already resolves where the definition sits
+
+### Fixed
+- **Labels In `.bfor`, `.brept` And `.bwhile`** - the body is a scope of its own, so a
+  label inside one no longer collides with a same-named label outside it
+- **Labels In Different `.case` Branches** - were reported as duplicates, though a
+  `.switch` assembles at most one of them
+- **`.if` On A Reassigned Variable** - `v .var 1` then `v .var 2` decided the branch from
+  the first value, greying out the branch that is actually assembled and reporting symbols
+  in the one that is not
+- **Integer Division** - `-7 / 2` is -4: 64tass floors where the evaluator truncated
+- **Checks Inside A Dead Branch** - an unsupported mnemonic, an oversized immediate and a
+  shape with no addressing mode were reported in code that is never assembled
+- **`lbl mac 5`** - a label in front of an unprefixed macro call was not indexed at all,
+  so every reference to it read as undefined
+- **`.for i := 0, ...`** - the `:=` spelling defined no loop variable, leaving every use
+  of `i` undefined, the loop header included
+- **`v += 1`** - and `v*=2`, `v<<=1`, `v..=[1]`: the operator was read as part of the name
+  and reported as a character that cannot be in one
+- **Lines Ending In Spaces** - `jsr foo  ` was not checked at all, its operand having been
+  read as the mnemonic
+- **Index Registers Inside A String** - `lda #"a,` offered `x` and `y` after a comma that
+  is text
+- **Unused `.function`** - was called a label; `-Wunused` calls it a macro
+- **Include Edges And Directory Order** - a file included by several roots was attributed
+  to whichever the scan reached first, so which program an include belonged to - and the
+  symbols it could see - depended on the order directories were walked
 
 ### Removed
 - **Per-Test-Run Timing Log** - `test/performance-results.jsonl` was appended to on every
