@@ -120,3 +120,19 @@ describe('buildCodeActions', () => {
         expect(actions).toEqual([]);
     });
 });
+
+describe('miscased built-in fixes', () => {
+    it('offers the lowercase spelling', () => {
+        const { actions } = fixesFor('        *= $1000\n        LDA #1', true);
+        expect(actions.map(a => a.title)).toEqual(["Change to 'lda'"]);
+    });
+
+    it('replaces just that word', () => {
+        const { actions, uri } = fixesFor('        *= $1000\n        .BYTE 1', true);
+        const edits = actions[0].edit?.changes?.[uri] as TextEdit[];
+        expect(edits).toEqual([{
+            range: { start: { line: 1, character: 8 }, end: { line: 1, character: 13 } },
+            newText: '.byte',
+        }]);
+    });
+});

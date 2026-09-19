@@ -31,12 +31,31 @@ export function buildCodeActions(
     for (const diagnostic of diagnostics) {
         if (diagnostic.code === 'undefined-symbol' || diagnostic.code === 'undefined-macro') {
             actions.push(...spellingFixes(document, diagnostic, documentIndex, caseSensitive, lines, visibleUris));
+        } else if (diagnostic.code === 'miscased-builtin') {
+            const fix = lowercaseFix(document, diagnostic, lines);
+            if (fix) actions.push(fix);
         } else if (diagnostic.code === 'unclosed-block') {
             const fix = closeBlockFix(document, diagnostic, lines);
             if (fix) actions.push(fix);
         }
     }
     return actions;
+}
+
+/**
+ * Write a built-in name the way the assembler spells it. With case sensitivity
+ * on that is always lowercase, so the repair needs nothing from the index.
+ */
+function lowercaseFix(document: TextDocument, diagnostic: Diagnostic, lines: string[]): CodeAction | null {
+    const line = lines[diagnostic.range.start.line] ?? '';
+    const written = line.slice(diagnostic.range.start.character, diagnostic.range.end.character);
+    if (!written) return null;
+    return {
+        title: `Change to '${written.toLowerCase()}'`,
+        kind: CodeActionKind.QuickFix,
+        diagnostics: [diagnostic],
+        edit: { changes: { [document.uri]: [TextEdit.replace(diagnostic.range, written.toLowerCase())] } },
+    };
 }
 
 function spellingFixes(

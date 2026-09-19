@@ -5,11 +5,12 @@ import { parseDocument } from '../../src/server/parser';
 import { DocumentIndex } from '../../src/server/types';
 import { createDoc } from '../helpers/doc';
 
-function getDiagnostics(source: string) {
+function getDiagnostics(source: string, options: { caseSensitive?: boolean } = {}) {
+    const caseSensitive = options.caseSensitive ?? false;
     const doc = createDoc(source);
-    const index = parseDocument(doc);
+    const index = parseDocument(doc, { caseSensitive });
     const documentIndex = new Map<string, DocumentIndex>([[doc.uri, index]]);
-    return validateDocument(doc, documentIndex);
+    return validateDocument(doc, documentIndex, caseSensitive);
 }
 
 function errors(source: string) {
@@ -1646,5 +1647,51 @@ describe('a document with CRLF line endings', () => {
         const [found] = getDiagnostics('        *= $1000\r\n        jmp nowhere\r\n')
             .filter(d => d.code === 'undefined-symbol');
         expect([found.range.start.line, found.range.start.character]).toEqual([1, 12]);
+    });
+});
+
+describe('a built-in written with capitals while case sensitivity is on', () => {
+    // `-C` makes 64tass match instruction and directive names exactly, and it has
+    // no capitalised names at all: `LDA #1` is "wrong type", `JMP lbl` and
+    // `start RTS` are "general syntax", `.BYTE` is "not defined symbol 'BYTE'".
+    // A lone `RTS` is none of those - it defines a symbol called RTS and
+    // assembles, as do `LDA = 5`, `LDA:` and `LDA .byte 1` (all verified).
+    const miscased = (source: string) =>
+        getDiagnostics(source, { caseSensitive: true }).filter(d => d.code === 'miscased-builtin');
+
+    it('is reported in the instruction slot', () => {
+        expect(miscased('        *= $1000\n        LDA #1')).toHaveLength(1);
+        expect(miscased('        *= $1000\nlbl     nop\n        JMP lbl')).toHaveLength(1);
+        expect(miscased('        *= $1000\nstart   RTS')).toHaveLength(1);
+    });
+
+    it('is reported for a directive, even alone', () => {
+        expect(miscased('        *= $1000\n        .BYTE 1')).toHaveLength(1);
+        expect(miscased('        *= $1000\n        .Byte')).toHaveLength(1);
+    });
+
+    it('points at the word, so the fix is to lowercase it', () => {
+        const [found] = miscased('        *= $1000\n        LDA #1');
+        expect([found.range.start.character, found.range.end.character]).toEqual([8, 11]);
+        expect(found.message).toContain("'lda'");
+    });
+
+    it('is not reported where the name is a symbol after all', () => {
+        expect(miscased('        *= $1000\n        RTS')).toEqual([]);
+        expect(miscased('        *= $1000\nLDA     = 5\n        lda #LDA')).toEqual([]);
+        expect(miscased('        *= $1000\nLDA:    nop')).toEqual([]);
+        expect(miscased('        *= $1000\nLDA     .byte 1')).toEqual([]);
+    });
+
+    it('is not reported with case sensitivity off', () => {
+        expect(getDiagnostics('        *= $1000\n        LDA #1').filter(d => d.code === 'miscased-builtin'))
+            .toEqual([]);
+    });
+
+    it('leaves the rest of such a line alone', () => {
+        // Reading LDA as the instruction made `.byte 1` its operand, reported as
+        // two values in a row - on a line the assembler takes.
+        expect(getDiagnostics('        *= $1000\nLDA     .byte 1', { caseSensitive: true })
+            .filter(d => d.severity === DiagnosticSeverity.Error)).toEqual([]);
     });
 });

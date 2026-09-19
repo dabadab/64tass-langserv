@@ -453,6 +453,17 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   underscore gained or lost (`_name` is local to the nearest code label), and a
   name that already resolves where the definition sits. Directive words are
   allowed - `byte = 1` assembles, a directive being one only with its dot.
+- **Capitals under `-C`**: with case sensitivity on the assembler matches
+  instruction and directive names EXACTLY, and it has no capitalised names:
+  `LDA #1` is "wrong type", `start RTS` and `JMP lbl` are "general syntax",
+  `.BYTE` is "not defined symbol 'BYTE'" (verified). `findMiscasedBuiltin` in
+  `diagnostics.ts` reports those as `miscased-builtin`, with a quick fix that
+  lowercases the word. The statement slot only, and only where the word cannot
+  be a label instead: a lone `RTS`, `LDA = 5`, `LDA:` and `LDA .byte 1` all
+  assemble, the last being why the opcode branch of the symbol scan now requires
+  the lowercase spelling too. The PARSER is still case-blind about built-ins, so
+  such a line is outlined and highlighted as an instruction; the diagnostic is
+  what says otherwise.
 - **Diagnostic codes**: diagnostics that a quick fix can act on carry a `code`
   (`undefined-symbol`, `undefined-macro`, `unclosed-block`, plus
   `invalid-symbol-character`, `expression-expected` and `label-required`); `codeActions.ts`
@@ -623,7 +634,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1760 tests); compiles first
+yarn test          # Run all tests (currently 1768 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

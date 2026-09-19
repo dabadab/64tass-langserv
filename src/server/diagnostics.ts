@@ -12,6 +12,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { LabelDefinition, DocumentIndex } from './types';
 import {
     OPCODES,
+    ALL_DIRECTIVE_SET,
     DATA_DIRECTIVES,
     EXPRESSION_DIRECTIVES,
     opcodesForCpu,
@@ -225,6 +226,50 @@ function findUnsupportedMnemonic(
     }
     // A label came first, so the next token has to be the instruction.
     if (second !== undefined && !cpuOpcodes.has(first.toLowerCase()) && unsupported(second)) {
+        return { name: second, column: code.indexOf(second, indent.length + first.length) };
+    }
+    return null;
+}
+
+/**
+ * A built-in name in the statement slot written in anything but lowercase, while
+ * case sensitivity is on.
+ *
+ * `-C` makes the assembler match instruction and directive names exactly, and
+ * nothing else is spelled with capitals: `LDA #1` is "wrong type", `.BYTE 1` is
+ * "not defined symbol 'BYTE'", and so are `asl A` and `lda $10,X` (all verified).
+ * 64tass reads the name as a symbol instead, which is why no other check here
+ * has anything to say about such a line.
+ *
+ * The statement slot only. A capitalised name elsewhere is an ordinary symbol -
+ * `LDA = 5` and `LDA:` both assemble under `-C`, and a project may well have a
+ * label of that name.
+ *
+ * Returns the offending token and its column, or null.
+ */
+function findMiscasedBuiltin(code: string): { name: string; column: number } | null {
+    const tokens = code.match(/^(\s*)(\.?[a-zA-Z_][a-zA-Z0-9_]*)(:?)(\s*(\S+))?/);
+    if (!tokens) return null;
+    const [, indent, first, colon, , second] = tokens;
+    const miscased = (word: string) => word !== word.toLowerCase() && (word.startsWith('.')
+        ? ALL_DIRECTIVE_SET.has(word.slice(1).toLowerCase())
+        : OPCODES.has(word.toLowerCase()));
+    const spelledOut = (word: string) => word === word.toLowerCase() && (word.startsWith('.')
+        ? ALL_DIRECTIVE_SET.has(word.slice(1))
+        : OPCODES.has(word));
+
+    if (!colon && miscased(first)) {
+        // A dotted name is never a label, so `.BYTE` alone is already an error.
+        // A mnemonic spelled with capitals is one: a lone `RTS` defines RTS and
+        // assembles, and so do `LDA = 5` and `LDA .byte 1` (all verified). It is
+        // the line that goes on as an instruction which cannot work.
+        if (first.startsWith('.')) return { name: first, column: indent.length };
+        if (second === undefined) return null;
+        if (/^[.=]|^:=/.test(second)) return null;
+        return { name: first, column: indent.length };
+    }
+    // A label came first, so the next token is the statement.
+    if (second !== undefined && !spelledOut(first) && miscased(second)) {
         return { name: second, column: code.indexOf(second, indent.length + first.length) };
     }
     return null;
@@ -627,6 +672,27 @@ export function validateDocument(
             }
         }
 
+        // A built-in written with capitals while `-C` is in force: the assembler
+        // reads it as a symbol and the line does not assemble (verified). Before
+        // the mnemonic check below, which would otherwise call `BRA` unsupported
+        // when the spelling is what is wrong.
+        if (caseSensitive && !deadLines.has(lineNum)) {
+            const miscased = findMiscasedBuiltin(code);
+            if (miscased) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Error,
+                    range: Range.create(
+                        Position.create(lineNum, miscased.column),
+                        Position.create(lineNum, miscased.column + miscased.name.length)
+                    ),
+                    message: `'${miscased.name}' is read as a symbol while case sensitivity is on; `
+                        + `64tass only knows '${miscased.name.toLowerCase()}'`,
+                    source: '64tass',
+                    code: 'miscased-builtin'
+                });
+            }
+        }
+
         // A mnemonic this CPU does not have, judged against the target in force -
         // declared, or the default when nothing said. A 65c02 project that never
         // declares itself is reported against the 6502i default and should say so
@@ -797,7 +863,14 @@ export function validateDocument(
         // takes an operand whose symbols are worth checking. Gating on the narrow
         // set meant one missing mnemonic silently disabled symbol validation for
         // its whole line - and the target is only a guess unless it was declared.
-        if (opcodeMatch && OPCODES.has(opcodeMatch[1].toLowerCase())) {
+        // The mnemonic has to be spelled as the assembler spells it. With `-C` in
+        // force `LDA .byte 1` is a LABEL and a directive (verified), and reading
+        // LDA as the instruction made `.byte 1` its operand - reported as two
+        // values in a row on a line that assembles.
+        const writtenAsOpcode = opcodeMatch
+            && OPCODES.has(opcodeMatch[1].toLowerCase())
+            && (!caseSensitive || opcodeMatch[1] === opcodeMatch[1].toLowerCase());
+        if (opcodeMatch && writtenAsOpcode) {
             operand = opcodeMatch[2];
             operandStart = opcodeMatch[0].length - operand.length;
 
