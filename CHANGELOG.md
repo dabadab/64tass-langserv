@@ -4,6 +4,31 @@ All notable changes to the 64tass Language Support extension will be documented 
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-20
+
+### Improved
+- **Capitals Under Case Sensitivity** - with `64tass.caseSensitive` on, 64tass matches
+  instruction and directive names exactly and has no capitalised ones, so `LDA #1` and
+  `.BYTE 1` do not assemble. Both are now reported, with a quick fix that lowercases the
+  word. Only where the name cannot be a label instead: a lone `RTS`, `LDA = 5` and
+  `LDA .byte 1` all assemble and stay silent
+- **Unclosed Brackets** - nothing continues a line in this language, a trailing backslash
+  included, so a tuple, list or dict split across two lines is an error. The bracket left
+  open is now reported where it opened
+
+### Fixed
+- **Files With CRLF Line Endings** - every line kept its carriage return, which no
+  pattern anchored at the end of a line could match. `.if`/`.else`/`.fi` chains were not
+  recognised at all, so labels in the two halves collided as duplicates and branches that
+  are never assembled were checked as live code - 28 wrong reports in one real project
+- **Unnamed `.struct` And `.union`** - their members belong to the scope around them, as
+  the zeropage-layout idiom depends on; they were hidden as an unnamed `.block`'s are, so
+  89 fields of one project read as undefined
+- **Local Symbols After A Bare Macro Call** - `PTR_ADD ptr, offset` was taken for a label
+  definition and re-anchored the `_local`s after it, so references to them from above the
+  call read as undefined. The no-argument form had this since before 0.13.0, the form
+  with arguments since 0.13.0
+
 ## [0.13.0] - 2026-09-19
 
 ### Added
