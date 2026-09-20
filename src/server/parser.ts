@@ -465,6 +465,21 @@ export function parseDocument(
                 continue nextLine;
             }
 
+            // `.namespace <expression>` ACTIVATES the scope it names rather than
+            // creating one - the manual's reason for the form is "label
+            // definitions into the same scope in different files" - so what
+            // follows belongs to THAT scope (verified, plain and dotted; naming a
+            // scope that does not exist is an error, not a new scope).
+            if (open === '.namespace') {
+                const activation = line.match(
+                    /^\s*\.namespace\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(?:;.*)?$/i);
+                if (activation) {
+                    scopeStack.push({ name: normalizeName(activation[1]), directive: open });
+                    recordScope(lineNum);
+                    continue nextLine;
+                }
+            }
+
             // Safe: directive name from static constant (SCOPE_OPENERS)
             //
             // An ANONYMOUS label may stand where the name goes: `+ .block` opens a

@@ -1508,3 +1508,31 @@ describe('an anonymous label in front of a scope opener', () => {
             .labels.find(l => l.name === 'inner')?.scopePath).toBe('block@0');
     });
 });
+
+describe('.namespace with a parameter', () => {
+    // "This directive either creates a new scope (if used without a parameter)
+    // or activates the one in the parameter... This enables label definitions
+    // into the same scope in different files." Verified, plain and dotted; a
+    // parameter naming no existing scope is an error rather than a new scope.
+    const scopeOf = (source: string, name: string) =>
+        parse(source).labels.find(l => l.name === name)?.scopePath;
+
+    it('puts what follows into the scope it names', () => {
+        const source = ['colors  .namespace', 'red     = 2', '        .endnamespace',
+            '        .namespace colors', 'blue    = 6', '        .endnamespace'].join('\n');
+        expect([scopeOf(source, 'red'), scopeOf(source, 'blue')]).toEqual(['colors', 'colors']);
+    });
+
+    it('takes a dotted path', () => {
+        const source = ['        .namespace outer.inner', 'deep    = 1', '        .endnamespace'].join('\n');
+        expect(scopeOf(source, 'deep')).toBe('outer.inner');
+    });
+
+    it('still makes a scope of its own without one', () => {
+        expect(scopeOf('        .namespace\nhid     = 1\n        .endnamespace', 'hid')).toBe('namespace@0');
+    });
+
+    it('leaves the named form alone', () => {
+        expect(scopeOf('colors  .namespace\nred     = 2\n        .endnamespace', 'red')).toBe('colors');
+    });
+});

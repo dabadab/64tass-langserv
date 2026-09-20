@@ -22,3 +22,16 @@ table:  .byte 1, 2, 3
 flat:   .block
         rts
         .bend
+
+; `.namespace <expression>` activates the scope it names instead of creating
+; one, which is how definitions in different files land in the same scope.
+colors  .namespace
+red     = 2
+        .endnamespace
+
+        .namespace colors
+blue    = 6
+        .endnamespace
+
+        lda #colors.red
+        lda #colors.blue
