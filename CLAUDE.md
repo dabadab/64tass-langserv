@@ -459,6 +459,10 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   letter after the `@` is an operator on the expression, not a symbol, and the
   operand scan skips it. What follows is still checked; `lda w` is still a
   symbol.
+- **Float literals**: a decimal exponent is `e` and a binary one `p`, and the
+  mantissa may be hex or binary: `$1.8p4` is the manual's 4:4 fixed point and
+  `12.2p8` its 8:8 (verified). `VALUE_PATTERN` covers all three bases; it used to
+  stop at the point, so a fixed-point table read as values in a row.
 - **Byte string prefixes**: `b"oeU"`, `x"fce2"` (hex entry), `z"..."` (z85) and the
   rest of the manual's `b l n p s x z`. The letter is part of the literal, and
   `isByteStringPrefix` in `utils.ts` is the one test for it - lowercase, one of
@@ -698,7 +702,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1831 tests); compiles first
+yarn test          # Run all tests (currently 1833 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

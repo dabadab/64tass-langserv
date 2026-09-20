@@ -17,4 +17,10 @@ hi      .byte 2
         .word $ff_ff
         .byte %1010_1010
         .byte <(1_0.5e1)
+
+; A decimal exponent is `e`, a binary one `p` - the fixed-point forms the manual
+; gives for 4:4 and 8:8 tables.
+        .byte $1.8p4
+        .sint 12.2p8
+        .byte %1.1p2
         rts

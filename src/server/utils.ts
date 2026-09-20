@@ -201,13 +201,15 @@ export interface Token {
 //     the pattern used to stop at the underscore, so the tail matched as an
 //     identifier and the tokenizer saw two values in a row
 const VALUE_PATTERN = new RegExp('^(' + [
-    `\\$${HEX_DIGITS}`,                              // $FF, $ff_ff
+    // $FF, $ff_ff, and the manual's fixed-point forms $1.8p4 / $a.bp4, where a
+    // binary exponent is `p` and a decimal one `e` (all verified to assemble)
+    `\\$${HEX_DIGITS}(?:\\.(?:${HEX_DIGITS})?)?(?:[pP][+-]?${DEC_DIGITS})?`,
     '0x[0-9a-fA-F]+',                               // 0xFF
-    `%${BIN_DIGITS}`,                               // %1010, %1010_1010
+    `%${BIN_DIGITS}(?:\\.(?:${BIN_DIGITS})?)?(?:[pP][+-]?${DEC_DIGITS})?`, // %1010, %1.1p2
     '0b[01]+',                                      // 0b1010
     '\\\\(?:@|\\d+|[a-zA-Z_][a-zA-Z0-9_]*)',        // \1, \@, \name
-    // 360.0, 1., .5, 1e2, 2.5e-3, 1_0.5
-    `(?:${DEC_DIGITS}\\.(?:${DEC_DIGITS})?|\\.${DEC_DIGITS}|${DEC_DIGITS})(?:[eE][+-]?${DEC_DIGITS})?`,
+    // 360.0, 1., .5, 1e2, 2.5e-3, 1_0.5, and the binary exponent 12.2p8
+    `(?:${DEC_DIGITS}\\.(?:${DEC_DIGITS})?|\\.${DEC_DIGITS}|${DEC_DIGITS})(?:[eEpP][+-]?${DEC_DIGITS})?`,
     '[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*' // name, tbl.lo, a.b.c
 ].join('|') + ')');
 

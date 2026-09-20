@@ -831,3 +831,17 @@ describe('byte string prefixes', () => {
         expect(tokenizeExpression('sym"abc"').map(t => t.type)).toEqual(['value', 'value']);
     });
 });
+
+describe('binary exponents and hex floats', () => {
+    // "A decimal exponent is e while a binary one is p" - `$1.8p4` is the
+    // manual's 4:4 fixed point and `12.2p8` its 8:8 (both verified to assemble).
+    it('are one value each', () => {
+        for (const literal of ['$1.8p4', '12.2p8', '$a.bp4', '%1.1p2', '1.5p-2', '$10p4']) {
+            expect(tokenizeExpression(literal).map(t => t.text), literal).toEqual([literal]);
+        }
+    });
+
+    it('leave a dotted reference alone', () => {
+        expect(tokenizeExpression('tbl.lo').map(t => t.text)).toEqual(['tbl.lo']);
+    });
+});
