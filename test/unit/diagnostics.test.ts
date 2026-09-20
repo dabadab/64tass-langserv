@@ -1893,3 +1893,32 @@ describe('address length forcing', () => {
             .filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
     });
 });
+
+describe('source after a .end', () => {
+    // "Terminate assembly. Any content after this directive is ignored."
+    // Verified: a line of punctuation after one draws no error at all, and the
+    // reach is the file - an include's `.end` leaves its parent assembling.
+    it('is not checked', () => {
+        expect(getDiagnostics('        *= $1000\n        .end\n        lda undefined_thing')
+            .filter(d => d.code === 'undefined-symbol')).toEqual([]);
+    });
+
+    it('is greyed out, and says why', () => {
+        const [hint] = getDiagnostics('        *= $1000\n        .end\n        lda undefined_thing')
+            .filter(d => d.code === 'inactive-code');
+        expect(hint.message).toBe('Not assembled - .end ends the file here');
+        expect(hint.range.start.line).toBe(2);
+    });
+
+    it('carries no duplicate of a label defined before it', () => {
+        expect(getDiagnostics('        *= $1000\nlbl     nop\n        .end\nlbl     nop')
+            .filter(d => d.message.startsWith('Duplicate'))).toEqual([]);
+    });
+
+    it('is not confused with a closer or a string', () => {
+        expect(getDiagnostics('        *= $1000\n        .text ".end"\n        lda undefined_thing')
+            .filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
+        expect(getDiagnostics('        *= $1000\n        .if 1\n        nop\n        .endif\n'
+            + '        lda undefined_thing').filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
+    });
+});

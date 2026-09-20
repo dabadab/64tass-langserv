@@ -26,7 +26,7 @@ import {
 } from './constants';
 import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys, splitTopLevel, splitLines, isByteStringPrefix } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
-import { blockDirectivesOn, findWeakLines } from './blocks';
+import { blockDirectivesOn, findWeakLines, BOUNDARY } from './blocks';
 import { addressExpressionOf, findAddressingProblem, immediateBytesFor } from './operands';
 import { calleeScopePath } from './signatureHelp';
 import { LABEL_REQUIRED_OPENERS } from './constants';
@@ -229,6 +229,28 @@ function findUnsupportedMnemonic(
         return { name: second, column: code.indexOf(second, indent.length + first.length) };
     }
     return null;
+}
+
+/**
+ * The lines a `.end` leaves out: "terminate assembly. Any content after this
+ * directive is ignored."
+ *
+ * Verified twice over: what follows is not even parsed - a line of punctuation
+ * after one draws no error - and the reach is the FILE, since an include's `.end`
+ * leaves its parent assembling. A `.end` inside a branch that is not taken still
+ * ends the file, so this needs no conditional reasoning at all.
+ *
+ * `\b` keeps `.endif`, `.endm` and the rest of the closers out.
+ */
+function ignoredAfterEnd(lines: string[], commentBlockLines: ReadonlySet<number>): number[] {
+    const END = new RegExp(`${BOUNDARY}\\.end\\b`, 'i');
+    for (let i = 0; i < lines.length; i++) {
+        if (commentBlockLines.has(i)) continue;
+        if (END.test(stripStrings(parseLineStructure(lines[i]).code))) {
+            return Array.from({ length: lines.length - i - 1 }, (_, n) => i + n + 1);
+        }
+    }
+    return [];
 }
 
 /**
@@ -653,7 +675,12 @@ export function validateDocument(
 
     // Lines in .if branches the assembler provably never evaluates. Undefined-symbol
     // reporting is skipped for these, since the assembler does not resolve them either.
-    const deadLines = findDeadLines(lines, document.uri, documentIndex, caseSensitive, unit);
+    // ...plus everything after a `.end`, which the assembler does not read at all.
+    const afterEnd = new Set(ignoredAfterEnd(lines, commentBlockLines));
+    const deadLines = new Set([
+        ...findDeadLines(lines, document.uri, documentIndex, caseSensitive, unit),
+        ...afterEnd,
+    ]);
 
     // Grey out the branches the assembler provably never reaches. findDeadLines
     // only marks what it can decide - `.if 0`, a condition of resolved constants -
@@ -667,7 +694,9 @@ export function validateDocument(
                 Position.create(first, 0),
                 Position.create(last, lines[last]?.length ?? 0)
             ),
-            message: 'Not assembled - this branch is never taken',
+            message: afterEnd.has(first)
+                ? 'Not assembled - .end ends the file here'
+                : 'Not assembled - this branch is never taken',
             source: '64tass',
             code: 'inactive-code',
             tags: [DiagnosticTag.Unnecessary],

@@ -274,6 +274,10 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   skip `.comment` blocks: that conservatism only holds while the lines they read
   are CODE, and prose saying "disabled with .if 0" opened a chain that never
   closed, marking the rest of the file dead and suppressing every diagnostic in it.
+  Everything after a `.end` joins the same set: the directive ends the FILE it is
+  in - an include's leaves the parent assembling - and what follows is not even
+  parsed (verified: a line of punctuation after one draws no error). Greyed with
+  a message of its own, since "this branch is never taken" would be a lie.
   Dead lines also silence the three checks that judge machine code -
   `unsupported-mnemonic`, `immediate-too-large`, `no-addressing-mode` - since an
   unassembled branch draws none of them from the assembler either (verified).
@@ -694,7 +698,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1827 tests); compiles first
+yarn test          # Run all tests (currently 1831 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
