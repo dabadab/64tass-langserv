@@ -443,6 +443,10 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   branches deliberately opt out, each said so at the branch: anonymous labels
   (never named), define-pragma symbols (the pragma line is itself the comment) and
   dict-literal keys (the comment describes the assignment, not each key).
+- **Address length forcing**: `lda @w $0000`, `bne @b lbl`, `sta @l $010000` - the
+  letter after the `@` is an operator on the expression, not a symbol, and the
+  operand scan skips it. What follows is still checked; `lda w` is still a
+  symbol.
 - **Byte string prefixes**: `b"oeU"`, `x"fce2"` (hex entry), `z"..."` (z85) and the
   rest of the manual's `b l n p s x z`. The letter is part of the literal, and
   `isByteStringPrefix` in `utils.ts` is the one test for it - lowercase, one of
@@ -682,7 +686,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1816 tests); compiles first
+yarn test          # Run all tests (currently 1819 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

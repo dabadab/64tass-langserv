@@ -1104,6 +1104,11 @@ export function validateDocument(
                 // own array idiom (verified clean).
                 if (match.index > 1 && operandNoStrings[match.index - 1] === '.'
                     && operandNoStrings[match.index - 2] === ']') continue;
+                // The address-size forcing prefixes: `lda @w $0000`, `bne @b lbl`,
+                // `sta @l $010000`. The letter is an operator on the expression
+                // after it, not a symbol (verified: all three assemble).
+                if (symName.length === 1 && 'bwl'.includes(symName.toLowerCase())
+                    && operandNoStrings[match.index - 1] === '@') continue;
                 // The prefix letter of a byte string (`b"oeU"`, `x"fce2"`) is part
                 // of the literal, not a symbol (verified: only these letters, only
                 // lowercase, only with no space before the quote).

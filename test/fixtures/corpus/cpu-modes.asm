@@ -14,4 +14,10 @@ start   rep #$30
         ldx s           ; TSX
         pea $1234
 loop    brl loop
+
+; Address length forcing: the prefix pins the addressing mode rather than
+; naming a symbol.
+        lda @w $0000
+        sta @l $010000
+        bne @b loop
         rtl

@@ -1872,3 +1872,24 @@ describe('a byte string', () => {
         expect(getDiagnostics('        *= $1000\n        .text q"abc"').length).toBeGreaterThan(0);
     });
 });
+
+describe('address length forcing', () => {
+    // `@b`, `@w` and `@l` pin the addressing mode of the expression after them
+    // (verified: all three assemble). The letter was read as a symbol.
+    it('is not a symbol reference', () => {
+        expect(getDiagnostics('        *= $1000\n        lda @w $0000\n        bne @b lbl\n'
+            + '        lda @w #$00\nlbl     nop')).toEqual([])
+        ;
+    });
+
+    it('still checks what follows it', () => {
+        expect(getDiagnostics('        *= $1000\n        lda @w nowhere')
+            .filter(d => d.code === 'undefined-symbol').map(d => d.message))
+            .toEqual(["Undefined symbol 'nowhere'"]);
+    });
+
+    it('leaves a bare w or b alone as a symbol', () => {
+        expect(getDiagnostics('        *= $1000\n        lda w')
+            .filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
+    });
+});
