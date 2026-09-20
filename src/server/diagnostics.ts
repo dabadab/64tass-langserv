@@ -232,6 +232,32 @@ function findUnsupportedMnemonic(
 }
 
 /**
+ * Where a multi-symbol lookup sits in a line, and which scope it looks into.
+ *
+ * The manual: "More than one symbol may be looked up at the same time and the
+ * result will be a list or tuple", written `colors.(red, green, blue)` - the
+ * names inside the parentheses belong to `colors`, not to the scope at the
+ * cursor, which is where they were being looked for. A `.(` with no scope in
+ * front of it builds a list of KEYS (the manual's `dict(.(red, green), ...)`),
+ * which names nothing at all; that region maps to null and is skipped.
+ */
+function multiLookupRegions(code: string): { start: number; end: number; scope: string | null }[] {
+    const regions: { start: number; end: number; scope: string | null }[] = [];
+    const opener = /([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)?\.\(/g;
+    let match;
+    while ((match = opener.exec(code)) !== null) {
+        let depth = 1;
+        let i = match.index + match[0].length;
+        for (; i < code.length && depth > 0; i++) {
+            if (code[i] === '(') depth++;
+            else if (code[i] === ')') depth--;
+        }
+        regions.push({ start: match.index + match[0].length, end: i - 1, scope: match[1] ?? null });
+    }
+    return regions;
+}
+
+/**
  * A bracket opened on a line and still open at the end of it.
  *
  * 64tass has no line continuation of any kind, not even a trailing backslash: a
@@ -1060,6 +1086,7 @@ export function validateDocument(
 
             // Strip string literals to avoid matching symbols inside strings
             const operandNoStrings = stripStrings(operand);
+            const multiLookups = multiLookupRegions(operandNoStrings);
             symbolPattern.lastIndex = 0;
             while ((match = symbolPattern.exec(operandNoStrings)) !== null) {
                 const symName = match[1];
@@ -1126,7 +1153,13 @@ export function validateDocument(
                     }
                 }
 
-                const symbol = findSymbolInfo(symName, document.uri, lineNum, documentIndex, caseSensitive, true, unit);
+                // Inside `scope.(a, b, c)` the names are members of that scope; in
+                // a bare `.(a, b)` they are keys and name nothing to resolve.
+                const lookup = multiLookups.find(r => match!.index >= r.start && match!.index < r.end);
+                if (lookup && lookup.scope === null) continue;
+                const qualified = lookup ? `${lookup.scope}.${symName}` : symName;
+
+                const symbol = findSymbolInfo(qualified, document.uri, lineNum, documentIndex, caseSensitive, true, unit);
                 if (!symbol && !deadLines.has(lineNum)) {
                     const startCol = operandStart + match.index;
                     diagnostics.push({

@@ -1825,3 +1825,31 @@ describe('a member reached through an index', () => {
             .toEqual(["Undefined symbol 'nowhere'"]);
     });
 });
+
+describe('a multi-symbol lookup', () => {
+    // The manual: "More than one symbol may be looked up at the same time and the
+    // result will be a list or tuple", written `colors.(red, green, blue)`. The
+    // names belong to `colors`; they were looked for in the scope at the cursor.
+    const SCOPE = ['colors  .namespace', 'red     = 2', 'green   = 3', '        .endnamespace',
+        '        *= $1000'].join('\n');
+
+    it('resolves the names against the scope in front of the dot', () => {
+        expect(getDiagnostics(`${SCOPE}\n        .byte colors.(red, green)`)).toEqual([]);
+    });
+
+    it('still reports a name that scope does not have', () => {
+        expect(getDiagnostics(`${SCOPE}\n        .byte colors.(red, nosuch)`)
+            .filter(d => d.code === 'undefined-symbol').map(d => d.message))
+            .toEqual(["Undefined symbol 'nosuch'"]);
+    });
+
+    it('leaves a keyed list alone, which names nothing', () => {
+        // `dict(.(red, green), range(2))` builds keys, not references (verified).
+        expect(getDiagnostics(`${SCOPE}\nd       = dict(.(red, green), range(2))`)).toEqual([]);
+    });
+
+    it('still resolves an ordinary dotted reference', () => {
+        expect(getDiagnostics(`${SCOPE}\n        lda #colors.nosuch`)
+            .filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
+    });
+});
