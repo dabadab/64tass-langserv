@@ -20,10 +20,19 @@ msg     .text "hello world"
 tbl     .byte 1, 2, 3, 4
         .endpage
 
-; .alignblk aligns the block it holds.
+; .alignblk aligns the block it holds. .alignind and .alignpageind take the
+; label they are aligning and pad HERE so that it lands right - which is why
+; their first argument is a target rather than an interval.
         .alignblk $10
 aligned .byte 1
         .endalignblk
+
+        .alignind padded, $100, $ea
+        nop
+padded  .byte 1, 2, 3
+        .alignpageind paged, $100
+        nop
+paged   .byte 1, 2, 3
 
 ; .offs shifts the output address, .option sets an assembly option, and the
 ; listing controls turn the list file off and on again.

@@ -1947,3 +1947,22 @@ describe('a C-style numeric literal', () => {
         expect(getDiagnostics('        *= $1000\n        .byte $10\n        .byte %101')).toEqual([]);
     });
 });
+
+describe('the indirect alignment directives', () => {
+    // `.alignind <target>[, <interval>[, <fill>]]` pads where it stands so the
+    // TARGET lands aligned - the first argument is a label, not an interval,
+    // which is what `.alignind $10, $ea` gets wrong ("can't do the alignment of
+    // this"). Verified both ways.
+    it('resolve the label they align', () => {
+        expect(getDiagnostics('        *= $1000\n        .alignind tbl, $100, $ea\n'
+            + '        nop\ntbl     .byte 1, 2, 3')).toEqual([]);
+        expect(getDiagnostics('        *= $1000\n        .alignpageind tbl\n        nop\ntbl     .byte 1'))
+            .toEqual([]);
+    });
+
+    it('report a target that is not defined', () => {
+        expect(getDiagnostics('        *= $1000\n        .alignind nowhere')
+            .filter(d => d.code === 'undefined-symbol').map(d => d.message))
+            .toEqual(["Undefined symbol 'nowhere'"]);
+    });
+});
