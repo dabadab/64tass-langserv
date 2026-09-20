@@ -48,6 +48,7 @@ VS Code extension providing language support for the 64tass MOS 6502 macro assem
 │   └── results.jsonl             # Saved records, one per line, per machine id
 ├── syntaxes/
 │   └── 64tass.tmLanguage.json    # TextMate grammar for syntax highlighting
+│                                 #   (rules pinned by test/unit/grammar.test.ts)
 ├── language-configuration.json   # Bracket matching, comments, etc.
 ├── test/
 │   ├── unit/                     # Unit tests for each module
@@ -711,7 +712,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1843 tests); compiles first
+yarn test          # Run all tests (currently 1858 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

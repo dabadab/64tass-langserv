@@ -3,14 +3,30 @@
   "name": "64tass",
   "scopeName": "source.64tass",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#immediate" },
-    { "include": "#numbers" },
-    { "include": "#opcodes" },
-    { "include": "#directives" },
-    { "include": "#labels" },
-    { "include": "#registers" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#immediate"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#opcodes"
+    },
+    {
+      "include": "#directives"
+    },
+    {
+      "include": "#labels"
+    },
+    {
+      "include": "#registers"
+    }
   ],
   "repository": {
     "comments": {
@@ -23,6 +39,28 @@
     },
     "strings": {
       "patterns": [
+        {
+          "match": "(?<![a-zA-Z0-9_.])([blnpsxz])(\\\"([^\\\"]|\\\"\\\")*\\\")",
+          "captures": {
+            "1": {
+              "name": "storage.type.string.64tass"
+            },
+            "2": {
+              "name": "string.quoted.double.64tass"
+            }
+          }
+        },
+        {
+          "match": "(?<![a-zA-Z0-9_.])([blnpsxz])('([^']|'')*')",
+          "captures": {
+            "1": {
+              "name": "storage.type.string.64tass"
+            },
+            "2": {
+              "name": "string.quoted.single.64tass"
+            }
+          }
+        },
         {
           "name": "string.quoted.double.64tass",
           "match": "\"([^\"]|\"\")*\""
@@ -56,16 +94,36 @@
     "numbers": {
       "patterns": [
         {
+          "name": "constant.numeric.float.hex.64tass",
+          "match": "\\$[0-9a-fA-F]+(?:_+[0-9a-fA-F]+)*(?:\\.(?:[0-9a-fA-F]+(?:_+[0-9a-fA-F]+)*)?)?[pP][+-]?[0-9]+(?:_+[0-9]+)*"
+        },
+        {
+          "name": "constant.numeric.float.hex.64tass",
+          "match": "\\$[0-9a-fA-F]+(?:_+[0-9a-fA-F]+)*\\.(?:[0-9a-fA-F]+(?:_+[0-9a-fA-F]+)*)?"
+        },
+        {
           "name": "constant.numeric.hex.64tass",
-          "match": "\\$[0-9a-fA-F]+"
+          "match": "\\$[0-9a-fA-F]+(?:_+[0-9a-fA-F]+)*"
+        },
+        {
+          "name": "constant.numeric.float.binary.64tass",
+          "match": "%[01]+(?:_+[01]+)*(?:\\.(?:[01]+(?:_+[01]+)*)?)?[pP][+-]?[0-9]+(?:_+[0-9]+)*"
+        },
+        {
+          "name": "constant.numeric.float.binary.64tass",
+          "match": "%[01]+(?:_+[01]+)*\\.(?:[01]+(?:_+[01]+)*)?"
         },
         {
           "name": "constant.numeric.binary.64tass",
-          "match": "%[01]+"
+          "match": "%[01]+(?:_+[01]+)*"
+        },
+        {
+          "name": "constant.numeric.float.64tass",
+          "match": "(?<![\\w$%.])(?:[0-9]+(?:_+[0-9]+)*\\.(?:[0-9]+(?:_+[0-9]+)*)?(?:[eEpP][+-]?[0-9]+(?:_+[0-9]+)*)?|\\.[0-9]+(?:_+[0-9]+)*(?:[eEpP][+-]?[0-9]+(?:_+[0-9]+)*)?|[0-9]+(?:_+[0-9]+)*[eEpP][+-]?[0-9]+(?:_+[0-9]+)*)"
         },
         {
           "name": "constant.numeric.decimal.64tass",
-          "match": "\\b[0-9]+\\b"
+          "match": "(?<![\\w$%.])[0-9]+(?:_+[0-9]+)*\\b"
         }
       ]
     },
