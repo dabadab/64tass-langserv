@@ -151,16 +151,15 @@ export function parseNumericValue(value: string): number | null {
     // The separators are for reading, not for the value (`1_000` is 1000).
     const trimmed = value.trim();
 
-    // Hexadecimal: $FF, $ff_ff or 0xFF
-    const hexMatch = trimmed.match(new RegExp(`^\\$(${HEX_DIGITS})$`))
-        || trimmed.match(/^0x([0-9a-fA-F]+)$/i);
+    // Hexadecimal: $FF or $ff_ff. No `0x`: 64tass has no such form, and reading
+    // one silenced a line the assembler rejects ("an operator is expected").
+    const hexMatch = trimmed.match(new RegExp(`^\\$(${HEX_DIGITS})$`));
     if (hexMatch) {
         return parseInt(hexMatch[1].replace(/_/g, ''), 16);
     }
 
-    // Binary: %10101010, %1010_1010 or 0b10101010
-    const binMatch = trimmed.match(new RegExp(`^%(${BIN_DIGITS})$`))
-        || trimmed.match(/^0b([01]+)$/i);
+    // Binary: %10101010 or %1010_1010. No `0b`, for the same reason.
+    const binMatch = trimmed.match(new RegExp(`^%(${BIN_DIGITS})$`));
     if (binMatch) {
         return parseInt(binMatch[1].replace(/_/g, ''), 2);
     }
@@ -204,9 +203,7 @@ const VALUE_PATTERN = new RegExp('^(' + [
     // $FF, $ff_ff, and the manual's fixed-point forms $1.8p4 / $a.bp4, where a
     // binary exponent is `p` and a decimal one `e` (all verified to assemble)
     `\\$${HEX_DIGITS}(?:\\.(?:${HEX_DIGITS})?)?(?:[pP][+-]?${DEC_DIGITS})?`,
-    '0x[0-9a-fA-F]+',                               // 0xFF
     `%${BIN_DIGITS}(?:\\.(?:${BIN_DIGITS})?)?(?:[pP][+-]?${DEC_DIGITS})?`, // %1010, %1.1p2
-    '0b[01]+',                                      // 0b1010
     '\\\\(?:@|\\d+|[a-zA-Z_][a-zA-Z0-9_]*)',        // \1, \@, \name
     // 360.0, 1., .5, 1e2, 2.5e-3, 1_0.5, and the binary exponent 12.2p8
     `(?:${DEC_DIGITS}\\.(?:${DEC_DIGITS})?|\\.${DEC_DIGITS}|${DEC_DIGITS})(?:[eEpP][+-]?${DEC_DIGITS})?`,

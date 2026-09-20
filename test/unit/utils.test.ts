@@ -290,20 +290,16 @@ describe('parseNumericValue', () => {
         expect(parseNumericValue('$FF')).toBe(255);
     });
 
-    it('parses hex with 0x prefix', () => {
-        expect(parseNumericValue('0xFF')).toBe(255);
-    });
-
-    it('parses hex with 0X prefix (case insensitive)', () => {
-        expect(parseNumericValue('0XAB')).toBe(171);
-    });
-
     it('parses binary with % prefix', () => {
         expect(parseNumericValue('%10101010')).toBe(170);
     });
 
-    it('parses binary with 0b prefix', () => {
-        expect(parseNumericValue('0b11111111')).toBe(255);
+    it('refuses the C prefixes 64tass does not have', () => {
+        // `.byte 0x10` is "an operator is expected" to the assembler (verified),
+        // so reading these as numbers silenced a line it rejects.
+        expect(parseNumericValue('0xFF')).toBeNull();
+        expect(parseNumericValue('0XAB')).toBeNull();
+        expect(parseNumericValue('0b11111111')).toBeNull();
     });
 
     it('parses decimal', () => {
@@ -442,10 +438,15 @@ describe('tokenizeExpression', () => {
     });
 
     it('tokenizes the numeric bases', () => {
-        expect(shape('$FF, 0xAB, %1010, 0b11, 12')).toEqual([
-            'value:$FF', 'operator:,', 'value:0xAB', 'operator:,',
-            'value:%1010', 'operator:,', 'value:0b11', 'operator:,', 'value:12'
+        expect(shape('$FF, %1010, 12')).toEqual([
+            'value:$FF', 'operator:,', 'value:%1010', 'operator:,', 'value:12'
         ]);
+    });
+
+    it('leaves a C-style literal as the two values 64tass reads', () => {
+        // `.byte 0x10` is "an operator is expected" there; reading `0xAB` as one
+        // value made the extension silent on a line the assembler rejects.
+        expect(shape('0xAB')).toEqual(['value:0', 'value:xAB']);
     });
 
     it('keeps a float as a single value', () => {

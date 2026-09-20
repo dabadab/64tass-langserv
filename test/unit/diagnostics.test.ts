@@ -1933,3 +1933,17 @@ describe('the x repeat operator', () => {
         expect(getDiagnostics('        *= $1000\n        .text "ab"x3').length).toBeGreaterThan(0);
     });
 });
+
+describe('a C-style numeric literal', () => {
+    it('is reported, as the assembler reports it', () => {
+        // `.byte 0x10` and `.byte 0b101` are both "an operator is expected" to
+        // 64tass, which has no such prefixes (verified).
+        expect(getDiagnostics('        *= $1000\n        .byte 0x10').map(d => d.message))
+            .toEqual(["An operator is expected before 'x10'"]);
+        expect(getDiagnostics('        *= $1000\n        .byte 0b101').length).toBe(1);
+    });
+
+    it('leaves the real prefixes alone', () => {
+        expect(getDiagnostics('        *= $1000\n        .byte $10\n        .byte %101')).toEqual([]);
+    });
+});

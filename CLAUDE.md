@@ -459,6 +459,10 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   letter after the `@` is an operator on the expression, not a symbol, and the
   operand scan skips it. What follows is still checked; `lda w` is still a
   symbol.
+- **Numeric prefixes**: `$` and `%` only. The C-style `0x`/`0b` branches are gone
+  from `parseNumericValue` and `VALUE_PATTERN`: 64tass has no such form, so
+  reading one kept the extension silent on `.byte 0x10`, which the assembler
+  rejects as "an operator is expected" (verified).
 - **Worded operators**: `x` (repeat) and `in` (membership) are operators when
   spaced after a value, and names otherwise - the manual insists on the spacing
   "or else they won't be recognized as such", and so does the assembler
@@ -707,7 +711,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1837 tests); compiles first
+yarn test          # Run all tests (currently 1838 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
