@@ -382,6 +382,11 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   that name still wins. `substitutionsFor` takes the LONGEST matching prefix of a
   path and carries the remainder over, and consults every document rather than
   stopping at the first - stopping made the answer depend on indexing order.
+- **Indexed member access**: `sprites[2].x` - the manual's `.brept` array idiom -
+  is a member of an indexed element, so the dot after `]` is neither a macro-call
+  prefix nor the start of a bare symbol. Both scans in `diagnostics.ts` skip it;
+  which element the member belongs to is not modelled, so nothing there is
+  resolved or reported.
 - **Struct instances**: `name .dstruct type, ...` (and `.dunion`) records
   `DocumentIndex.structInstances[name] = type`, so `name.member` resolves to that
   type's member. A member the type does not declare is still reported, matching the
@@ -658,7 +663,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1792 tests); compiles first
+yarn test          # Run all tests (currently 1799 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
@@ -697,7 +702,7 @@ building one literally.
   as a *label* means a mnemonic went unrecognised - which is what
   `all-opcodes.test.ts` asserts. `test/fixtures/64tass-examples/` holds real
   sources from the 64tass distribution.
-  `test/fixtures/corpus/` holds 23 files that BOTH assemble cleanly under real
+  `test/fixtures/corpus/` holds 24 files that BOTH assemble cleanly under real
   64tass and must produce zero error diagnostics here, so a false positive fails
   the build. Add one whenever a new construct is supported; verify it assembles
   before committing (a construct that does not assemble proves nothing), and add

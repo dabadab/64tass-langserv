@@ -1801,3 +1801,27 @@ describe('definitions inside a .weak region', () => {
         expect(duplicates('        *= $1000\nlbl     nop\nlbl     nop')).toHaveLength(1);
     });
 });
+
+describe('a member reached through an index', () => {
+    // The manual's `.brept` array idiom, verified clean: `sprites[2].x` indexes
+    // the run and picks a field of that element. The dot after `]` was read as a
+    // macro-call prefix, and the field as a symbol of its own.
+    const ARRAY = ['        *= $1000', 'sprites .brept 4', 'x       .byte ?', 'color   .byte ?',
+        '        .endrept'].join('\n');
+
+    it('is neither a macro call nor a bare symbol', () => {
+        expect(getDiagnostics(`${ARRAY}\n        lda sprites[2].x`)).toEqual([]);
+        expect(getDiagnostics(`${ARRAY}\n        lda sprites[0].color,y`)).toEqual([]);
+    });
+
+    it('still reports a macro call that is one', () => {
+        expect(getDiagnostics('        *= $1000\n        .nosuchmacro 1')
+            .filter(d => d.code === 'undefined-macro')).toHaveLength(1);
+    });
+
+    it('still reports an undefined symbol beside one', () => {
+        expect(getDiagnostics(`${ARRAY}\n        lda sprites[2].x + nowhere`)
+            .filter(d => d.code === 'undefined-symbol').map(d => d.message))
+            .toEqual(["Undefined symbol 'nowhere'"]);
+    });
+});

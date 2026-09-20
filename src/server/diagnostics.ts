@@ -854,8 +854,11 @@ export function validateDocument(
             const fullMatch = match[0];
             const startCol = match.index;
 
-            // Skip if this is part of a dotted reference (e.g., tbl.lo - the .lo is not a macro call)
-            if (startCol > 0 && /[a-zA-Z0-9_]/.test(codeNoStrings[startCol - 1])) {
+            // Skip if this is part of a dotted reference (e.g., tbl.lo - the .lo is
+            // not a macro call), including after an index: `sprites[2].x` is the
+            // manual's own `.brept` array idiom and its `.x` is a member (verified
+            // clean), where this read it as a call to a macro called x.
+            if (startCol > 0 && /[a-zA-Z0-9_\]]/.test(codeNoStrings[startCol - 1])) {
                 continue;
             }
 
@@ -1068,6 +1071,12 @@ export function validateDocument(
                 // It is a legal symbol name too (verified), so skipping it can cost
                 // at most a missed report on a symbol actually called `in`.
                 if (symLower === 'in') continue;
+                // A member reached through an index - `sprites[0].color` - belongs
+                // to whatever the indexed element is, which the index does not
+                // model. Silence beats a false "undefined symbol" on the manual's
+                // own array idiom (verified clean).
+                if (match.index > 1 && operandNoStrings[match.index - 1] === '.'
+                    && operandNoStrings[match.index - 2] === ']') continue;
                 // `\name` and `\1` substitute a macro's argument as TEXT; the name
                 // after the backslash is the parameter, not a symbol here.
                 if (match.index > 0 && operandNoStrings[match.index - 1] === '\\') continue;
