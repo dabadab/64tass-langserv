@@ -1481,3 +1481,30 @@ describe('an unnamed .struct or .union', () => {
         expect(scopeOf(source, 'after')).toBeNull();
     });
 });
+
+describe('an anonymous label in front of a scope opener', () => {
+    // Verified: `+ .block` opens a scope like a named label does - a symbol
+    // inside is not visible after the `.bend` - while `jsr +` from above still
+    // reaches the address, so the label itself belongs to the enclosing scope.
+    const SOURCE = ['        *= $1000', '        jsr +', '+       .block', 'inner   rts', '        .bend'].join('\n');
+
+    it('opens the scope', () => {
+        expect(parse(SOURCE).labels.find(l => l.name === 'inner')?.scopePath).toBe('block@2');
+    });
+
+    it('leaves the anonymous label outside it', () => {
+        const anon = parse(SOURCE).labels.find(l => l.isAnonymous);
+        expect([anon?.scopePath, anon?.range.start.line]).toEqual([null, 2]);
+    });
+
+    it('does the same for a .proc, which insists on a label', () => {
+        // `+ .proc` assembles, where a bare `.proc` is "label required".
+        expect(parse('        *= $1000\n        jsr +\n+       .proc\ninner   rts\n        .pend')
+            .labels.find(l => l.name === 'inner')?.scopePath).toBe('proc@2');
+    });
+
+    it('still opens an unnamed one with no label at all', () => {
+        expect(parse('        .block\ninner   rts\n        .bend')
+            .labels.find(l => l.name === 'inner')?.scopePath).toBe('block@0');
+    });
+});

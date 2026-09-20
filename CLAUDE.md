@@ -155,6 +155,10 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   bytes it emits and the loop variable outlives the loop, so neither is inside.
   Both kinds close with `.next`, hence `loopStack`: a plain loop nested in a
   `.bfor` must not let its own `.next` close the scope.
+  An ANONYMOUS label may stand where the name goes (`+ .block`, and even
+  `+ .proc`, which otherwise insists on a label): the scope opens, but the label
+  names the address in front of it, so the frame is deferred to the next line -
+  `jsr +` from outside must still reach it (all verified).
   An UNNAMED one is still a scope - `.block` with no label hides its labels from
   the outside (verified), and so does an unnamed `.namespace` - so it gets a
   synthetic `block@<line>` name rather than null, the same trick the unlabelled
@@ -686,7 +690,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1819 tests); compiles first
+yarn test          # Run all tests (currently 1823 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

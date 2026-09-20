@@ -92,7 +92,7 @@ export function parseDocument(
     // but its `.next` must not close the `.bfor` around it.
     const loopStack: boolean[] = [];
     // A scoped loop's frame opens on the line AFTER its directive - see below.
-    let pendingScope: { name: string; directive: string } | null = null;
+    let pendingScope: { name: string | null; directive: string } | null = null;
     // Current code label for local symbol scoping
     let currentLocalScope: string | null = null;
     // Scopes imported by enclosing `.with` directives, innermost last. Recorded as
@@ -466,7 +466,14 @@ export function parseDocument(
             }
 
             // Safe: directive name from static constant (SCOPE_OPENERS)
-            const anonPattern = new RegExp(`^\\s*\\${open}\\b`, 'i');
+            //
+            // An ANONYMOUS label may stand where the name goes: `+ .block` opens a
+            // scope exactly as `name .block` does (verified - a label inside is not
+            // visible after the `.bend`), and even `.proc`, which insists on a
+            // label, takes one. The label names an address, not the scope, so the
+            // scope still gets the synthetic name below and the line falls through
+            // to the anonymous-label branch that records the `+`.
+            const anonPattern = new RegExp(`^\\s*(?:[+-]+(?:\\s*:\\s*|\\s+))?\\${open}\\b`, 'i');
             if (anonPattern.test(lineLower)) {
                 // An unnamed scope still IS a scope: `.block` with no label hides
                 // its labels from the outside (verified - `lda hidden` after one
@@ -482,11 +489,20 @@ export function parseDocument(
                 // frame, so the matching `.ends`/`.endu` still closes it, while
                 // contributing no segment to the scope path.
                 const transparent = open === '.struct' || open === '.union';
-                scopeStack.push({
+                const frame = {
                     name: transparent ? null : `${open.slice(1)}@${lineNum}`,
                     directive: open,
-                });
-                recordScope(lineNum);
+                };
+                // With an anonymous label in front, the frame opens on the NEXT
+                // line: `+` names the address before the block, and `jsr +` from
+                // outside reaches it (verified), so it belongs to the enclosing
+                // scope - the same reason a scoped loop defers its frame.
+                if (/^\s*[+-]+(?:\s*:\s*|\s+)/.test(line)) {
+                    pendingScope = frame;
+                } else {
+                    scopeStack.push(frame);
+                    recordScope(lineNum);
+                }
             }
         }
 
