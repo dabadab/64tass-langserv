@@ -4,6 +4,51 @@ All notable changes to the 64tass Language Support extension will be documented 
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-20
+
+Everything here comes from an audit of the extension against the 64tass v1.60
+reference manual, construct by construct, with each case assembled by the real
+assembler first.
+
+### Improved
+- **C-Style Literals Are Reported** - `0x10` and `0b101` were accepted as numbers, and
+  64tass has neither form: the line it rejects now gets the same "an operator is
+  expected" here
+- **Source After `.end` Is Greyed Out** - the directive ends the file, so what follows is
+  faded rather than checked, the way a branch that is never taken already is
+- **Highlighting For Floats, Digit Separators And Byte Strings** - the grammar had no rule
+  for any of them, so a fixed-point constant or a `b"..."` prefix coloured as code
+
+### Fixed
+Documented constructs that assemble cleanly and were reported as errors:
+- **Labels Named After Another Target's Mnemonic** - `map .fill 8` read as the 45gs02's
+  MAP with `.fill 8` for an operand. A word the parser indexed as a definition, with a
+  directive after it, is a label
+- **`.weak` Definitions** - a weak symbol is overridden by a stronger one rather than
+  colliding with it, in either order and across an include. Two weak ones still collide
+- **Indexed Member Access** - `sprites[2].x`, the manual's `.brept` array idiom, read the
+  `.x` as a call to an undefined macro
+- **Multi-Symbol Lookup** - the names in `colors.(red, green, blue)` were looked for at
+  the cursor instead of in `colors`, so each one read as undefined
+- **Digit Separators** - `1_000`, `$ff_ff` and `%1010_1010` are one value each; the tail
+  after the underscore was being read as a symbol
+- **Byte String Prefixes** - `b"oeU"`, `x"fce2"`, `z"..."` and the rest of the manual's
+  seven: the letter belongs to the literal
+- **Address Length Forcing** - the letter of `@w`, `@b` and `@l` pins the addressing mode
+  and is not a symbol
+- **Anonymous Labels On Scope Openers** - `+ .block` opens a scope like any other label
+  does; its contents were leaking into the enclosing scope and colliding there
+- **`.namespace <name>`** - the form that re-activates an existing scope, so definitions
+  in different files land in one namespace, filed them where nothing could reach them
+- **Fixed-Point Constants** - `$1.8p4` and `12.2p8`, the manual's 4:4 and 8:8 forms, were
+  read as several values
+- **The `x` Repeat Operator** - `.text "ab" x 3` was reported as two values in a row
+
+### Added
+- Corpus fixtures for the encoding, page, alignment, option and loop-escape directives,
+  the 65816 size family, `.weak`, the `.brept` array idiom, multi-symbol lookup and the
+  `::=` reassignment - constructs no test mentioned before
+
 ## [0.14.0] - 2026-09-20
 
 ### Improved
