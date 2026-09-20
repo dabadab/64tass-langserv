@@ -814,3 +814,20 @@ describe('digit separators', () => {
         expect(tokenizeExpression('1_0.5e1_0').map(t => t.type)).toEqual(['value']);
     });
 });
+
+describe('byte string prefixes', () => {
+    // The manual lists b l n p s x z. Verified: only those letters, only
+    // lowercase, and only directly against the quote - `B"abc"`, `b "abc"` and
+    // `q"abc"` are each "an operator is expected".
+    it('are part of the literal', () => {
+        expect(tokenizeExpression('b"oeU"').map(t => t.text)).toEqual(['b"oeU"']);
+        expect(tokenizeExpression("b'oeU'").map(t => t.text)).toEqual(["b'oeU'"]);
+        expect(tokenizeExpression('x"fce2"').map(t => t.type)).toEqual(['value']);
+    });
+
+    it('are not just any letter before a quote', () => {
+        expect(tokenizeExpression('q"abc"').map(t => t.type)).toEqual(['value', 'value']);
+        expect(tokenizeExpression('B"abc"').map(t => t.type)).toEqual(['value', 'value']);
+        expect(tokenizeExpression('sym"abc"').map(t => t.type)).toEqual(['value', 'value']);
+    });
+});

@@ -213,6 +213,21 @@ const VALUE_PATTERN = new RegExp('^(' + [
 
 // Tokenize an expression into values, operators, and parentheses
 // Used for validating operator presence between data directive values
+/**
+ * The byte string prefixes the manual lists: `b"oeU"`, `x"fce2"` (hex entry),
+ * `z"..."` (z85) and the rest. Lowercase and directly adjacent to the quote -
+ * `B"abc"`, `b "abc"` and `q"abc"` are all "an operator is expected" (verified),
+ * so the prefix cannot be treated as any identifier before a string.
+ */
+export const BYTE_STRING_PREFIXES = new Set(['b', 'l', 'n', 'p', 's', 'x', 'z']);
+
+/** Whether `text` has a byte string prefix at `pos`, e.g. the `b` of `b"oeU"`. */
+export function isByteStringPrefix(text: string, pos: number): boolean {
+    return BYTE_STRING_PREFIXES.has(text[pos])
+        && (text[pos + 1] === '"' || text[pos + 1] === "'")
+        && !/[a-zA-Z0-9_.]/.test(text[pos - 1] ?? '');
+}
+
 export function tokenizeExpression(expr: string): Token[] {
     const tokens: Token[] = [];
     // Longest first, so "<<" is not read as two "<" and ".." not as a float.
@@ -233,10 +248,13 @@ export function tokenizeExpression(expr: string): Token[] {
 
         const char = expr[pos];
 
-        // Try to match string literal (single or double quoted)
-        if (char === '"' || char === "'") {
+        // Try to match string literal (single or double quoted), with the byte
+        // string prefix that may come before it - the letter is part of the
+        // literal, and tokenizing it separately made the line two values in a row.
+        if (char === '"' || char === "'" || isByteStringPrefix(expr, pos)) {
             const stringStart = pos;
-            const quote = char;
+            if (char !== '"' && char !== "'") pos++; // the prefix letter
+            const quote = expr[pos];
             pos++; // Skip opening quote
 
             // Scan until closing quote (handle escaped quotes "")

@@ -1860,3 +1860,15 @@ describe('numbers written with digit separators', () => {
             + '        .byte %1010_1010\n        .byte 1_0.5')).toEqual([]);
     });
 });
+
+describe('a byte string', () => {
+    it('is one value, prefix included', () => {
+        expect(getDiagnostics('        *= $1000\nraw     = b"oeU"\n        .text s"p1"\n'
+            + '        .text x"fce2"\n        .byte len(raw)')).toEqual([]);
+    });
+
+    it('still reports a letter that is not a prefix', () => {
+        // `q"abc"` is "an operator is expected" to the assembler as well.
+        expect(getDiagnostics('        *= $1000\n        .text q"abc"').length).toBeGreaterThan(0);
+    });
+});

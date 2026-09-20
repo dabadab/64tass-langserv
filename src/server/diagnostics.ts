@@ -24,7 +24,7 @@ import {
     BUILTINS,
     BUILTIN_DIRECTIVES_PATTERN
 } from './constants';
-import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys, splitTopLevel, splitLines } from './utils';
+import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys, splitTopLevel, splitLines, isByteStringPrefix } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
 import { blockDirectivesOn, findWeakLines } from './blocks';
 import { addressExpressionOf, findAddressingProblem, immediateBytesFor } from './operands';
@@ -1104,6 +1104,10 @@ export function validateDocument(
                 // own array idiom (verified clean).
                 if (match.index > 1 && operandNoStrings[match.index - 1] === '.'
                     && operandNoStrings[match.index - 2] === ']') continue;
+                // The prefix letter of a byte string (`b"oeU"`, `x"fce2"`) is part
+                // of the literal, not a symbol (verified: only these letters, only
+                // lowercase, only with no space before the quote).
+                if (symName.length === 1 && isByteStringPrefix(operandNoStrings, match.index)) continue;
                 // `\name` and `\1` substitute a macro's argument as TEXT; the name
                 // after the backslash is the parameter, not a symbol here.
                 if (match.index > 0 && operandNoStrings[match.index - 1] === '\\') continue;

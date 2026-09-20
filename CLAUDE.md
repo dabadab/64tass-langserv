@@ -443,6 +443,12 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   branches deliberately opt out, each said so at the branch: anonymous labels
   (never named), define-pragma symbols (the pragma line is itself the comment) and
   dict-literal keys (the comment describes the assignment, not each key).
+- **Byte string prefixes**: `b"oeU"`, `x"fce2"` (hex entry), `z"..."` (z85) and the
+  rest of the manual's `b l n p s x z`. The letter is part of the literal, and
+  `isByteStringPrefix` in `utils.ts` is the one test for it - lowercase, one of
+  those seven, directly against the quote, since `B"abc"`, `b "abc"` and `q"abc"`
+  are all errors (verified). Tokenizing the letter separately made every such
+  line two values in a row, plus an undefined symbol for the prefix.
 - **Digit separators**: the manual allows an underscore BETWEEN the digits of any
   numeric literal (`1_000`, `$ff_ff`, `%1010_1010`, `1_0.5e1`), and only between
   them - `$_ff` and `1_` are errors, `_100` is a local symbol (verified). The
@@ -676,7 +682,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1812 tests); compiles first
+yarn test          # Run all tests (currently 1816 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
