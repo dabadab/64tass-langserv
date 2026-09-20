@@ -48,3 +48,30 @@ export function blockDirectivesOn(line: string): BlockDirectives {
         closed: CLOSER_PATTERNS.filter(([, pattern]) => pattern.test(code)).map(([directive]) => directive),
     };
 }
+
+/**
+ * The lines inside a `.weak` region.
+ *
+ * A weak definition is 64tass's stand-in for `.ifdef`: "any symbols defined
+ * inside can be overridden by stronger symbols in the same scope from outside",
+ * so a strong definition beside a weak one is no duplicate in either order. Two
+ * WEAK definitions of one name still are (all verified), which is why this is a
+ * set of lines rather than a blanket exemption.
+ *
+ * Nests, and is blind to `.weak` written in a comment or a string, since it asks
+ * `blockDirectivesOn` like every other block scanner.
+ */
+export function findWeakLines(lines: string[]): Set<number> {
+    const inside = new Set<number>();
+    let depth = 0;
+    for (let i = 0; i < lines.length; i++) {
+        const { opened, closed } = blockDirectivesOn(lines[i]);
+        const before = depth;
+        if (closed.includes('.endweak')) depth = Math.max(0, depth - 1);
+        if (opened.includes('.weak')) depth++;
+        // Inside at both ends of the line, so the outermost `.weak` and
+        // `.endweak` are out and a nested pair is in - where they belong.
+        if (Math.min(before, depth) > 0) inside.add(i);
+    }
+    return inside;
+}

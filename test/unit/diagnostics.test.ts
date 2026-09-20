@@ -1207,6 +1207,14 @@ describe('duplicates across an include', () => {
         expect(found[0].range.start.line).toBe(1);
     });
 
+    it('leaves a weak definition on either side alone', () => {
+        // The point of .weak is that the other file may override it (verified).
+        expect(withInclude('        .include "sub.inc"\ncounter = 1',
+            '        .weak\ncounter = 2\n        .endweak')).toHaveLength(0);
+        expect(withInclude('        .include "sub.inc"\n        .weak\ncounter = 1\n        .endweak',
+            'counter = 2')).toHaveLength(0);
+    });
+
     it('leaves a same name in a different scope alone', () => {
         expect(withInclude(
             '        .include "sub.inc"\nouter   .block\ncounter = 1\n        .bend', 'counter = 2'))
@@ -1764,5 +1772,32 @@ describe('a label named after another target\'s mnemonic', () => {
         // label and a call, so the operand stays checked.
         expect(getDiagnostics('        *= $1000\n        bra nowhere')
             .some(d => d.code === 'undefined-symbol')).toBe(true);
+    });
+});
+
+describe('definitions inside a .weak region', () => {
+    // The manual calls a weak symbol one that "can be overridden by stronger
+    // symbols in the same scope from outside" - 64tass's stand-in for .ifdef.
+    // Verified: strong-then-weak and weak-then-strong both assemble, while two
+    // weak definitions of one name are a duplicate like any other.
+    const duplicates = (source: string) =>
+        getDiagnostics(source).filter(d => d.message.startsWith('Duplicate'));
+
+    it('do not collide with a stronger one before them', () => {
+        expect(duplicates('        *= $1000\nsymbol  = 1\n        .weak\nsymbol  = 0\n        .endweak')).toEqual([]);
+    });
+
+    it('do not collide with a stronger one after them', () => {
+        expect(duplicates('        *= $1000\n        .weak\nsymbol  = 0\n        .endweak\nsymbol  = 1')).toEqual([]);
+    });
+
+    it('still collide with each other', () => {
+        expect(duplicates('        *= $1000\n        .weak\nsymbol  = 0\nsymbol  = 2\n        .endweak')).toHaveLength(1);
+        expect(duplicates('        *= $1000\n        .weak\nsymbol  = 0\n        .endweak\n'
+            + '        .weak\nsymbol  = 3\n        .endweak')).toHaveLength(1);
+    });
+
+    it('leave an ordinary duplicate alone', () => {
+        expect(duplicates('        *= $1000\nlbl     nop\nlbl     nop')).toHaveLength(1);
     });
 });

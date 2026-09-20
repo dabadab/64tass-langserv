@@ -285,6 +285,12 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   branch that provably cannot be taken (`.if 0`) is not there at all, and so neither
   collides nor is collided with. Missing the second gave a false duplicate for a
   label defined once inside `.if 0` and once outside it.
+  A definition inside a `.weak` region (`findWeakLines` in `blocks.ts`) is exempt
+  from the duplicate check against a definition outside one, in either order:
+  the manual's weak symbol is 64tass's stand-in for `.ifdef` and is overridden
+  rather than colliding. Two WEAK definitions of one name still collide
+  (verified), so the rule is "one side weak, the other not", not a blanket pass -
+  and it applies across an include too.
   Cross-file duplicates ARE detected, but only down the include TREE:
   `crossFileDuplicates` compares this document's labels against those of every
   file it includes, transitively. Never against the whole compilation unit - two
@@ -652,7 +658,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1780 tests); compiles first
+yarn test          # Run all tests (currently 1792 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
@@ -691,7 +697,7 @@ building one literally.
   as a *label* means a mnemonic went unrecognised - which is what
   `all-opcodes.test.ts` asserts. `test/fixtures/64tass-examples/` holds real
   sources from the 64tass distribution.
-  `test/fixtures/corpus/` holds 22 files that BOTH assemble cleanly under real
+  `test/fixtures/corpus/` holds 23 files that BOTH assemble cleanly under real
   64tass and must produce zero error diagnostics here, so a false positive fails
   the build. Add one whenever a new construct is supported; verify it assembles
   before committing (a construct that does not assemble proves nothing), and add

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { blockDirectivesOn } from '../../src/server/blocks';
+import { blockDirectivesOn, findWeakLines } from '../../src/server/blocks';
 
 describe('blockDirectivesOn', () => {
     it('finds an opener and a closer', () => {
@@ -34,5 +34,22 @@ describe('blockDirectivesOn', () => {
 
     it('is case-insensitive', () => {
         expect(blockDirectivesOn('OUTER   .PROC').opened).toEqual(['.proc']);
+    });
+});
+
+describe('findWeakLines', () => {
+    it('covers the body, not the delimiters', () => {
+        expect([...findWeakLines(['        .weak', 'a       = 1', '        .endweak', 'b       = 2'])])
+            .toEqual([1]);
+    });
+
+    it('nests', () => {
+        const lines = ['        .weak', 'a = 1', '        .weak', 'b = 2', '        .endweak', 'c = 3', '        .endweak', 'd = 4'];
+        // The inner pair is inside the outer region, and counts as such.
+        expect([...findWeakLines(lines)]).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('ignores one written in a comment or a string', () => {
+        expect([...findWeakLines(['        nop ; .weak', '        .text ".weak"', 'a = 1'])]).toEqual([]);
     });
 });

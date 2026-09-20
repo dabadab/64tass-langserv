@@ -26,7 +26,7 @@ import {
 } from './constants';
 import { parseLineStructure, stripStrings, tokenizeExpression, findCommentBlockLines, stripDictKeys, splitTopLevel, splitLines } from './utils';
 import { findSymbolInfo, isParameter, findAnonymousLabel } from './symbols';
-import { blockDirectivesOn } from './blocks';
+import { blockDirectivesOn, findWeakLines } from './blocks';
 import { addressExpressionOf, findAddressingProblem, immediateBytesFor } from './operands';
 import { calleeScopePath } from './signatureHelp';
 import { LABEL_REQUIRED_OPENERS } from './constants';
@@ -360,6 +360,7 @@ function crossFileDuplicates(
     index: DocumentIndex,
     documentIndex: Map<string, DocumentIndex>,
     deadLines: ReadonlySet<number>,
+    weakLines: ReadonlySet<number>,
     getText?: (uri: string) => string | null
 ): [LabelDefinition, LabelDefinition][] {
     const found: [LabelDefinition, LabelDefinition][] = [];
@@ -381,6 +382,18 @@ function crossFileDuplicates(
         return lines;
     };
 
+    // ...and `.weak` regions on the other side, from the same text.
+    const weakElsewhere = new Map<string, ReadonlySet<number>>();
+    const weakIn = (uri: string): ReadonlySet<number> => {
+        let lines = weakElsewhere.get(uri);
+        if (lines === undefined) {
+            const text = getText?.(uri) ?? null;
+            lines = text === null ? new Set<number>() : findWeakLines(splitLines(text));
+            weakElsewhere.set(uri, lines);
+        }
+        return lines;
+    };
+
     for (const label of index.labels) {
         if (label.isAnonymous || label.kind === 'var') continue;
         if (deadLines.has(label.range.start.line)) continue;
@@ -391,6 +404,9 @@ function crossFileDuplicates(
                 if ((candidate.scopePath ?? null) !== (label.scopePath ?? null)) continue;
                 if ((candidate.localScope ?? null) !== (label.localScope ?? null)) continue;
                 if (deadIn(other, candidate.uri).has(candidate.range.start.line)) continue;
+                // One weak side and one strong one is an override, not a clash.
+                if (weakLines.has(label.range.start.line)
+                    !== weakIn(candidate.uri).has(candidate.range.start.line)) continue;
                 found.push([label, candidate]);
                 break;
             }
@@ -515,6 +531,10 @@ function findDuplicateLabels(
     });
 
     const branchPaths = computeBranchPaths(lines);
+    // A weak definition is overridden by a strong one rather than colliding with
+    // it, in either order (verified) - so a pair collides only when both sides
+    // are weak or neither is.
+    const weakLines = findWeakLines(lines);
     const seen = new Map<string, LabelDefinition[]>();
     for (const label of index.labels) {
         // Anonymous labels can have several instances in one scope, and
@@ -530,15 +550,17 @@ function findDuplicateLabels(
         }
 
         const path = branchPaths.get(label.range.start.line);
+        const weak = weakLines.has(label.range.start.line);
         const collided = prior.find(other =>
-            !areMutuallyExclusive(path, branchPaths.get(other.range.start.line)));
+            !areMutuallyExclusive(path, branchPaths.get(other.range.start.line))
+            && weak === weakLines.has(other.range.start.line));
         if (collided) report(label, collided);
         prior.push(label);
     }
 
     // The same name defined here AND in a file this one includes: the assembler
     // rejects that, and the loop above cannot see it.
-    for (const [label, other] of crossFileDuplicates(index, documentIndex, deadLines, getText)) {
+    for (const [label, other] of crossFileDuplicates(index, documentIndex, deadLines, weakLines, getText)) {
         report(label, other);
     }
     return found;
