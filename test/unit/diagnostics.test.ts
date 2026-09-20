@@ -1742,3 +1742,27 @@ describe('an .if on a .for loop variable', () => {
         expect(getDiagnostics(LOOP).filter(d => d.code === 'undefined-symbol')).toHaveLength(2);
     });
 });
+
+describe('a label named after another target\'s mnemonic', () => {
+    // Recognition uses the union of every CPU's mnemonics, since a flag this
+    // extension cannot see may select any target - which is why `bra nowhere`
+    // still has its operand checked. A directive after the word settles it the
+    // other way: `map .fill 8` is a label and a fill on a 6502 (verified clean),
+    // and reading MAP as the 45gs02 instruction made `.fill 8` its operand.
+    const source = '        *= $1000\nmap     .fill 8\nneg     .byte 1\n        lda map\n        lda neg';
+
+    it('is not read as an instruction when a directive follows', () => {
+        expect(getDiagnostics(source)).toEqual([]);
+    });
+
+    it('resolves where it is used', () => {
+        expect(getDiagnostics(source).filter(d => d.code === 'undefined-symbol')).toEqual([]);
+    });
+
+    it('still checks the operand where the word could be the instruction', () => {
+        // Nothing settles `bra nowhere`: on a 65c02 it is a branch, on a 6502 a
+        // label and a call, so the operand stays checked.
+        expect(getDiagnostics('        *= $1000\n        bra nowhere')
+            .some(d => d.code === 'undefined-symbol')).toBe(true);
+    });
+});

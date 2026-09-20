@@ -628,6 +628,12 @@ export function validateDocument(
 
     diagnostics.push(...findDuplicateLabels(index, lines, deadLines, document.uri, documentIndex, getText));
 
+    // Where the parser put a label definition, as `line:column`. A word there is a
+    // definition however it is spelled, which is what tells this scan apart from
+    // an instruction it would otherwise read (see writtenAsOpcode).
+    const labelStarts = new Set(index?.labels.map(
+        label => `${label.range.start.line}:${label.range.start.character}`) ?? []);
+
     // Check for unclosed blocks and undefined symbols in a single pass
     const blockStack: { directive: string; line: number }[] = [];
     const symbolPattern = /\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\b/g;
@@ -884,7 +890,7 @@ export function validateDocument(
         // Check regular symbol references (after opcodes or data directives).
         // Uses codeForRefs so a "label:" prefix no longer hides the rest of the line.
         // Look for symbols after opcodes
-        const opcodeMatch = codeForRefs.match(/^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?([a-zA-Z]{3})\s+(.+)$/i);
+        const opcodeMatch = codeForRefs.match(/^(\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?)([a-zA-Z]{3})\s+(.+)$/i);
         // Look for symbols after data directives like .text, .byte, .word, etc.
         const dataDirectiveMatch = codeForRefs.match(DATA_OPERAND);
         const expressionDirectiveMatch = codeForRefs.match(EXPRESSION_OPERAND);
@@ -908,15 +914,25 @@ export function validateDocument(
         // LDA as the instruction made `.byte 1` its operand - reported as two
         // values in a row on a line that assembles.
         const writtenAsOpcode = opcodeMatch
-            && OPCODES.has(opcodeMatch[1].toLowerCase())
-            && (!caseSensitive || opcodeMatch[1] === opcodeMatch[1].toLowerCase());
+            && OPCODES.has(opcodeMatch[2].toLowerCase())
+            && (!caseSensitive || opcodeMatch[2] === opcodeMatch[2].toLowerCase())
+            // ...and the line is not a LABEL followed by a DIRECTIVE. This scan
+            // uses the union of every target's mnemonics where the parser uses
+            // this CPU's set - right for a mnemonic the target may yet have, and
+            // the reason `bra nowhere` still has its operand checked. But a word
+            // the parser indexed as a definition, with a directive after it, is
+            // settled: `map .fill 8` on a 6502 is a label and a fill (verified
+            // clean), and reading MAP as the 45gs02 instruction made `.fill 8`
+            // its operand - reported as an undefined symbol and a missing operator.
+            && !(/^\.[a-zA-Z]/.test(opcodeMatch[3])
+                && labelStarts.has(`${lineNum}:${opcodeMatch[1].length}`));
         if (opcodeMatch && writtenAsOpcode) {
-            operand = opcodeMatch[2];
+            operand = opcodeMatch[3];
             operandStart = opcodeMatch[0].length - operand.length;
 
             // Does the immediate value fit the byte it is assembled into?
             const tooLarge = deadLines.has(lineNum) ? null : findOversizedImmediate(
-                index.cpu, opcodeMatch[1], operand, document.uri, lineNum, documentIndex, caseSensitive, unit);
+                index.cpu, opcodeMatch[2], operand, document.uri, lineNum, documentIndex, caseSensitive, unit);
             if (tooLarge) {
                 diagnostics.push({
                     severity: DiagnosticSeverity.Error,
@@ -940,7 +956,7 @@ export function validateDocument(
                 : evaluateExpression(address, document.uri, lineNum, documentIndex, caseSensitive, unit);
             const problem = deadLines.has(lineNum)
                 ? null
-                : findAddressingProblem(index.cpu, opcodeMatch[1], operand, addressValue);
+                : findAddressingProblem(index.cpu, opcodeMatch[2], operand, addressValue);
             // Judged against the target in force, declared or defaulted: a file
             // that never says which CPU it is for is taken at its default, since
             // staying silent there means saying nothing about most real sources.
@@ -1012,7 +1028,7 @@ export function validateDocument(
 
             // Anonymous label references (+ / -), in an opcode operand only:
             // a data directive uses them as arithmetic.
-            if (opcodeMatch) {
+            if (writtenAsOpcode) {
                 diagnostics.push(...findAnonymousProblem(
                     operand, operandStart, document.uri, lineNum, documentIndex));
             }
@@ -1042,8 +1058,8 @@ export function validateDocument(
                 // is TSX and "asl a" is accumulator-mode ASL. Two forms:
                 //   - the whole operand is a register this opcode accepts ("lda x")
                 //   - an index register or addressing suffix after a comma ("tbl,x", "$01,s")
-                if (opcodeMatch) {
-                    const mnemonic = opcodeMatch[1].toLowerCase();
+                if (writtenAsOpcode) {
+                    const mnemonic = opcodeMatch[2].toLowerCase();
                     const register = symName.toLowerCase();
                     const isWholeOperand = operand.trim().toLowerCase() === register;
                     if (isWholeOperand && registerModes[mnemonic]?.includes(register)) continue;

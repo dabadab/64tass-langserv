@@ -435,6 +435,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   LETTERS are deliberately allowed: the manual permits them under `-a`, a flag the
   extension cannot see, so a missed error without it beats reporting good code
   with it (`£` and `↑` are not letters and are still caught).
+- **Label or instruction in the symbol scan**: the scan gates on the OPCODES
+  union, since a flag nobody here sees may select any target - that is what keeps
+  `bra nowhere` checked on a 6502. A word the PARSER indexed as a definition at
+  that column with a DIRECTIVE after it settles the question the other way:
+  `map .fill 8` is a label and a fill (verified), and reading MAP as the 45gs02
+  instruction made `.fill 8` its operand - an undefined symbol and a missing
+  operator on a clean line.
 - **Which lines get a symbol scan**: opcodes, `DATA_DIRECTIVES`,
   `EXPRESSION_DIRECTIVES`, `*=` and the right-hand side of an assignment (dotted
   targets included). The two directive lists are separate because the
@@ -645,7 +652,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1777 tests); compiles first
+yarn test          # Run all tests (currently 1780 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

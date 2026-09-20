@@ -16,3 +16,12 @@ derived2 := value + 2
         lda #derived2
         bne loop
         rts
+
+; Labels named after mnemonics of OTHER targets. Recognition uses the union of
+; every CPU's opcodes, since the target may be set by a flag nobody here sees -
+; but `map` and `neg` are the 45gs02's and the 4510's, not this file's, and a
+; directive after the word settles it.
+map     .fill 8
+neg     .byte 1
+        lda map
+        lda neg
