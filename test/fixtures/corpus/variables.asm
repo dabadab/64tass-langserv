@@ -6,6 +6,7 @@ v       .var 1
 v       .var 2
 w       := 10
 w       := 20
+w       ::= 30          ; reassigns an existing variable; it must exist already
 
         lda #v
         lda #w

@@ -26,3 +26,20 @@ faraway rtl
 
 table   .byte 1, 2, 3
         lda table
+
+; The size directives of this target: .autsiz follows the sep/rep above, .mansiz
+; hands the width back to .as/.al and .xs/.xl, and .databank/.dpage say what the
+; assembler may assume about the bank and direct page registers.
+        .autsiz
+        lda #$12
+        .mansiz
+        .al
+        .xl
+        lda #$1234
+        ldx #$1234
+        .as
+        .xs
+        .databank $01
+        .dpage $1200
+        lda $1234
+        rtl

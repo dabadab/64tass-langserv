@@ -711,7 +711,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1838 tests); compiles first
+yarn test          # Run all tests (currently 1843 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)
@@ -750,7 +750,7 @@ building one literally.
   as a *label* means a mnemonic went unrecognised - which is what
   `all-opcodes.test.ts` asserts. `test/fixtures/64tass-examples/` holds real
   sources from the 64tass distribution.
-  `test/fixtures/corpus/` holds 25 files that BOTH assemble cleanly under real
+  `test/fixtures/corpus/` holds 26 files that BOTH assemble cleanly under real
   64tass and must produce zero error diagnostics here, so a false positive fails
   the build. Add one whenever a new construct is supported; verify it assembles
   before committing (a construct that does not assemble proves nothing), and add

@@ -1536,3 +1536,12 @@ describe('.namespace with a parameter', () => {
         expect(scopeOf('colors  .namespace\nred     = 2\n        .endnamespace', 'red')).toBe('colors');
     });
 });
+
+describe('the ::= reassignment', () => {
+    // `v ::= 2` reassigns a variable that already exists - on its own it is "not
+    // defined symbol 'v'" (verified), so it defines nothing of its own.
+    it('adds no second definition', () => {
+        const index = parse('v       := 1\nv       ::= 2');
+        expect(index.labels.map(l => `${l.name}:${l.kind}`)).toEqual(['v:var']);
+    });
+});
