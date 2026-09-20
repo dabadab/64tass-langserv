@@ -316,7 +316,23 @@ export function tokenizeExpression(expr: string): Token[] {
         // Try to match value (number or identifier)
         const valMatch = remaining.match(value);
         if (valMatch) {
-            tokens.push({ type: 'value', text: valMatch[0], start: pos });
+            // `x` (repeat) and `in` (membership) are worded operators. The manual
+            // is explicit that "spacing must be used for the x and in operators or
+            // else they won't be recognized as such", and the assembler agrees -
+            // `"ab"x3` is "an operator is expected" while `"ab" x 3` assembles -
+            // so a spaced one standing after a value is the operator, and `x2` or
+            // an `x` against its neighbour is still a name.
+            const spacedWord = (valMatch[0] === 'x' || valMatch[0] === 'in')
+                && /\s/.test(expr[pos - 1] ?? ' ')
+                && /\s/.test(expr[pos + valMatch[0].length] ?? ' ');
+            const previous = tokens[tokens.length - 1];
+            const afterValue = previous !== undefined
+                && (previous.type === 'value' || previous.text === ')' || previous.text === ']');
+            tokens.push({
+                type: spacedWord && afterValue ? 'operator' : 'value',
+                text: valMatch[0],
+                start: pos,
+            });
             pos += valMatch[0].length;
             continue;
         }

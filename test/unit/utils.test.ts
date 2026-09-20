@@ -845,3 +845,23 @@ describe('binary exponents and hex floats', () => {
         expect(tokenizeExpression('tbl.lo').map(t => t.text)).toEqual(['tbl.lo']);
     });
 });
+
+describe('the worded operators x and in', () => {
+    // "Spacing must be used for the x and in operators or else they won't be
+    // recognized as such" - and the assembler agrees: `"ab" x 3` assembles,
+    // `"ab"x3` is "an operator is expected".
+    it('are operators when spaced after a value', () => {
+        expect(tokenizeExpression('"ab" x 3').map(t => t.type)).toEqual(['value', 'operator', 'value']);
+        expect(tokenizeExpression('1 in [1,2]').map(t => t.type))
+            .toEqual(['value', 'operator', 'paren', 'value', 'operator', 'value', 'paren']);
+    });
+
+    it('are names anywhere else', () => {
+        expect(tokenizeExpression('x2').map(t => t.type)).toEqual(['value']);
+        expect(tokenizeExpression('x + 1').map(t => t.type)).toEqual(['value', 'operator', 'value']);
+        // Unspaced, they are part of what they touch - which is why the assembler
+        // insists on the spacing in the first place.
+        expect(tokenizeExpression('"ab"x3').map(t => t.type)).toEqual(['value', 'value']);
+        expect(tokenizeExpression('inx').map(t => t.type)).toEqual(['value']);
+    });
+});

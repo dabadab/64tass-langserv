@@ -1922,3 +1922,14 @@ describe('source after a .end', () => {
             + '        lda undefined_thing').filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
     });
 });
+
+describe('the x repeat operator', () => {
+    it('is not two values in a row', () => {
+        expect(getDiagnostics('        *= $1000\n        .text "ab" x 3\n        .byte [1, 2] x 2')).toEqual([]);
+    });
+
+    it('still reports the unspaced form the assembler rejects', () => {
+        // `"ab"x3` is "an operator is expected" there as well.
+        expect(getDiagnostics('        *= $1000\n        .text "ab"x3').length).toBeGreaterThan(0);
+    });
+});

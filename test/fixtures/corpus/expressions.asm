@@ -23,4 +23,10 @@ hi      .byte 2
         .byte $1.8p4
         .sint 12.2p8
         .byte %1.1p2
+
+; `x` repeats and `in` tests membership. Both need the spacing, "or else they
+; won't be recognized as such".
+        .text "ab" x 3
+        .byte [1, 2] x 2
+        .byte 1 in [1, 2]
         rts
