@@ -1110,7 +1110,9 @@ export function validateDocument(
                 // Skip numbers (might be caught as identifiers if they have letters like in hex)
                 if (/^[0-9]/.test(symName)) continue;
                 // Skip hex numbers like $FE - if preceded by $ and only contains hex digits
-                if (match.index > 0 && operandNoStrings[match.index - 1] === '$' && /^[0-9A-Fa-f]+$/.test(symName)) continue;
+                // Digit separators included: `$ff_ff` is one literal (verified).
+                if (match.index > 0 && operandNoStrings[match.index - 1] === '$'
+                    && /^[0-9A-Fa-f]+(?:_+[0-9A-Fa-f]+)*$/.test(symName)) continue;
 
                 // Register operands are instructions, not symbol references: "ldx s"
                 // is TSX and "asl a" is accumulator-mode ASL. Two forms:

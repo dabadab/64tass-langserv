@@ -443,6 +443,13 @@ a stale `out/server/server.js` would be worse than not testing it at all.
   branches deliberately opt out, each said so at the branch: anonymous labels
   (never named), define-pragma symbols (the pragma line is itself the comment) and
   dict-literal keys (the comment describes the assignment, not each key).
+- **Digit separators**: the manual allows an underscore BETWEEN the digits of any
+  numeric literal (`1_000`, `$ff_ff`, `%1010_1010`, `1_0.5e1`), and only between
+  them - `$_ff` and `1_` are errors, `_100` is a local symbol (verified). The
+  digit runs live in `DEC_DIGITS`/`HEX_DIGITS`/`BIN_DIGITS` in `utils.ts`, shared
+  by `parseNumericValue` and `VALUE_PATTERN`, with the same shape again in
+  `conditions.ts`'s tokenizer. Stopping at the underscore made the tail an
+  identifier, so every such literal was two values in a row.
 - **Symbol name characters**: the manual's rule is "starting with a letter and
   containing letters, numbers and underscores", and anything else ENDS the name -
   `CODE_£ = $30` defines `CODE_` and then fails, so ten such lines in a row all
@@ -669,7 +676,7 @@ yarn package     # Create .vsix (uses vsce)
 Tests must be kept up to date when making code changes. Run `yarn test` before considering work complete. If a change modifies parser, symbols, diagnostics, utils, or constants, update or add corresponding tests in `test/unit/` and verify they pass.
 
 ```bash
-yarn test          # Run all tests (currently 1807 tests); compiles first
+yarn test          # Run all tests (currently 1812 tests); compiles first
 yarn test:watch    # Watch mode
 yarn test:coverage # Run with coverage (report in coverage/)
 yarn typecheck     # Type-check src/ AND test/ (vitest transpiles without checking)

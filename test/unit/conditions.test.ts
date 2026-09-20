@@ -291,3 +291,10 @@ describe('a .for loop variable', () => {
         expect(evalWith('c == 1', 'c\t= 1')).toBe(true);
     });
 });
+
+describe('digit separators in a condition', () => {
+    it('leave the number decidable', () => {
+        expect(evalWith('1_000 > 5')).toBe(true);
+        expect(evalWith('%1010_1010 == $aa')).toBe(true);
+    });
+});

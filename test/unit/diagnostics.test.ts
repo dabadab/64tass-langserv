@@ -1853,3 +1853,10 @@ describe('a multi-symbol lookup', () => {
             .filter(d => d.code === 'undefined-symbol')).toHaveLength(1);
     });
 });
+
+describe('numbers written with digit separators', () => {
+    it('are values, not two things in a row', () => {
+        expect(getDiagnostics('        *= $1000\n        .word 1_000\n        .word $ff_ff\n'
+            + '        .byte %1010_1010\n        .byte 1_0.5')).toEqual([]);
+    });
+});

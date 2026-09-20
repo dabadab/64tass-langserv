@@ -74,7 +74,9 @@ function evalExpr(expr: string, ctx: Ctx): number | null {
     return value;
 }
 
-const TOKEN_PATTERN = /^(\s+|\$[0-9a-fA-F]+|%[01]+|\d+|[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*|<=|>=|==|!=|&&|\|\||[-+*/()<>!=])/;
+// Digit separators are part of the literal (`.if flags == %1010_1010`): without
+// them here the tokenizer split the number and the condition went undecided.
+const TOKEN_PATTERN = /^(\s+|\$[0-9a-fA-F]+(?:_+[0-9a-fA-F]+)*|%[01]+(?:_+[01]+)*|\d+(?:_+\d+)*|[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*|<=|>=|==|!=|&&|\|\||[-+*/()<>!=])/;
 
 function tokenize(expr: string): string[] | null {
     const tokens: string[] = [];

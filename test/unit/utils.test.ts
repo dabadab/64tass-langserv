@@ -788,3 +788,29 @@ describe('splitLines', () => {
         expect(splitLines('a\r\n')).toHaveLength(2);
     });
 });
+
+describe('digit separators', () => {
+    // The manual, for integers, bit strings and floats alike: "an underscore can
+    // be used between digits as a separator for better readability of long
+    // numbers". BETWEEN digits: `$_ff` and `1_` are errors and `_100` is a local
+    // symbol (all verified).
+    it('are part of the number', () => {
+        expect(parseNumericValue('1_000')).toBe(1000);
+        expect(parseNumericValue('$ff_ff')).toBe(65535);
+        expect(parseNumericValue('%1010_1010')).toBe(170);
+        expect(parseNumericValue('1__000')).toBe(1000);
+    });
+
+    it('do not make a number of something else', () => {
+        expect(parseNumericValue('1_')).toBeNull();
+        expect(parseNumericValue('$_ff')).toBeNull();
+        expect(parseNumericValue('_100')).toBeNull();
+    });
+
+    it('keep a literal one value to the tokenizer', () => {
+        expect(tokenizeExpression('1_000').map(t => t.type)).toEqual(['value']);
+        expect(tokenizeExpression('$ff_ff').map(t => t.type)).toEqual(['value']);
+        expect(tokenizeExpression('%1010_1010').map(t => t.type)).toEqual(['value']);
+        expect(tokenizeExpression('1_0.5e1_0').map(t => t.type)).toEqual(['value']);
+    });
+});

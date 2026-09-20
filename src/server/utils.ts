@@ -136,26 +136,39 @@ export function getBlockComment(lines: string[], lineNum: number): string | unde
     return undefined;
 }
 
+/**
+ * The digit runs of a numeric literal, with the manual's separator: "an
+ * underscore can be used between digits as a separator for better readability of
+ * long numbers". BETWEEN digits only - `$_ff` and `1_` are errors and `_100` is a
+ * local symbol (all verified) - which is what the trailing group enforces.
+ */
+const DEC_DIGITS = '\\d+(?:_+\\d+)*';
+const HEX_DIGITS = '[0-9a-fA-F]+(?:_+[0-9a-fA-F]+)*';
+const BIN_DIGITS = '[01]+(?:_+[01]+)*';
+
 // Parse a numeric value from various formats (decimal, hex, binary)
 export function parseNumericValue(value: string): number | null {
+    // The separators are for reading, not for the value (`1_000` is 1000).
     const trimmed = value.trim();
 
-    // Hexadecimal: $FF or 0xFF or 0xABC
-    const hexMatch = trimmed.match(/^\$([0-9a-fA-F]+)$/) || trimmed.match(/^0x([0-9a-fA-F]+)$/i);
+    // Hexadecimal: $FF, $ff_ff or 0xFF
+    const hexMatch = trimmed.match(new RegExp(`^\\$(${HEX_DIGITS})$`))
+        || trimmed.match(/^0x([0-9a-fA-F]+)$/i);
     if (hexMatch) {
-        return parseInt(hexMatch[1], 16);
+        return parseInt(hexMatch[1].replace(/_/g, ''), 16);
     }
 
-    // Binary: %10101010 or 0b10101010
-    const binMatch = trimmed.match(/^%([01]+)$/) || trimmed.match(/^0b([01]+)$/i);
+    // Binary: %10101010, %1010_1010 or 0b10101010
+    const binMatch = trimmed.match(new RegExp(`^%(${BIN_DIGITS})$`))
+        || trimmed.match(/^0b([01]+)$/i);
     if (binMatch) {
-        return parseInt(binMatch[1], 2);
+        return parseInt(binMatch[1].replace(/_/g, ''), 2);
     }
 
-    // Decimal: 123 or -123
-    const decMatch = trimmed.match(/^-?\d+$/);
+    // Decimal: 123 or -1_000
+    const decMatch = trimmed.match(new RegExp(`^-?${DEC_DIGITS}$`));
     if (decMatch) {
-        return parseInt(trimmed, 10);
+        return parseInt(trimmed.replace(/_/g, ''), 10);
     }
 
     return null;
@@ -184,13 +197,17 @@ export interface Token {
 //     "tbl.lo" is not read as two values with a missing operator between them
 //   - macro arguments ("\1", "\@", "\name") as values rather than being skipped
 //     as unknown characters
+//   - digit separators inside every numeric form ($ff_ff, 1_000, %1010_1010):
+//     the pattern used to stop at the underscore, so the tail matched as an
+//     identifier and the tokenizer saw two values in a row
 const VALUE_PATTERN = new RegExp('^(' + [
-    '\\$[0-9a-fA-F]+',                              // $FF
+    `\\$${HEX_DIGITS}`,                              // $FF, $ff_ff
     '0x[0-9a-fA-F]+',                               // 0xFF
-    '%[01]+',                                       // %1010
+    `%${BIN_DIGITS}`,                               // %1010, %1010_1010
     '0b[01]+',                                      // 0b1010
     '\\\\(?:@|\\d+|[a-zA-Z_][a-zA-Z0-9_]*)',        // \1, \@, \name
-    '(?:\\d+\\.\\d*|\\.\\d+|\\d+)(?:[eE][+-]?\\d+)?', // 360.0, 1., .5, 1e2, 2.5e-3
+    // 360.0, 1., .5, 1e2, 2.5e-3, 1_0.5
+    `(?:${DEC_DIGITS}\\.(?:${DEC_DIGITS})?|\\.${DEC_DIGITS}|${DEC_DIGITS})(?:[eE][+-]?${DEC_DIGITS})?`,
     '[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*' // name, tbl.lo, a.b.c
 ].join('|') + ')');
 
